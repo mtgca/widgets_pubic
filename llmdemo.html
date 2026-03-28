@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Next Word Prediction</title>
+<style>
+  body { 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+    background-color: #ffffff; 
+    color: #333; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center; 
+    height: 100vh; 
+    margin: 0; 
+  }
+  h1 { 
+    color: #8a2be2; 
+    margin-bottom: 5px; 
+    font-size: 2rem;
+    text-align: center;
+  }
+  p.subtitle { 
+    font-size: 1.4rem; 
+    margin-bottom: 60px; 
+    font-weight: bold; 
+  }
+  .container { 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    gap: 30px; 
+  }
+  .box { 
+    padding: 20px 30px; 
+    border-radius: 12px; 
+    text-align: center; 
+    z-index: 2;
+  }
+  .input-box { 
+    background-color: #f8f9fa; 
+    border: 2px solid #dee2e6; 
+    width: 250px;
+  }
+  .output-box { 
+    background-color: #fff0f5; 
+    border: 2px solid #ffb6c1; 
+    min-width: 120px; 
+    height: 40px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    font-weight: bold; 
+    font-size: 2rem; 
+    color: #ff1493; 
+    opacity: 0; 
+    transition: opacity 0.5s; 
+  }
+  .network { 
+    display: flex; 
+    gap: 40px; 
+    position: relative; 
+    padding: 30px;
+    background-color: #fff8dc;
+    border-radius: 12px;
+    border: 2px solid #f5deb3;
+  }
+  #connections {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+  }
+  .layer { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 20px; 
+    justify-content: center; 
+    position: relative;
+    z-index: 1;
+  }
+  .node { 
+    width: 25px; 
+    height: 25px; 
+    border-radius: 50%; 
+    background-color: #d3d3d3; 
+    transition: background-color 0.3s, box-shadow 0.3s; 
+  }
+  line {
+    stroke: #e0e0e0;
+    stroke-width: 2;
+    transition: stroke 0.3s, stroke-width 0.3s;
+  }
+  .arrow { 
+    font-size: 2.5rem; 
+    color: #adb5bd; 
+  }
+  button { 
+    margin-top: 60px; 
+    padding: 15px 35px; 
+    font-size: 1.2rem; 
+    font-weight: bold;
+    cursor: pointer; 
+    background-color: #8a2be2; 
+    color: white; 
+    border: none; 
+    border-radius: 8px; 
+    transition: background-color 0.2s; 
+  }
+  button:hover { background-color: #6a1b9a; }
+  button:disabled { background-color: #cccccc; cursor: not-allowed; }
+  
+  /* --- UPDATED COLORS HERE --- */
+  .active-node { 
+    background-color: #87cefa; /* Light Blue */
+    box-shadow: 0 0 15px #87cefa; 
+  }
+  line.active-link {
+    stroke: #ffd700; /* Yellow */
+    stroke-width: 4;
+  }
+  /* --------------------------- */
+
+  .text-highlight { 
+    color: #2e8b57 !important; 
+    font-weight: bold; 
+  }
+  .network-title {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1rem;
+    color: #666;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+  <h1>How Large Language Models are Trained</h1>
+  <p class="subtitle">Pre-training: Predicting the next word</p>
+
+  <div class="container">
+    <div class="box input-box">
+      <h3 style="margin-top:0; color:#555;">Input (Context)</h3>
+      <div style="font-size: 1.8rem; color: #777; transition: color 0.3s;" id="inputText">Click below to start</div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="network" id="neuralNet">
+      <div class="network-title">Neural Network</div>
+      <svg id="connections"></svg>
+      <div class="layer">
+        <div class="node"></div><div class="node"></div><div class="node"></div>
+      </div>
+      <div class="layer">
+        <div class="node"></div><div class="node"></div><div class="node"></div><div class="node"></div><div class="node"></div>
+      </div>
+      <div class="layer">
+        <div class="node"></div><div class="node"></div><div class="node"></div><div class="node"></div>
+      </div>
+      <div class="layer">
+        <div class="node"></div><div class="node"></div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="box">
+      <h3 style="margin-top:0; color:#555;">Prediction</h3>
+      <div class="output-box" id="outputText">...</div>
+    </div>
+  </div>
+
+  <button onclick="simulatePrediction()" id="actionBtn">Start Prediction</button>
+
+<script>
+  const phrases = [
+    { input: "Where are we", output: "going" },
+    { input: "The cat sat on the", output: "mat" },
+    { input: "To be or not to", output: "be" },
+    { input: "Once upon a", output: "time" },
+    { input: "May the force be with", output: "you" },
+    { input: "I will be", output: "back" },
+    { input: "A picture is worth a thousand", output: "words" },
+    { input: "Break a", output: "leg" },
+    { input: "Bite the", output: "bullet" },
+    { input: "Time flies like an", output: "arrow" }
+  ];
+  
+  let currentPhraseIndex = 0;
+
+  function drawLines() {
+    const svg = document.getElementById('connections');
+    svg.innerHTML = ''; 
+    const layers = document.querySelectorAll('.layer');
+    
+    for(let i = 0; i < layers.length - 1; i++) {
+      const currentLayerNodes = layers[i].querySelectorAll('.node');
+      const nextLayerNodes = layers[i+1].querySelectorAll('.node');
+      
+      currentLayerNodes.forEach((node1) => {
+        nextLayerNodes.forEach((node2) => {
+          const rect1 = node1.getBoundingClientRect();
+          const rect2 = node2.getBoundingClientRect();
+          const svgRect = svg.getBoundingClientRect();
+          
+          const x1 = rect1.left + rect1.width/2 - svgRect.left;
+          const y1 = rect1.top + rect1.height/2 - svgRect.top;
+          const x2 = rect2.left + rect2.width/2 - svgRect.left;
+          const y2 = rect2.top + rect2.height/2 - svgRect.top;
+          
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', x1);
+          line.setAttribute('y1', y1);
+          line.setAttribute('x2', x2);
+          line.setAttribute('y2', y2);
+          line.dataset.layerIndex = i; 
+          svg.appendChild(line);
+        });
+      });
+    }
+  }
+
+  window.onload = drawLines;
+  window.onresize = drawLines;
+
+  function simulatePrediction() {
+    const nodes = document.querySelectorAll('.node');
+    const lines = document.querySelectorAll('line');
+    const inputText = document.getElementById('inputText');
+    const outputText = document.getElementById('outputText');
+    const button = document.getElementById('actionBtn');
+    
+    nodes.forEach(n => n.classList.remove('active-node'));
+    lines.forEach(l => l.classList.remove('active-link'));
+    inputText.classList.remove('text-highlight');
+    outputText.style.opacity = '0';
+    button.disabled = true;
+    button.innerText = "Processing...";
+
+    inputText.innerText = phrases[currentPhraseIndex].input;
+    outputText.innerText = phrases[currentPhraseIndex].output;
+    currentPhraseIndex = (currentPhraseIndex + 1) % phrases.length;
+
+    setTimeout(() => {
+      inputText.classList.add('text-highlight');
+    }, 400);
+
+    setTimeout(() => {
+      document.querySelectorAll('.layer:nth-child(3) .node').forEach(n => n.classList.add('active-node'));
+      document.querySelectorAll('line[data-layer-index="0"]').forEach(l => l.classList.add('active-link'));
+    }, 1000);
+
+    setTimeout(() => {
+      document.querySelectorAll('.layer:nth-child(3) .node').forEach(n => n.classList.remove('active-node'));
+      document.querySelectorAll('line[data-layer-index="0"]').forEach(l => l.classList.remove('active-link'));
+      
+      document.querySelectorAll('.layer:nth-child(4) .node').forEach(n => n.classList.add('active-node'));
+      document.querySelectorAll('line[data-layer-index="1"]').forEach(l => l.classList.add('active-link'));
+    }, 1600);
+
+    setTimeout(() => {
+      document.querySelectorAll('.layer:nth-child(4) .node').forEach(n => n.classList.remove('active-node'));
+      document.querySelectorAll('line[data-layer-index="1"]').forEach(l => l.classList.remove('active-link'));
+      
+      document.querySelectorAll('.layer:nth-child(5) .node').forEach(n => n.classList.add('active-node'));
+      document.querySelectorAll('line[data-layer-index="2"]').forEach(l => l.classList.add('active-link'));
+    }, 2200);
+
+    setTimeout(() => {
+      document.querySelectorAll('.layer:nth-child(5) .node').forEach(n => n.classList.remove('active-node'));
+      document.querySelectorAll('line[data-layer-index="2"]').forEach(l => l.classList.remove('active-link'));
+      
+      document.querySelectorAll('.layer:nth-child(6) .node').forEach(n => n.classList.add('active-node'));
+    }, 2800);
+
+    setTimeout(() => {
+      document.querySelectorAll('.layer:nth-child(6) .node').forEach(n => n.classList.remove('active-node'));
+      outputText.style.opacity = '1';
+      button.disabled = false;
+      button.innerText = "Predict Next Phrase";
+    }, 3400);
+  }
+</script>
+</body>
+</html>
