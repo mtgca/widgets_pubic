@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GMM Covariance Types Interactive</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --accent: #e74c3c;
+            --bg: #f8f9fa;
+            --c1: #3498db;
+            --c2: #2ecc71;
+            --c3: #9b59b6;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ecf0f1;
+            color: #333;
+            line-height: 1.6;
+        }
+        h1 {
+            color: var(--primary);
+            text-align: center;
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 10px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .panel-left {
+            flex: 1;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .panel-right {
+            flex: 2;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+        }
+        .explanations div {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #ccc;
+            background: var(--bg);
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .explanations div.active {
+            border-left-color: var(--accent);
+            background: #fdf2f0;
+        }
+        .explanations h3 { margin-top: 0; margin-bottom: 5px; color: var(--primary); }
+        .explanations p { margin: 0; font-size: 0.9em; }
+        
+        #controls {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        select {
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            font-weight: bold;
+            color: var(--primary);
+        }
+        #viz-container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fafafa;
+            overflow: hidden;
+            flex-grow: 1;
+            position: relative;
+        }
+        svg { display: block; width: 100%; height: 100%; }
+        
+        /* SVG Styles */
+        .cluster-1 { fill: var(--c1); opacity: 0.6; }
+        .cluster-2 { fill: var(--c2); opacity: 0.6; }
+        .cluster-3 { fill: var(--c3); opacity: 0.6; }
+        
+        .contour-1 { fill: none; stroke: var(--c1); stroke-width: 2px; stroke-dasharray: 5,5; }
+        .contour-2 { fill: none; stroke: var(--c2); stroke-width: 2px; stroke-dasharray: 5,5; }
+        .contour-3 { fill: none; stroke: var(--c3); stroke-width: 2px; stroke-dasharray: 5,5; }
+        
+        .center-marker { fill: #333; stroke: #fff; stroke-width: 1px; }
+    </style>
+</head>
+<body>
+
+    <h1>Gaussian Mixture Models: Covariance Types</h1>
+    
+    <div class="container">
+        <!-- Left Panel: Explanations -->
+        <div class="panel-left">
+            <h2 style="margin-top:0;">Covariance Shapes</h2>
+            <p style="font-size: 0.9em; margin-bottom: 20px;">The covariance matrix defines the shape, size, and orientation of the clusters. Select a type to see how the mathematical constraints affect the GMM flexibility.</p>
+            
+            <div class="explanations">
+                <div id="desc-spherical" class="active" onclick="document.getElementById('cov-select').value='spherical'; updateViz('spherical');">
+                    <h3>Spherical</h3>
+                    <p>Each component has its own single variance value. The shape is constrained to a perfect circle (or sphere in 3D). Clusters can have different sizes, but their axes must be equal.</p>
+                </div>
+                <div id="desc-diag" onclick="document.getElementById('cov-select').value='diag'; updateViz('diag');">
+                    <h3>Diagonal (Diag)</h3>
+                    <p>Each component has an independent variance for each dimension, but covariances are zero. Shapes are ellipses constrained to align with the coordinate axes (no tilted rotation).</p>
+                </div>
+                <div id="desc-tied" onclick="document.getElementById('cov-select').value='tied'; updateViz('tied');">
+                    <h3>Tied</h3>
+                    <p>All components share the exact same general covariance matrix. This forces all clusters to have the exact same shape, size, and orientation, varying only by their mean (center).</p>
+                </div>
+                <div id="desc-full" onclick="document.getElementById('cov-select').value='full'; updateViz('full');">
+                    <h3>Full</h3>
+                    <p>Each component has its own independent, general covariance matrix. This provides maximum flexibility, allowing ellipses of any size and any arbitrary orientation.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Interactive Viz -->
+        <div class="panel-right">
+            <div id="controls">
+                <label for="cov-select" style="font-weight:bold; margin-right: 10px;">Select Covariance Type:</label>
+                <select id="cov-select" onchange="updateViz(this.value)">
+                    <option value="spherical">Spherical</option>
+                    <option value="diag">Diagonal (Diag)</option>
+                    <option value="tied">Tied</option>
+                    <option value="full">Full</option>
+                </select>
+            </div>
+            <div id="viz-container">
+                <svg viewBox="0 0 700 500"></svg>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const svg = d3.select("svg");
+        const width = 700;
+        const height = 500;
+
+        // Cluster Centers
+        const centers = [
+            { id: 1, x: 200, y: 150 },
+            { id: 2, x: 500, y: 200 },
+            { id: 3, x: 350, y: 380 }
+        ];
+
+        // Define the parameters for each state [rx, ry, angle_deg]
+        // Radii represent ~2 standard deviations to bound most points.
+        const states = {
+            spherical: [
+                { rx: 60, ry: 60, angle: 0 },
+                { rx: 40, ry: 40, angle: 0 },
+                { rx: 80, ry: 80, angle: 0 }
+            ],
+            diag: [
+                { rx: 100, ry: 30, angle: 0 },
+                { rx: 40, ry: 90, angle: 0 },
+                { rx: 60, ry: 50, angle: 0 }
+            ],
+            tied: [
+                { rx: 90, ry: 35, angle: -35 },
+                { rx: 90, ry: 35, angle: -35 },
+                { rx: 90, ry: 35, angle: -35 }
+            ],
+            full: [
+                { rx: 110, ry: 30, angle: -20 },
+                { rx: 40, ry: 100, angle: 45 },
+                { rx: 80, ry: 40, angle: -60 }
+            ]
+        };
+
+        // Box-Muller transform to generate base normal points (mean=0, std=1)
+        function randomNormal() {
+            let u = 0, v = 0;
+            while(u === 0) u = Math.random(); 
+            while(v === 0) v = Math.random();
+            return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        }
+
+        // Generate base points for each cluster
+        const numPoints = 120;
+        let dataPoints = [];
+        
+        for (let c = 0; c < 3; c++) {
+            for (let i = 0; i < numPoints; i++) {
+                dataPoints.push({
+                    id: `p-${c}-${i}`,
+                    clusterIdx: c,
+                    baseX: randomNormal(), // std = 1
+                    baseY: randomNormal()
+                });
+            }
+        }
+
+        // Add groups
+        const pointsGroup = svg.append("g").attr("id", "points");
+        const contoursGroup = svg.append("g").attr("id", "contours");
+        const centersGroup = svg.append("g").attr("id", "centers");
+
+        // Initialize ellipses (Contours)
+        const ellipses = contoursGroup.selectAll("ellipse")
+            .data([0, 1, 2])
+            .enter().append("ellipse")
+            .attr("class", d => `contour-${d+1}`)
+            .attr("cx", d => centers[d].x)
+            .attr("cy", d => centers[d].y);
+
+        // Initialize Scatter Points
+        const circles = pointsGroup.selectAll("circle")
+            .data(dataPoints)
+            .enter().append("circle")
+            .attr("class", d => `cluster-${d.clusterIdx+1}`)
+            .attr("r", 3);
+
+        // Draw Center Crosses
+        centersGroup.selectAll("circle")
+            .data(centers)
+            .enter().append("circle")
+            .attr("class", "center-marker")
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y)
+            .attr("r", 5);
+
+        // Function to apply transformation to base normal point
+        function getTransformedPoint(d, params) {
+            // scale base normal points. 
+            // The params.rx is approx 2 std deviations, so we divide by 2 for the true std.
+            let sx = d.baseX * (params.rx / 2.5); 
+            let sy = d.baseY * (params.ry / 2.5);
+            
+            // rotate
+            let rad = params.angle * (Math.PI / 180);
+            let rotX = sx * Math.cos(rad) - sy * Math.sin(rad);
+            let rotY = sx * Math.sin(rad) + sy * Math.cos(rad);
+            
+            // translate
+            return {
+                x: rotX + centers[d.clusterIdx].x,
+                y: rotY + centers[d.clusterIdx].y
+            };
+        }
+
+        // Main update function
+        window.updateViz = function(type) {
+            // Update UI
+            document.querySelectorAll('.explanations div').forEach(el => el.classList.remove('active'));
+            document.getElementById(`desc-${type}`).classList.add('active');
+            document.getElementById('cov-select').value = type;
+
+            const currentParams = states[type];
+
+            // Transition Ellipses
+            ellipses.transition().duration(1000)
+                .attr("rx", d => currentParams[d].rx)
+                .attr("ry", d => currentParams[d].ry)
+                .attr("transform", d => `rotate(${currentParams[d].angle}, ${centers[d].x}, ${centers[d].y})`);
+
+            // Transition Scatter Points
+            circles.transition().duration(1000)
+                .attr("cx", d => getTransformedPoint(d, currentParams[d.clusterIdx]).x)
+                .attr("cy", d => getTransformedPoint(d, currentParams[d.clusterIdx]).y);
+        };
+
+        // Initialize
+        updateViz("spherical");
+
+    </script>
+</body>
+</html>
