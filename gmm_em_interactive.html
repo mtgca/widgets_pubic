@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EM Algorithm in GMMs Interactive</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --accent: #3498db;
+            --bg: #ecf0f1;
+            --c1: rgb(52, 152, 219);  /* Blue */
+            --c2: rgb(231, 76, 60);   /* Red */
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--bg);
+            color: #333;
+            line-height: 1.6;
+        }
+        h1 {
+            color: var(--primary);
+            text-align: center;
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 10px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .panel-left {
+            flex: 1;
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-right {
+            flex: 2;
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+        }
+        .step-block {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-left: 4px solid #ddd;
+            background: #fafafa;
+            border-radius: 0 4px 4px 0;
+            transition: all 0.3s ease;
+        }
+        .step-block.active {
+            border-left-color: var(--accent);
+            background: #ebf5fb;
+        }
+        .step-block h3 { margin-top: 0; margin-bottom: 5px; color: var(--primary); }
+        .step-block p { margin: 0; font-size: 0.9em; }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 14px;
+            border-radius: 4px;
+            border: none;
+            background-color: var(--primary);
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #1a252f; }
+        button:disabled { background-color: #95a5a6; cursor: not-allowed; }
+        .btn-e { background-color: #27ae60; }
+        .btn-e:hover { background-color: #2ecc71; }
+        .btn-m { background-color: #8e44ad; }
+        .btn-m:hover { background-color: #9b59b6; }
+        
+        #viz-container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fdfdfd;
+            overflow: hidden;
+            flex-grow: 1;
+            position: relative;
+            min-height: 450px;
+        }
+        svg { display: block; width: 100%; height: 100%; }
+        
+        .gaussian-contour { fill: none; stroke-width: 2px; stroke-dasharray: 5,5; transition: all 0.5s ease-in-out; }
+        .gaussian-fill { opacity: 0.1; transition: all 0.5s ease-in-out; }
+        .centroid-marker { stroke: #fff; stroke-width: 1.5px; transition: all 0.5s ease-in-out; }
+        .data-point { stroke: rgba(0,0,0,0.1); stroke-width: 1px; transition: fill 0.3s ease-in-out; }
+        
+        #status-bar {
+            text-align: center;
+            font-weight: bold;
+            padding: 10px;
+            background: #eee;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Expectation-Maximization (EM) for GMMs</h1>
+    
+    <div class="container">
+        <!-- Explanations & Controls -->
+        <div class="panel-left">
+            <h2 style="margin-top:0;">The Algorithm</h2>
+            <p style="font-size: 0.9em;">The EM algorithm alternates between guessing the probabilities (E-Step) and updating the cluster shapes (M-Step) until it perfectly fits the data.</p>
+            
+            <div id="block-init" class="step-block active">
+                <h3>1. Initialization</h3>
+                <p>We start by placing Gaussian distributions (ellipses) randomly or poorly over the data.</p>
+            </div>
+            
+            <div id="block-e" class="step-block">
+                <h3>2. E-Step (Expectation)</h3>
+                <p><strong>"Who belongs to whom?"</strong><br>Given the current shapes, we calculate the posterior probability for every point. Colors blend based on these <em>soft assignments</em>.</p>
+            </div>
+            
+            <div id="block-m" class="step-block">
+                <h3>3. M-Step (Maximization)</h3>
+                <p><strong>"Update the shapes."</strong><br>Using those soft probabilities, we re-calculate the Mean (center), Covariance (size/shape), and Weight for each Gaussian to better fit the points assigned to it.</p>
+            </div>
+            
+            <div style="margin-top: auto; font-size: 0.85em; color: #7f8c8d; border-top: 1px solid #eee; padding-top: 10px;">
+                <em>Notice how it resembles "Soft K-Means". Instead of points voting 100% for one centroid, they cast fractional votes based on probability.</em>
+            </div>
+        </div>
+
+        <!-- Interactive Viz -->
+        <div class="panel-right">
+            <div id="status-bar">Status: Ready to start E-Step (Iteration 1)</div>
+            <div class="controls">
+                <button onclick="reset()">Reset Data</button>
+                <button class="btn-e" id="btn-e" onclick="runEStep()">Run E-Step</button>
+                <button class="btn-m" id="btn-m" onclick="runMStep()" disabled>Run M-Step</button>
+                <button onclick="autoRun()">Auto Run (5 steps)</button>
+            </div>
+            
+            <div id="viz-container">
+                <svg viewBox="0 0 700 450"></svg>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const svg = d3.select("svg");
+        const width = 700;
+        const height = 450;
+
+        // Base Colors
+        const c1 = [52, 152, 219]; // Blue
+        const c2 = [231, 76, 60];  // Red
+        const cNeutral = [150, 150, 150];
+
+        let points = [];
+        let gmm = [];
+        let responsibilities = [];
+        let iteration = 1;
+        let currentStep = 'E'; // 'E' or 'M'
+
+        // Generate synthetic data (two hidden blobs)
+        function generateData() {
+            points = [];
+            // Blob 1 (top left)
+            for (let i = 0; i < 80; i++) {
+                points.push({ x: randNorm(200, 40), y: randNorm(150, 30) });
+            }
+            // Blob 2 (bottom right, more spread out)
+            for (let i = 0; i < 120; i++) {
+                points.push({ x: randNorm(500, 60), y: randNorm(300, 70) });
+            }
+        }
+
+        // Normal random generator (Box-Muller)
+        function randNorm(mean, std) {
+            let u = 0, v = 0;
+            while(u === 0) u = Math.random();
+            while(v === 0) v = Math.random();
+            let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+            return num * std + mean;
+        }
+
+        // Initialize Gaussian parameters poorly
+        function initGMM() {
+            gmm = [
+                { id: 0, mean: {x: 350, y: 100}, cov: {x: 20000, y: 20000}, weight: 0.5, color: c1, rgbStr: `rgb(${c1.join(',')})` },
+                { id: 1, mean: {x: 350, y: 350}, cov: {x: 20000, y: 20000}, weight: 0.5, color: c2, rgbStr: `rgb(${c2.join(',')})` }
+            ];
+            responsibilities = new Array(points.length).fill({p0: 0.5, p1: 0.5});
+            iteration = 1;
+            currentStep = 'E';
+        }
+
+        const pointsGroup = svg.append("g").attr("id", "points");
+        const gaussiansGroup = svg.append("g").attr("id", "gaussians");
+
+        function drawInitial() {
+            pointsGroup.selectAll("*").remove();
+            gaussiansGroup.selectAll("*").remove();
+
+            // Draw points (initially neutral gray)
+            pointsGroup.selectAll("circle")
+                .data(points)
+                .enter().append("circle")
+                .attr("class", "data-point")
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .attr("r", 4)
+                .style("fill", `rgb(${cNeutral.join(',')})`);
+
+            // Draw Gaussians
+            const g = gaussiansGroup.selectAll("g")
+                .data(gmm)
+                .enter().append("g")
+                .attr("id", d => `gmm-${d.id}`);
+
+            g.append("ellipse")
+                .attr("class", "gaussian-fill")
+                .style("fill", d => d.rgbStr);
+            
+            g.append("ellipse")
+                .attr("class", "gaussian-contour")
+                .style("stroke", d => d.rgbStr);
+
+            g.append("circle")
+                .attr("class", "centroid-marker")
+                .attr("r", 6)
+                .style("fill", d => d.rgbStr);
+
+            updateGaussianVisuals(0); // 0ms transition initially
+            updateUIState();
+        }
+
+        function updateGaussianVisuals(duration = 500) {
+            const g = gaussiansGroup.selectAll("g").data(gmm);
+            
+            // 2 Standard deviations for ellipse radii (contains ~86% of data for 2D)
+            g.select(".gaussian-fill").transition().duration(duration)
+                .attr("cx", d => d.mean.x).attr("cy", d => d.mean.y)
+                .attr("rx", d => Math.sqrt(d.cov.x) * 2)
+                .attr("ry", d => Math.sqrt(d.cov.y) * 2);
+
+            g.select(".gaussian-contour").transition().duration(duration)
+                .attr("cx", d => d.mean.x).attr("cy", d => d.mean.y)
+                .attr("rx", d => Math.sqrt(d.cov.x) * 2)
+                .attr("ry", d => Math.sqrt(d.cov.y) * 2);
+
+            g.select(".centroid-marker").transition().duration(duration)
+                .attr("cx", d => d.mean.x).attr("cy", d => d.mean.y);
+        }
+
+        // Diagonal Gaussian PDF
+        function gaussianPDF(pt, mean, cov) {
+            let dx = pt.x - mean.x;
+            let dy = pt.y - mean.y;
+            // Add tiny epsilon to cov to avoid div by zero
+            let cx = Math.max(cov.x, 0.1);
+            let cy = Math.max(cov.y, 0.1);
+            
+            let exponent = -0.5 * ((dx*dx)/cx + (dy*dy)/cy);
+            let coeff = 1.0 / (2 * Math.PI * Math.sqrt(cx * cy));
+            return coeff * Math.exp(exponent);
+        }
+
+        // --- E-STEP ---
+        window.runEStep = function() {
+            if(currentStep !== 'E') return;
+
+            points.forEach((pt, i) => {
+                let lh0 = gmm[0].weight * gaussianPDF(pt, gmm[0].mean, gmm[0].cov);
+                let lh1 = gmm[1].weight * gaussianPDF(pt, gmm[1].mean, gmm[1].cov);
+                let sum = lh0 + lh1;
+                
+                if (sum === 0) sum = 1e-10; // Prevent NaN if points are too far
+
+                responsibilities[i] = {
+                    p0: lh0 / sum,
+                    p1: lh1 / sum
+                };
+            });
+
+            // Update point colors to show soft assignment
+            pointsGroup.selectAll(".data-point")
+                .transition().duration(400)
+                .style("fill", (d, i) => {
+                    let r0 = responsibilities[i].p0;
+                    let r1 = responsibilities[i].p1;
+                    let r = Math.round(r0 * c1[0] + r1 * c2[0]);
+                    let g = Math.round(r0 * c1[1] + r1 * c2[1]);
+                    let b = Math.round(r0 * c1[2] + r1 * c2[2]);
+                    return `rgb(${r},${g},${b})`;
+                });
+
+            currentStep = 'M';
+            updateUIState();
+        };
+
+        // --- M-STEP ---
+        window.runMStep = function() {
+            if(currentStep !== 'M') return;
+
+            gmm.forEach((k, idx) => {
+                let Nk = 0;
+                let sumX = 0, sumY = 0;
+
+                // 1. Calculate new Means and Nk
+                points.forEach((pt, i) => {
+                    let resp = idx === 0 ? responsibilities[i].p0 : responsibilities[i].p1;
+                    Nk += resp;
+                    sumX += resp * pt.x;
+                    sumY += resp * pt.y;
+                });
+
+                if (Nk < 1e-5) Nk = 1e-5; // Prevent collapse
+
+                // 2. Update Weights
+                k.weight = Nk / points.length;
+
+                // 3. Update Means
+                k.mean.x = sumX / Nk;
+                k.mean.y = sumY / Nk;
+
+                // 4. Update Covariances (Diagonal only for visual simplicity)
+                let sumCovX = 0, sumCovY = 0;
+                points.forEach((pt, i) => {
+                    let resp = idx === 0 ? responsibilities[i].p0 : responsibilities[i].p1;
+                    sumCovX += resp * Math.pow(pt.x - k.mean.x, 2);
+                    sumCovY += resp * Math.pow(pt.y - k.mean.y, 2);
+                });
+
+                k.cov.x = Math.max(sumCovX / Nk, 100); // Floor variance to avoid tiny dot
+                k.cov.y = Math.max(sumCovY / Nk, 100);
+            });
+
+            // Animate ellipses
+            updateGaussianVisuals(600);
+
+            iteration++;
+            currentStep = 'E';
+            updateUIState();
+        };
+
+        // UI Management
+        function updateUIState() {
+            document.querySelectorAll('.step-block').forEach(el => el.classList.remove('active'));
+            
+            if (iteration === 1 && currentStep === 'E') {
+                document.getElementById('block-init').classList.add('active');
+            } else if (currentStep === 'E') {
+                document.getElementById('block-e').classList.add('active');
+            } else {
+                document.getElementById('block-m').classList.add('active');
+            }
+
+            document.getElementById('btn-e').disabled = (currentStep !== 'E');
+            document.getElementById('btn-m').disabled = (currentStep !== 'M');
+            document.getElementById('status-bar').innerText = `Status: Iteration ${iteration} - Ready to run ${currentStep}-Step`;
+        }
+
+        window.reset = function() {
+            generateData();
+            initGMM();
+            drawInitial();
+        };
+
+        window.autoRun = function() {
+            let steps = 10; // 5 full iterations
+            let delay = 0;
+            
+            for(let i=0; i<steps; i++) {
+                setTimeout(() => {
+                    if(currentStep === 'E') runEStep();
+                    else runMStep();
+                }, delay);
+                delay += 700;
+            }
+        };
+
+        // Boot
+        reset();
+
+    </script>
+</body>
+</html>
