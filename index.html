@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Teaching Widgets</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f4f6f9;
+    color: #1a1a2e;
+    min-height: 100vh;
+  }
+
+  header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff;
+    padding: 48px 24px 40px;
+    text-align: center;
+  }
+
+  header h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+
+  header p {
+    color: #a0b0c8;
+    font-size: 1rem;
+    max-width: 560px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    padding: 32px 24px 0;
+  }
+
+  .filter-btn {
+    padding: 7px 18px;
+    border-radius: 999px;
+    border: 2px solid #d0d8e8;
+    background: #fff;
+    color: #4a5568;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    letter-spacing: 0.3px;
+  }
+
+  .filter-btn:hover {
+    border-color: #4f7df3;
+    color: #4f7df3;
+  }
+
+  .filter-btn.active {
+    background: #4f7df3;
+    border-color: #4f7df3;
+    color: #fff;
+  }
+
+  .filter-btn[data-filter="all"].active {
+    background: #1a1a2e;
+    border-color: #1a1a2e;
+  }
+
+  .results-info {
+    text-align: center;
+    margin: 20px 0 4px;
+    font-size: 0.82rem;
+    color: #888;
+    min-height: 1.2em;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    max-width: 1100px;
+    margin: 16px auto 56px;
+    padding: 0 24px;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    border: 1px solid #e8edf5;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(79,125,243,0.13);
+    border-color: #c0d0f0;
+  }
+
+  .card.hidden {
+    display: none;
+  }
+
+  .card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tag {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.73rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+
+  .tag-ml       { background: #e8f0fe; color: #2d5fcc; }
+  .tag-clustering { background: #e6f9f1; color: #1a7a4a; }
+  .tag-llms     { background: #fdf0e8; color: #c2610a; }
+  .tag-deep-learning { background: #f3e8fd; color: #7c3aaa; }
+  .tag-ai       { background: #fff0f5; color: #b5245a; }
+
+  .card-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1a1a2e;
+    line-height: 1.35;
+  }
+
+  .card-desc {
+    font-size: 0.88rem;
+    color: #5a6478;
+    line-height: 1.6;
+    flex: 1;
+  }
+
+  .card-arrow {
+    font-size: 0.82rem;
+    color: #4f7df3;
+    font-weight: 600;
+    align-self: flex-start;
+    margin-top: 4px;
+  }
+
+  .no-results {
+    display: none;
+    text-align: center;
+    padding: 60px 24px;
+    color: #888;
+    font-size: 1rem;
+    grid-column: 1 / -1;
+  }
+
+  footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 0.8rem;
+    color: #aaa;
+    border-top: 1px solid #e8edf5;
+  }
+
+  footer a { color: #4f7df3; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AI Teaching Widgets</h1>
+  <p>Interactive demos for Machine Learning, Deep Learning, and AI — single-file, no installation required.</p>
+</header>
+
+<div class="filter-bar" id="filterBar">
+  <button class="filter-btn active" data-filter="all">All</button>
+  <button class="filter-btn" data-filter="ml">ML</button>
+  <button class="filter-btn" data-filter="clustering">Clustering</button>
+  <button class="filter-btn" data-filter="llms">LLMs</button>
+  <button class="filter-btn" data-filter="deep-learning">Deep Learning</button>
+  <button class="filter-btn" data-filter="ai">AI</button>
+</div>
+
+<div class="results-info" id="resultsInfo"></div>
+
+<div class="grid" id="grid">
+
+  <a class="card" href="https://mtgca.github.io/widgets_pubic/llmpretraining.html"
+     data-tags="llms ai">
+    <div class="card-tags">
+      <span class="tag tag-llms">LLMs</span>
+      <span class="tag tag-ai">AI</span>
+    </div>
+    <div class="card-title">LLM Next-Word Prediction</div>
+    <div class="card-desc">Visualizes how large language models are pretrained via next-token prediction over a text corpus.</div>
+    <div class="card-arrow">Open widget →</div>
+  </a>
+
+  <a class="card" href="https://mtgca.github.io/widgets_pubic/external_metrics_interactive.html"
+     data-tags="ml clustering">
+    <div class="card-tags">
+      <span class="tag tag-ml">ML</span>
+      <span class="tag tag-clustering">Clustering</span>
+    </div>
+    <div class="card-title">External Clustering Metrics: ARI &amp; NMI</div>
+    <div class="card-desc">Drag-and-drop demo showing how Adjusted Rand Index and Normalized Mutual Information respond to different cluster assignments.</div>
+    <div class="card-arrow">Open widget →</div>
+  </a>
+
+  <a class="card" href="https://mtgca.github.io/widgets_pubic/gmm_covariance_interactive.html"
+     data-tags="ml clustering">
+    <div class="card-tags">
+      <span class="tag tag-ml">ML</span>
+      <span class="tag tag-clustering">Clustering</span>
+    </div>
+    <div class="card-title">GMM Covariance Types</div>
+    <div class="card-desc">Explores how the covariance matrix (full, tied, diagonal, spherical) controls the shape and orientation of Gaussian Mixture Model clusters.</div>
+    <div class="card-arrow">Open widget →</div>
+  </a>
+
+  <a class="card" href="https://mtgca.github.io/widgets_pubic/gmm_em_interactive.html"
+     data-tags="ml clustering">
+    <div class="card-tags">
+      <span class="tag tag-ml">ML</span>
+      <span class="tag tag-clustering">Clustering</span>
+    </div>
+    <div class="card-title">EM Algorithm for GMMs</div>
+    <div class="card-desc">Step-through visualization of the Expectation-Maximization algorithm fitting a Gaussian Mixture Model to data.</div>
+    <div class="card-arrow">Open widget →</div>
+  </a>
+
+  <a class="card" href="https://mtgca.github.io/widgets_pubic/linkage_methods_interactive.html"
+     data-tags="ml clustering">
+    <div class="card-tags">
+      <span class="tag tag-ml">ML</span>
+      <span class="tag tag-clustering">Clustering</span>
+    </div>
+    <div class="card-title">Hierarchical Clustering Linkage Methods</div>
+    <div class="card-desc">Compares single, complete, average, and Ward linkage strategies for building hierarchical cluster dendrograms.</div>
+    <div class="card-arrow">Open widget →</div>
+  </a>
+
+  <a class="card" href="https://mtgca.github.io/widgets_pubic/Learning_Rate_Scheduling.html"
+     data-tags="deep-learning ai">
+    <div class="card-tags">
+      <span class="tag tag-deep-learning">Deep Learning</span>
+      <span class="tag tag-ai">AI</span>
+    </div>
+    <div class="card-title">Learning Rate Scheduling</div>
+    <div class="card-desc">Interactive visualization of common learning rate decay strategies: cosine annealing, SGDR, step decay, exponential decay, and linear warm-up + cosine decay.</div>
+    <div class="card-arrow">Open widget →</div>
+  </a>
+
+  <div class="no-results" id="noResults">No widgets match the selected filter.</div>
+</div>
+
+<footer>
+  Hosted on <a href="https://mtgca.github.io/widgets_pubic/">GitHub Pages</a> ·
+  All widgets are single-file HTML — no frameworks, no build step ·
+  <a href="https://github.com/mtgca/widgets_pubic">GitHub repo</a>
+</footer>
+
+<script>
+  const filterBar = document.getElementById('filterBar');
+  const cards = document.querySelectorAll('.card[data-tags]');
+  const resultsInfo = document.getElementById('resultsInfo');
+  const noResults = document.getElementById('noResults');
+  let activeFilters = new Set();
+
+  function applyFilters() {
+    let visible = 0;
+    cards.forEach(card => {
+      const tags = card.dataset.tags.split(' ');
+      const show = activeFilters.size === 0 || [...activeFilters].some(f => tags.includes(f));
+      card.classList.toggle('hidden', !show);
+      if (show) visible++;
+    });
+    noResults.style.display = visible === 0 ? 'block' : 'none';
+    resultsInfo.textContent = activeFilters.size === 0
+      ? `Showing all ${visible} widgets`
+      : `Showing ${visible} of ${cards.length} widgets`;
+  }
+
+  filterBar.addEventListener('click', e => {
+    const btn = e.target.closest('.filter-btn');
+    if (!btn) return;
+    const filter = btn.dataset.filter;
+
+    if (filter === 'all') {
+      activeFilters.clear();
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    } else {
+      document.querySelector('[data-filter="all"]').classList.remove('active');
+      if (activeFilters.has(filter)) {
+        activeFilters.delete(filter);
+        btn.classList.remove('active');
+        if (activeFilters.size === 0) {
+          document.querySelector('[data-filter="all"]').classList.add('active');
+        }
+      } else {
+        activeFilters.add(filter);
+        btn.classList.add('active');
+      }
+    }
+    applyFilters();
+  });
+
+  applyFilters();
+</script>
+
+</body>
+</html>
