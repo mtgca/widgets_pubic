@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Learning Rate Scheduler Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 1000px;
+            width: 100%;
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: #0f172a;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 2rem;
+        }
+
+        /* Controls Section */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            background: #f8fafc;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-weight: 600;
+            font-size: 0.95rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        select, input[type="range"] {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .value-display {
+            font-family: monospace;
+            color: var(--primary);
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        /* Chart Section */
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+
+        /* Explanation Section */
+        .explanation {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: #eff6ff;
+            border-left: 4px solid var(--primary);
+            border-radius: 0 8px 8px 0;
+            grid-column: 1 / -1;
+        }
+
+        .explanation h3 {
+            margin-bottom: 0.75rem;
+            color: #1e3a8a;
+        }
+
+        .explanation p {
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+
+        .math-block {
+            font-family: "Courier New", Courier, monospace;
+            background: #dbeafe;
+            padding: 0.75rem;
+            border-radius: 6px;
+            display: inline-block;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            color: #1e3a8a;
+        }
+
+        @media (max-width: 768px) {
+            .layout-grid {
+                grid-template-columns: 1fr;
+            }
+            .controls {
+                order: 2;
+            }
+            .chart-wrapper {
+                order: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Learning Rate Scheduling</h1>
+        <p class="subtitle">Interactive visualization of optimization decay strategies.</p>
+
+        <div class="layout-grid">
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label for="strategy">Scheduling Strategy</label>
+                    <select id="strategy">
+                        <option value="cosine">Standard Cosine Annealing</option>
+                        <option value="restarts">Cosine Annealing w/ Warm Restarts</option>
+                        <option value="step">Step Decay</option>
+                        <option value="exponential">Exponential Decay</option>
+                        <option value="warmup">Linear Warm-up + Cosine</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="initialLr">Initial LR: <span id="lrVal" class="value-display">0.050</span></label>
+                    <input type="range" id="initialLr" min="0.001" max="0.1" step="0.001" value="0.05">
+                </div>
+
+                <div class="control-group">
+                    <label for="epochs">Total Epochs: <span id="epochsVal" class="value-display">100</span></label>
+                    <input type="range" id="epochs" min="20" max="200" step="1" value="100">
+                </div>
+
+                <div class="control-group" id="cycleGroup" style="display: none;">
+                    <label for="cycleLength">Cycle Length (T<sub>0</sub>): <span id="cycleVal" class="value-display">20</span></label>
+                    <input type="range" id="cycleLength" min="10" max="50" step="1" value="20">
+                </div>
+            </div>
+
+            <div class="chart-wrapper">
+                <div class="chart-container">
+                    <canvas id="lrChart"></canvas>
+                </div>
+            </div>
+
+            <div class="explanation" id="explanationArea">
+                </div>
+
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const strategySelect = document.getElementById('strategy');
+        const initialLrInput = document.getElementById('initialLr');
+        const epochsInput = document.getElementById('epochs');
+        const cycleLengthInput = document.getElementById('cycleLength');
+        const cycleGroup = document.getElementById('cycleGroup');
+        
+        const lrValDisplay = document.getElementById('lrVal');
+        const epochsValDisplay = document.getElementById('epochsVal');
+        const cycleValDisplay = document.getElementById('cycleVal');
+        const explanationArea = document.getElementById('explanationArea');
+        const ctx = document.getElementById('lrChart').getContext('2d');
+
+        let lrChart;
+
+        // Content Dictionary for Graduate Level Explanations
+        const strategyData = {
+            cosine: {
+                title: "Standard Cosine Annealing",
+                math: "&eta;(t) = &eta;<sub>min</sub> + 0.5 * (&eta;<sub>max</sub> - &eta;<sub>min</sub>) * (1 + cos(t&pi; / T<sub>max</sub>))",
+                desc: "Smoothly decays the learning rate following a single half-cosine curve over the entire training duration. The transition is continuous, allowing the optimizer to make rapid initial progress and gradually shift to highly precise fine-tuning at the end.",
+                useCase: "Standard approach for training modern architectures when you want a smooth descent into a single, well-defined global minimum."
+            },
+            restarts: {
+                title: "Cosine Annealing with Warm Restarts (SGDR)",
+                math: "&eta;<sub>t</sub> = &eta;<sub>min</sub> + 0.5 * (&eta;<sub>max</sub> - &eta;<sub>min</sub>) * (1 + cos(T<sub>cur</sub>&pi; / T<sub>i</sub>))",
+                desc: "Decays the learning rate to zero over a set cycle length (T<sub>0</sub>), then immediately performs a 'warm restart' by spiking back to the maximum learning rate. This cyclical burst of energy helps kick the model out of suboptimal local minima.",
+                useCase: "Highly effective for complex loss landscapes in deep networks, allowing the optimizer to explore multiple local minima before settling."
+            },
+            step: {
+                title: "Step Decay",
+                math: "&eta;(t) = &eta;<sub>0</sub> * &gamma; <sup>floor(t / milestones)</sup>",
+                desc: "Drops the learning rate by a multiplicative factor (&gamma;) at predefined epoch intervals. While historically popular, the sudden abrupt drops can cause gradients to jump unpredictably.",
+                useCase: "Classic CNN architectures (like VGG or AlexNet). Less favored today compared to continuous methods because it requires manual tuning of the milestones."
+            },
+            exponential: {
+                title: "Exponential Decay",
+                math: "&eta;(t) = &eta;<sub>0</sub> * e<sup>-k * t</sup>",
+                desc: "Applies a continuous, exponential decay to the learning rate. It provides a smoother descent into the loss minimum compared to step decay, but can sometimes decay too quickly early in training.",
+                useCase: "Useful when the total number of epochs is largely unknown or unbounded, or during late-stage fine-tuning."
+            },
+            warmup: {
+                title: "Linear Warm-up + Cosine Decay",
+                math: "t &le; t<sub>warm</sub> : &eta;(t) = &eta;<sub>max</sub> * (t / t<sub>warm</sub>)<br>t &gt; t<sub>warm</sub> : Cosine Decay",
+                desc: "Begins with a near-zero learning rate and linearly increases it over the first ~10% of epochs, before handing off to a cosine decay. This stabilizes training when weights are randomly initialized and gradients are highly erratic.",
+                useCase: "Essential for training Transformers (e.g., BERT, GPT) and any model trained with very large batch sizes."
+            }
+        };
+
+        // Initialize Chart
+        function initChart() {
+            lrChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Learning Rate',
+                        data: [],
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        borderWidth: 2.5,
+                        pointRadius: 0,
+                        pointHitRadius: 10,
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'LR: ' + context.parsed.y.toFixed(5);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Epochs', font: { weight: 'bold' } },
+                            grid: { display: false }
+                        },
+                        y: {
+                            title: { display: true, text: 'Learning Rate (&eta;)', font: { weight: 'bold' } },
+                            min: 0,
+                            suggestedMax: 0.1
+                        }
+                    },
+                    animation: {
+                        duration: 300,
+                        easing: 'easeOutQuart'
+                    }
+                }
+            });
+        }
+
+        // Calculate Learning Rate based on strategy
+        function calculateLR(strategy, initialLr, totalEpochs, currentEpoch, cycleLength) {
+            // Adjust current epoch to start from 0 for mathematical formulas
+            const t = currentEpoch - 1; 
+
+            switch (strategy) {
+                case 'cosine':
+                    return 0.5 * initialLr * (1 + Math.cos((Math.PI * t) / (totalEpochs - 1)));
+                
+                case 'restarts':
+                    const T_cur = t % cycleLength;
+                    return 0.5 * initialLr * (1 + Math.cos((Math.PI * T_cur) / (cycleLength - 1)));
+
+                case 'step':
+                    // Drop by factor of 0.5 every 25% of epochs
+                    const milestone = Math.floor(totalEpochs / 4);
+                    const drops = Math.floor(t / milestone);
+                    return initialLr * Math.pow(0.5, drops);
+                
+                case 'exponential':
+                    // k is chosen so it decays to approx 1% of initial LR by the end
+                    const k = 4.6 / totalEpochs; 
+                    return initialLr * Math.exp(-k * t);
+                
+                case 'warmup':
+                    const warmupEpochs = Math.max(1, Math.floor(totalEpochs * 0.10)); // 10% warmup
+                    if (t < warmupEpochs) {
+                        return initialLr * ((t + 1) / warmupEpochs);
+                    } else {
+                        const postWarmupT = t - warmupEpochs;
+                        const postWarmupEpochs = totalEpochs - warmupEpochs - 1;
+                        return 0.5 * initialLr * (1 + Math.cos((Math.PI * postWarmupT) / postWarmupEpochs));
+                    }
+            }
+            return initialLr;
+        }
+
+        // Update the UI (Chart and Explanation)
+        function updateUI() {
+            const strategy = strategySelect.value;
+            const initialLr = parseFloat(initialLrInput.value);
+            const totalEpochs = parseInt(epochsInput.value);
+            const cycleLength = parseInt(cycleLengthInput.value);
+
+            // Toggle cycle length input visibility
+            cycleGroup.style.display = (strategy === 'restarts') ? 'flex' : 'none';
+
+            // Update display values
+            lrValDisplay.textContent = initialLr.toFixed(3);
+            epochsValDisplay.textContent = totalEpochs;
+            cycleValDisplay.textContent = cycleLength;
+
+            // Generate Data
+            const labels = [];
+            const data = [];
+            
+            for (let epoch = 1; epoch <= totalEpochs; epoch++) {
+                labels.push(epoch);
+                data.push(calculateLR(strategy, initialLr, totalEpochs, epoch, cycleLength));
+            }
+
+            // Update Chart
+            lrChart.data.labels = labels;
+            lrChart.data.datasets[0].data = data;
+            lrChart.options.scales.y.suggestedMax = initialLr * 1.1; 
+            lrChart.update();
+
+            // Update Explanation Area
+            const info = strategyData[strategy];
+            explanationArea.innerHTML = `
+                <h3>${info.title}</h3>
+                <div class="math-block">${info.math}</div>
+                <p><strong>Mathematical Mechanism:</strong> ${info.desc}</p>
+                <p><strong>Primary Use Case:</strong> ${info.useCase}</p>
+            `;
+        }
+
+        // Event Listeners
+        strategySelect.addEventListener('change', updateUI);
+        initialLrInput.addEventListener('input', updateUI);
+        epochsInput.addEventListener('input', updateUI);
+        cycleLengthInput.addEventListener('input', updateUI);
+
+        // Initialize on load
+        initChart();
+        // Force the dropdown to 'restarts' to show the new feature on load
+        strategySelect.value = 'restarts';
+        updateUI();
+
+    </script>
+</body>
+</html>
