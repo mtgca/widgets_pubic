@@ -15,6 +15,7 @@ Hosted on GitHub Pages: **https://mtgca.github.io/widgets_pubic/**
 | [GMM Covariance Types](https://mtgca.github.io/widgets_pubic/gmm_covariance_interactive.html) | ML / Clustering | Explores how the covariance matrix (full, tied, diagonal, spherical) controls the shape and orientation of Gaussian Mixture Model clusters. |
 | [EM Algorithm for GMMs](https://mtgca.github.io/widgets_pubic/gmm_em_interactive.html) | ML / Clustering | Step-through visualization of the Expectation-Maximization algorithm fitting a Gaussian Mixture Model to data. |
 | [Hierarchical Clustering Linkage Methods](https://mtgca.github.io/widgets_pubic/linkage_methods_interactive.html) | ML / Clustering | Compares single, complete, average, and Ward linkage strategies for building hierarchical cluster dendrograms. |
+| [Learning Rate Scheduling](https://mtgca.github.io/widgets_pubic/Learning_Rate_Scheduling.html) | AI / Deep Learning | Interactive visualization of common learning rate decay strategies: cosine annealing, SGDR, step decay, exponential decay, and linear warm-up + cosine decay. |
 
 ---
 
