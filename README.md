@@ -17,6 +17,7 @@ Hosted on GitHub Pages: **https://mtgca.github.io/widgets_pubic/**
 | [Hierarchical Clustering Linkage Methods](https://mtgca.github.io/widgets_pubic/linkage_methods_interactive.html) | ML / Clustering | Compares single, complete, average, and Ward linkage strategies for building hierarchical cluster dendrograms. |
 | [Learning Rate Scheduling](https://mtgca.github.io/widgets_pubic/Learning_Rate_Scheduling.html) | AI / Deep Learning | Interactive visualization of common learning rate decay strategies: cosine annealing, SGDR, step decay, exponential decay, and linear warm-up + cosine decay. |
 | [Dropout Regularization](https://mtgca.github.io/widgets_pubic/dropout.html) | AI / Deep Learning | Interactive demo showing how dropout randomly deactivates neurons during training to prevent overfitting in neural networks. |
+| [Convolution Visualizer](https://mtgca.github.io/widgets_pubic/conv.html) | AI / Deep Learning | Step-by-step visualization of the 2D convolution operation showing how a kernel slides over an input matrix to produce a feature map. |
 
 ---
 
