@@ -28,7 +28,7 @@ widgets_pubic/
 - Each widget is a **single, self-contained `.html` file** — no external dependencies, no build tools.
 - Widgets embed all CSS and JS inline so they work when served directly from GitHub Pages.
 - Widget filenames should be descriptive and end in `_interactive.html` for interactive demos, or be clearly named for the concept they teach.
-- When adding a new widget, update `README.md` with a link and short description in the table of contents.
+- When adding a new widget, **both** `README.md` and `index.html` must be updated (see below).
 
 ## Courses Covered
 
@@ -41,4 +41,7 @@ widgets_pubic/
 1. Create a self-contained `.html` file in the repo root.
 2. Keep all CSS and JS inline (no CDN dependencies when avoidable).
 3. Add a row to the table of contents in `README.md` with the GitHub Pages URL and a one-line description.
-4. Commit and push — GitHub Pages deploys automatically.
+4. Add a card to `index.html` inside the `#grid` div, following the existing card pattern (tags, title, desc, arrow link).
+5. Commit and push — GitHub Pages deploys automatically.
+
+> **Important**: Steps 3 and 4 are both required every time a widget is added. Never update one without the other.
