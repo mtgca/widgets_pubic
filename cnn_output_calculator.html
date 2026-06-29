@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CNN Output Size Calculator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            text-align: center;
+            background-color: #f8f9fa;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { color: #d63384; margin-bottom: 5px;}
+        h3 { color: #555; margin-top: 0; }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            display: inline-flex;
+            gap: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .control-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        .control-group input {
+            width: 60px;
+            padding: 8px;
+            font-size: 16px;
+            text-align: center;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .general-formula-container {
+            margin: 0 auto 20px;
+            font-size: 18px;
+            color: #444;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+        .general-formula-box {
+            background: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .formula-container {
+            font-size: 22px;
+            margin: 0 auto 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            display: inline-block;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .math-block {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            font-family: "Times New Roman", Times, serif;
+            font-style: italic;
+        }
+        .fraction {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            vertical-align: middle;
+        }
+        .numerator {
+            border-bottom: 2px solid #333;
+            padding: 0 5px 2px;
+        }
+        .denominator {
+            padding: 2px 5px 0;
+        }
+        
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 50px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .grid-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .grid {
+            display: inline-grid;
+            gap: 1px;
+            background: #999;
+            border: 2px solid #555;
+        }
+        .cell {
+            width: 35px;
+            height: 35px;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #ccc;
+            transition: all 0.1s;
+        }
+        .cell.padding {
+            background: #f0f0f0;
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, #e0e0e0 5px, #e0e0e0 10px);
+        }
+        .cell.filter-active {
+            background: #ffeeba; /* Yellowish */
+            box-shadow: inset 0 0 0 2px #ffc107;
+            color: #856404;
+            font-weight: bold;
+        }
+        .cell.output-active {
+            background: #d4edda !important;
+            box-shadow: inset 0 0 0 2px #28a745;
+            color: #155724 !important;
+            font-weight: bold;
+        }
+        .output-grid .cell {
+            background: #e8f5e9;
+            color: #a5d6a7;
+        }
+        
+        .arrow {
+            font-size: 40px;
+            color: #6c757d;
+        }
+        
+        .button-group {
+            margin-top: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            display: inline-block;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            margin: 0 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        .error-msg {
+            color: #dc3545;
+            font-weight: bold;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Convolutional Layer</h1>
+    <h3>Output Size Calculation</h3>
+    
+    <div class="general-formula-container">
+        <strong style="font-style: normal; font-family: sans-serif;">General Formula:</strong>
+        <div class="general-formula-box math-block">
+            Output = &lfloor; 
+            <div class="fraction" style="margin: 0 5px;">
+                <div class="numerator" style="border-bottom-width: 1px;">N - F + 2P</div>
+                <div class="denominator">S</div>
+            </div>
+            &rfloor; + 1
+        </div>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label>Input Size (N)</label>
+            <input type="number" id="val-n" value="7" min="1" max="15" onchange="resetAndCalculate()">
+        </div>
+        <div class="control-group">
+            <label>Filter Size (F)</label>
+            <input type="number" id="val-f" value="3" min="1" max="15" onchange="resetAndCalculate()">
+        </div>
+        <div class="control-group">
+            <label>Stride (S)</label>
+            <input type="number" id="val-s" value="1" min="1" max="5" onchange="resetAndCalculate()">
+        </div>
+        <div class="control-group">
+            <label>Padding (P)</label>
+            <input type="number" id="val-p" value="0" min="0" max="5" onchange="resetAndCalculate()">
+        </div>
+    </div>
+
+    <br>
+
+    <div class="formula-container">
+        <div class="math-block">
+            <span style="font-family: sans-serif; font-style: normal; font-weight: bold; font-size: 18px; color: #666; margin-right: 10px;">Live Calculation:</span>
+            Output = &lfloor; 
+            <div class="fraction">
+                <div class="numerator"><span id="form-n">7</span> - <span id="form-f">3</span> + 2(<span id="form-p">0</span>)</div>
+                <div class="denominator" id="form-s">1</div>
+            </div>
+            &rfloor; + 1 &nbsp;=&nbsp; <strong id="form-result" style="color: #28a745; font-style: normal;">5</strong>
+        </div>
+        <div id="error-message" class="error-msg">Invalid dimensions! Filter is larger than padded input.</div>
+    </div>
+
+    <div class="container" id="visual-container">
+        <div class="grid-wrapper">
+            <h4 style="margin-bottom: 5px;">Input Grid</h4>
+            <div id="dim-input" style="font-size:12px; color:#666; margin-bottom: 10px;">7x7</div>
+            <div id="input-grid" class="grid"></div>
+        </div>
+        
+        <div class="arrow">➔</div>
+        
+        <div class="grid-wrapper">
+            <h4 style="margin-bottom: 5px;">Output Grid</h4>
+            <div id="dim-output" style="font-size:12px; color:#666; margin-bottom: 10px;">5x5</div>
+            <div id="output-grid" class="grid output-grid"></div>
+        </div>
+    </div>
+
+    <div class="button-group" id="playback-controls">
+        <button id="btn-play" onclick="togglePlay()">Play Animation</button>
+        <button id="btn-step" onclick="step(1)">Step Forward</button>
+        <button onclick="resetAnimation()">Reset</button>
+        <span id="step-counter" style="margin-left: 15px; font-weight: bold; color: #555;">Step 0 / 25</span>
+    </div>
+
+    <script>
+        let N, F, S, P, OutDim;
+        let currentStep = 0;
+        let maxSteps = 0;
+        let isPlaying = false;
+        let playInterval = null;
+
+        function updateValues() {
+            N = parseInt(document.getElementById('val-n').value);
+            F = parseInt(document.getElementById('val-f').value);
+            S = parseInt(document.getElementById('val-s').value);
+            P = parseInt(document.getElementById('val-p').value);
+            
+            document.getElementById('form-n').innerText = N;
+            document.getElementById('form-f').innerText = F;
+            document.getElementById('form-p').innerText = P;
+            document.getElementById('form-s').innerText = S;
+            
+            let numerator = N - F + 2 * P;
+            
+            if (numerator < 0) {
+                OutDim = 0;
+                document.getElementById('form-result').innerText = "Error";
+                document.getElementById('form-result').style.color = "#dc3545";
+                document.getElementById('error-message').style.display = "block";
+                document.getElementById('visual-container').style.display = "none";
+                document.getElementById('playback-controls').style.display = "none";
+                maxSteps = 0;
+            } else {
+                OutDim = Math.floor(numerator / S) + 1;
+                document.getElementById('form-result').innerText = OutDim;
+                document.getElementById('form-result').style.color = "#28a745";
+                document.getElementById('error-message').style.display = "none";
+                document.getElementById('visual-container').style.display = "flex";
+                document.getElementById('playback-controls').style.display = "inline-block";
+                maxSteps = OutDim * OutDim;
+            }
+        }
+
+        function buildGrids() {
+            if (OutDim <= 0) return;
+            
+            const paddedSize = N + 2 * P;
+            document.getElementById('dim-input').innerText = `${paddedSize}x${paddedSize} (Padding: ${P})`;
+            document.getElementById('dim-output').innerText = `${OutDim}x${OutDim}`;
+            
+            const inputGrid = document.getElementById('input-grid');
+            inputGrid.style.gridTemplateColumns = `repeat(${paddedSize}, 1fr)`;
+            inputGrid.innerHTML = '';
+            
+            for (let r = 0; r < paddedSize; r++) {
+                for (let c = 0; c < paddedSize; c++) {
+                    let cell = document.createElement('div');
+                    cell.className = 'cell';
+                    if (r < P || r >= N + P || c < P || c >= N + P) {
+                        cell.classList.add('padding');
+                    }
+                    inputGrid.appendChild(cell);
+                }
+            }
+
+            const outputGrid = document.getElementById('output-grid');
+            outputGrid.style.gridTemplateColumns = `repeat(${OutDim}, 1fr)`;
+            outputGrid.innerHTML = '';
+            
+            for (let r = 0; r < OutDim; r++) {
+                for (let c = 0; c < OutDim; c++) {
+                    let cell = document.createElement('div');
+                    cell.className = 'cell';
+                    outputGrid.appendChild(cell);
+                }
+            }
+        }
+
+        function highlightStep() {
+            if (OutDim <= 0) return;
+            
+            const paddedSize = N + 2 * P;
+            const inputCells = document.getElementById('input-grid').children;
+            const outputCells = document.getElementById('output-grid').children;
+            
+            for(let cell of inputCells) cell.classList.remove('filter-active');
+            for(let cell of outputCells) cell.classList.remove('output-active');
+            
+            if (currentStep === 0) {
+                document.getElementById('step-counter').innerText = `Step 0 / ${maxSteps}`;
+                return;
+            }
+
+            let index = currentStep - 1; 
+            let outRow = Math.floor(index / OutDim);
+            let outCol = index % OutDim;
+            let inRowStart = outRow * S;
+            let inColStart = outCol * S;
+
+            for (let r = 0; r < F; r++) {
+                for (let c = 0; c < F; c++) {
+                    let currentR = inRowStart + r;
+                    let currentC = inColStart + c;
+                    if(currentR < paddedSize && currentC < paddedSize) {
+                         let cellIndex = currentR * paddedSize + currentC;
+                         inputCells[cellIndex].classList.add('filter-active');
+                    }
+                }
+            }
+            
+            outputCells[index].classList.add('output-active');
+            document.getElementById('step-counter').innerText = `Step ${currentStep} / ${maxSteps}`;
+            document.getElementById('btn-step').disabled = (currentStep === maxSteps);
+        }
+
+        function step(dir) {
+            currentStep += dir;
+            if (currentStep < 0) currentStep = 0;
+            if (currentStep > maxSteps) {
+                currentStep = maxSteps;
+                pauseAnimation();
+            }
+            highlightStep();
+        }
+
+        function togglePlay() {
+            if (isPlaying) {
+                pauseAnimation();
+            } else {
+                if(currentStep >= maxSteps) currentStep = 0;
+                isPlaying = true;
+                document.getElementById('btn-play').innerText = "Pause";
+                playInterval = setInterval(() => { step(1); }, 500);
+            }
+        }
+        
+        function pauseAnimation() {
+            isPlaying = false;
+            document.getElementById('btn-play').innerText = "Play Animation";
+            clearInterval(playInterval);
+        }
+
+        function resetAnimation() {
+            pauseAnimation();
+            currentStep = 0;
+            highlightStep();
+            document.getElementById('btn-step').disabled = false;
+        }
+
+        function resetAndCalculate() {
+            pauseAnimation();
+            currentStep = 0;
+            updateValues();
+            buildGrids();
+            highlightStep();
+        }
+
+        resetAndCalculate();
+    </script>
+</body>
+</html>

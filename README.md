@@ -18,6 +18,7 @@ Hosted on GitHub Pages: **https://mtgca.github.io/widgets_pubic/**
 | [Learning Rate Scheduling](https://mtgca.github.io/widgets_pubic/Learning_Rate_Scheduling.html) | AI / Deep Learning | Interactive visualization of common learning rate decay strategies: cosine annealing, SGDR, step decay, exponential decay, and linear warm-up + cosine decay. |
 | [Dropout Regularization](https://mtgca.github.io/widgets_pubic/dropout.html) | AI / Deep Learning | Interactive demo showing how dropout randomly deactivates neurons during training to prevent overfitting in neural networks. |
 | [Convolution Visualizer](https://mtgca.github.io/widgets_pubic/conv.html) | AI / Deep Learning | Step-by-step visualization of the 2D convolution operation showing how a kernel slides over an input matrix to produce a feature map. |
+| [CNN Output Size Calculator](https://mtgca.github.io/widgets_pubic/cnn_output_calculator.html) | AI / Deep Learning | Interactive calculator that computes the output dimensions of CNN layers (conv, pooling) given input size, kernel size, padding, and stride. |
 
 ---
 
