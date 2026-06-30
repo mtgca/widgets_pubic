@@ -19,6 +19,7 @@ Hosted on GitHub Pages: **https://mtgca.github.io/widgets_pubic/**
 | [Dropout Regularization](https://mtgca.github.io/widgets_pubic/dropout.html) | AI / Deep Learning | Interactive demo showing how dropout randomly deactivates neurons during training to prevent overfitting in neural networks. |
 | [Convolution Visualizer](https://mtgca.github.io/widgets_pubic/conv.html) | AI / Deep Learning | Step-by-step visualization of the 2D convolution operation showing how a kernel slides over an input matrix to produce a feature map. |
 | [CNN Output Size Calculator](https://mtgca.github.io/widgets_pubic/cnn_output_calculator.html) | AI / Deep Learning | Interactive calculator that computes the output dimensions of CNN layers (conv, pooling) given input size, kernel size, padding, and stride. |
+| [Intuitive CNN Feature Map](https://mtgca.github.io/widgets_pubic/cnn_intuition.html) | AI / Deep Learning | Animated 3D visualization of a convolution kernel scanning an input grid and producing a feature map, illustrating the intuition behind CNN feature extraction. |
 
 ---
 

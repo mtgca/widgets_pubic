@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intuitive CNN Feature Map</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 30px;
+            width: 100%;
+            text-align: center;
+            color: #2c3e50;
+            pointer-events: none;
+        }
+        h2 { margin: 0 0 5px 0; font-size: 24px; }
+        p { margin: 0; font-size: 16px; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h2>CNN Spatial Mapping</h2>
+        <p>Extracting structural features: A 10x10 Input maps to an 8x8 Feature Map</p>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // 1. Scene Setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf4f7f6); 
+        
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0, 28);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // 2. Data Definition
+        // A clean 10x10 'A'
+        const inputData = [
+            [0,0,0,0,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,0,0,0],
+            [0,0,1,1,0,0,1,1,0,0],
+            [0,1,1,0,0,0,0,1,1,0],
+            [0,1,1,1,1,1,1,1,1,0],
+            [1,1,0,0,0,0,0,0,1,1],
+            [1,1,0,0,0,0,0,0,1,1],
+            [1,1,0,0,0,0,0,0,1,1],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0]
+        ];
+
+        // A perfectly recognizable 8x8 'A' to represent the extracted feature map
+        const outputData = [
+            [0,0,0,1,1,0,0,0],
+            [0,0,1,1,1,1,0,0],
+            [0,1,1,0,0,1,1,0],
+            [0,1,1,1,1,1,1,0],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [0,0,0,0,0,0,0,0]
+        ];
+
+        const inputSize = 10;
+        const kernelSize = 3;
+        const outputSize = 8;
+        
+        const cellSize = 0.9;
+        const gap = 0.1;
+        const offset = (cellSize + gap);
+
+        const inputGroup = new THREE.Group();
+        const outputGroup = new THREE.Group();
+        inputGroup.position.x = -7;
+        outputGroup.position.x = 7;
+
+        scene.add(inputGroup);
+        scene.add(outputGroup);
+
+        const inputCells = [];
+        const outputCells = [];
+        const paintedCells = []; // Tracks which output pixels have been processed
+
+        // Color Palette
+        const colorEmptyInput = 0xffffff;
+        const colorFilledInput = 0x2c3e50;    // Dark Slate for input shape
+        const colorKernelGlow = 0x9b59b6;     // Purple highlight for scanning kernel
+        
+        const colorEmptyOutput = 0xe0e6ed;    // Dimmer background for unpainted output
+        const colorFilledOutput = 0x00d2ff;   // Bright Cyan for the recognized feature
+        const colorActivePixel = 0xff3366;    // Pink/Red for the exact pixel being calculated
+
+        const geometry = new THREE.PlaneGeometry(cellSize, cellSize);
+        const edgesGeometry = new THREE.EdgesGeometry(geometry);
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0xbdc3c7 });
+
+        // Build Input Grid
+        for (let y = 0; y < inputSize; y++) {
+            inputCells[y] = [];
+            for (let x = 0; x < inputSize; x++) {
+                const isFilled = inputData[y][x] === 1;
+                const mat = new THREE.MeshBasicMaterial({ color: isFilled ? colorFilledInput : colorEmptyInput });
+                const mesh = new THREE.Mesh(geometry, mat);
+                mesh.position.set(x * offset - (inputSize*offset)/2, -y * offset + (inputSize*offset)/2, 0);
+                mesh.add(new THREE.LineSegments(edgesGeometry, lineMaterial));
+                inputGroup.add(mesh);
+                inputCells[y][x] = { mesh, isFilled };
+            }
+        }
+
+        // Build Output Grid
+        for (let y = 0; y < outputSize; y++) {
+            outputCells[y] = [];
+            paintedCells[y] = [];
+            for (let x = 0; x < outputSize; x++) {
+                paintedCells[y][x] = false;
+                const mat = new THREE.MeshBasicMaterial({ color: colorEmptyOutput });
+                const mesh = new THREE.Mesh(geometry, mat);
+                mesh.position.set(x * offset - (outputSize*offset)/2, -y * offset + (outputSize*offset)/2, 0);
+                mesh.add(new THREE.LineSegments(edgesGeometry, lineMaterial));
+                outputGroup.add(mesh);
+                outputCells[y][x] = mesh;
+            }
+        }
+
+        // Perspective Tilt
+        inputGroup.rotation.y = Math.PI / 8;
+        outputGroup.rotation.y = -Math.PI / 8;
+
+        // Connecting Beams
+        const beamMaterial = new THREE.LineBasicMaterial({ color: 0x9b59b6, transparent: true, opacity: 0.5 });
+        let linesGroup = new THREE.Group();
+        scene.add(linesGroup);
+
+        // 3. Animation Logic
+        let stepX = 0, stepY = 0;
+        let lastTime = 0;
+        const stepDuration = 120; // Slightly faster for smoother viewing
+
+        function updateColors() {
+            // 1. Reset Input Grid to base colors
+            for (let y = 0; y < inputSize; y++) {
+                for (let x = 0; x < inputSize; x++) {
+                    const cell = inputCells[y][x];
+                    cell.mesh.material.color.setHex(cell.isFilled ? colorFilledInput : colorEmptyInput);
+                }
+            }
+
+            // 2. Highlight active 3x3 kernel on input grid
+            for (let ky = 0; ky < kernelSize; ky++) {
+                for (let kx = 0; kx < kernelSize; kx++) {
+                    const cell = inputCells[stepY + ky][stepX + kx];
+                    const baseColor = new THREE.Color(cell.isFilled ? colorFilledInput : colorEmptyInput);
+                    const highlight = new THREE.Color(colorKernelGlow);
+                    cell.mesh.material.color = baseColor.lerp(highlight, 0.4); // Blend glow with base
+                }
+            }
+
+            // 3. Paint Output Grid (Progressive Build)
+            paintedCells[stepY][stepX] = true; // Mark current cell as processed
+            
+            for (let y = 0; y < outputSize; y++) {
+                for (let x = 0; x < outputSize; x++) {
+                    if (y === stepY && x === stepX) {
+                        // The active pixel being calculated right now
+                        outputCells[y][x].material.color.setHex(colorActivePixel);
+                    } else if (paintedCells[y][x]) {
+                        // Previously calculated pixels
+                        const isFeature = outputData[y][x] === 1;
+                        outputCells[y][x].material.color.setHex(isFeature ? colorFilledOutput : 0xecf0f1);
+                    } else {
+                        // Unprocessed pixels
+                        outputCells[y][x].material.color.setHex(colorEmptyOutput);
+                    }
+                }
+            }
+
+            // 4. Draw Converging Beams
+            scene.remove(linesGroup);
+            linesGroup = new THREE.Group();
+
+            const outPos = new THREE.Vector3();
+            outputCells[stepY][stepX].getWorldPosition(outPos);
+
+            // Connect corners of the 3x3 kernel to the active output pixel
+            const corners = [
+                [0, 0], [kernelSize-1, 0], [0, kernelSize-1], [kernelSize-1, kernelSize-1]
+            ];
+
+            corners.forEach(corner => {
+                const inPos = new THREE.Vector3();
+                inputCells[stepY + corner[1]][stepX + corner[0]].mesh.getWorldPosition(inPos);
+                const points = [inPos, outPos];
+                const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                linesGroup.add(new THREE.Line(lineGeo, beamMaterial));
+            });
+            scene.add(linesGroup);
+        }
+
+        // Render Loop
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            if (time - lastTime > stepDuration) {
+                updateColors();
+                
+                // Move scanning window
+                stepX++;
+                if (stepX >= outputSize) {
+                    stepX = 0;
+                    stepY++;
+                    if (stepY >= outputSize) {
+                        // Reset for continuous loop
+                        stepY = 0;
+                        for (let y = 0; y < outputSize; y++) {
+                            for (let x = 0; x < outputSize; x++) {
+                                paintedCells[y][x] = false;
+                            }
+                        }
+                    }
+                }
+                lastTime = time;
+            }
+            renderer.render(scene, camera);
+        }
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start
+        requestAnimationFrame(animate);
+    </script>
+</body>
+</html>
