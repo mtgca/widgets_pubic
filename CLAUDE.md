@@ -52,6 +52,8 @@ widgets_pubic/
 
 Widgets are AI-generated. A widget is only marked **verified** once a human expert in the field has reviewed it for correctness. Until then it shows an explicit caution label so users take it with a grain of salt.
 
+**Verification is never automatic.** Every widget defaults to unverified (`data-verified="false"`) and stays that way. Claude must **never** flip a widget to verified on its own initiative — not when creating it, editing it, or "cleaning up." Status only changes when the human explicitly requests it (e.g. "mark X as verified" / "this one is expert-verified"). When asked, apply the change across all the places listed below (and record the expert if one is named). If in doubt, leave it unverified.
+
 Status is tracked by a single `data-verified` attribute (`"true"` / `"false"`) in three places per widget:
 
 - **Inside the widget** — the `.verify-badge` snippet after `<body>` renders a fixed corner pill: green `✓ Expert-verified` or amber `⚠ AI-generated · not expert-verified`. The badge uses `pointer-events:none`; if it overlaps a widget's own top-right controls, move it to `top:10px;left:10px` in that file only.
