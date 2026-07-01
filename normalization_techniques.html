@@ -250,6 +250,12 @@
     background: #f1f4f9; border-radius: 999px; padding: 2px 8px; white-space: nowrap;
   }
   .panel .p-dir { font-size: 0.74rem; color: #8a93a8; margin: 3px 0 10px; }
+  .panel .p-fhint {
+    font-size: 0.64rem; font-weight: 800; color: var(--pc, #2d7ef0);
+    border: 1px solid var(--pc, #2d7ef0); border-radius: 999px; padding: 1px 7px;
+    margin-left: 6px; white-space: nowrap; opacity: 0; transition: opacity 0.15s ease;
+  }
+  .panel .p-fhint.show { opacity: 1; }
 
   .ex-grid {
     display: grid;
@@ -268,12 +274,17 @@
   }
   .ex-num {
     width: 17px; height: 19px; line-height: 19px; text-align: center;
-    font-size: 0.7rem; font-weight: 700; color: #44506a;
+    font-size: 0.7rem; font-weight: 700; color: #44506a; cursor: default;
     border-radius: 3px; background: #eef1f6;
-    transition: background 0.25s ease, color 0.25s ease;
+    transition: background 0.25s ease, color 0.25s ease, transform 0.15s ease, box-shadow 0.15s ease;
   }
   .ex-cell.on { background: var(--pc, #2d7ef0); border-color: var(--pc, #2d7ef0); }
   .ex-cell.on .ex-num { background: rgba(255,255,255,0.22); color: #fff; }
+  .ex-num.f-hi {
+    transform: translateY(-2px) scale(1.16);
+    box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px var(--pc, #2d7ef0), 0 3px 7px rgba(0,0,0,0.2);
+    z-index: 3; position: relative;
+  }
 
   .p-stats {
     display: flex; gap: 8px; margin-top: 11px; font-size: 0.74rem;
@@ -305,7 +316,9 @@
     width: 22px; height: 26px; border-radius: 4px; background: #eef1f6;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     font-size: 0.6rem; font-weight: 800; color: #8a93a8; line-height: 1.1;
+    cursor: default; transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
   }
+  .ex-legend .lg-num.f-hi { background: #3a6df0; color: #fff; transform: scale(1.1); }
 </style>
 </head>
 <body>
@@ -364,7 +377,7 @@
     <div class="ex-panels" id="exPanels"></div>
     <div class="ex-legend">
       <span class="lg-cell">
-        <span class="lg-num">f₁</span><span class="lg-num">f₂</span><span class="lg-num">f₃</span>
+        <span class="lg-num" data-f="0">f₁</span><span class="lg-num" data-f="1">f₂</span><span class="lg-num" data-f="2">f₃</span>
       </span>
       <span>= the <b>H·W features</b> inside one <b>(sample × channel)</b> cell — each box is one feature value.</span>
     </div>
@@ -664,7 +677,7 @@
         grid += `<div class="ex-chlab">c${c + 1}</div>`;
         for (let n = 0; n < N2; n++) {
           grid += `<div class="ex-cell${ex.member(n, c, g) ? " on" : ""}">`;
-          for (let s = 0; s < S; s++) grid += `<div class="ex-num" title="feature ${s + 1}">${vals[n][c][s]}</div>`;
+          for (let s = 0; s < S; s++) grid += `<div class="ex-num" data-f="${s}" title="feature ${s + 1}">${vals[n][c][s]}</div>`;
           grid += `</div>`;
         }
       }
@@ -675,6 +688,7 @@
       panel.style.setProperty("--pc", ex.color);
       panel.innerHTML = `
         <div class="p-title"><span class="dot" style="background:${ex.color}"></span>${ex.name}
+          <span class="p-fhint"></span>
           <span class="p-badge">${ex.count} groups</span></div>
         <div class="p-dir">${ex.dir}</div>
         ${grid}
@@ -704,6 +718,30 @@
     renderExample();
   });
   document.getElementById("exRand").addEventListener("click", () => { randomize(); renderExample(); });
+
+  // hover a feature box -> light up the same feature position across all panels
+  function clearFeatureHover() {
+    document.querySelectorAll(".ex-num.f-hi, .lg-num.f-hi").forEach(el => el.classList.remove("f-hi"));
+    document.querySelectorAll(".p-fhint.show").forEach(el => el.classList.remove("show"));
+  }
+  const exSection = document.querySelector(".example");
+  exSection.addEventListener("mouseover", e => {
+    const box = e.target.closest(".ex-num, .lg-num");
+    if (!box || box.dataset.f === undefined) return;
+    const fi = box.dataset.f;
+    clearFeatureHover();
+    // only the hovered element pops
+    box.classList.add("f-hi");
+    // name it: shared legend box + this panel's badge
+    const lg = document.querySelector(`.lg-num[data-f="${fi}"]`);
+    if (lg) lg.classList.add("f-hi");
+    const panel = box.closest(".panel");
+    if (panel) {
+      const hint = panel.querySelector(".p-fhint");
+      if (hint) { hint.textContent = `feature f${+fi + 1}`; hint.classList.add("show"); }
+    }
+  });
+  exSection.addEventListener("mouseleave", clearFeatureHover);
 
   seedFixed();
   renderExample();
