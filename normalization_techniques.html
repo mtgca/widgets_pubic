@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Normalization Techniques in Deep Learning</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f4f6f9;
+    color: #1a1a2e;
+    min-height: 100vh;
+    padding: 32px 16px 56px;
+  }
+
+  .wrap { max-width: 1040px; margin: 0 auto; }
+
+  h1 {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(90deg, #e0218a 0%, #ff5e62 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #6a7488;
+    font-size: 0.95rem;
+    margin-bottom: 26px;
+    line-height: 1.5;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+  .tech-btn {
+    padding: 9px 20px;
+    border-radius: 999px;
+    border: 2px solid #d0d8e8;
+    background: #fff;
+    color: #4a5568;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .tech-btn:hover { border-color: #4f7df3; color: #4f7df3; }
+  .tech-btn.active { color: #fff; border-color: transparent; }
+  .tech-btn.active[data-tech="bn"] { background: #2d7ef0; }
+  .tech-btn.active[data-tech="ln"] { background: #18a558; }
+  .tech-btn.active[data-tech="in"] { background: #e8730c; }
+  .tech-btn.active[data-tech="gn"] { background: #8a3ffc; }
+
+  .play-row {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    align-items: center;
+    margin: 14px 0 10px;
+    flex-wrap: wrap;
+  }
+  .play-btn {
+    padding: 7px 16px;
+    border-radius: 8px;
+    border: none;
+    background: #1a1a2e;
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .play-btn:hover { background: #33334d; }
+  .hint { font-size: 0.78rem; color: #99a; }
+
+  .stage {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 24px;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #e8edf5;
+    border-radius: 16px;
+    padding: 28px 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    margin-top: 6px;
+  }
+  @media (max-width: 720px) { .stage { grid-template-columns: 1fr; } }
+
+  /* ---- 3D cube ---- */
+  .scene {
+    perspective: 1400px;
+    height: 360px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: grab;
+    user-select: none;
+  }
+  .scene:active { cursor: grabbing; }
+  .cube {
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.05s linear;
+  }
+  .slice {
+    position: absolute;
+    display: grid;
+    transform-style: preserve-3d;
+  }
+  .cell {
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba(120,130,150,0.45);
+    background: rgba(214,221,232,0.42);
+    transition: background 0.25s ease, box-shadow 0.25s ease;
+  }
+  .cell.active {
+    background: var(--hi, #2d7ef0);
+    border-color: rgba(255,255,255,0.55);
+    box-shadow: 0 0 0 0.5px rgba(255,255,255,0.4) inset;
+  }
+
+  /* ---- 3D axis arrows (live inside the cube, rotate with it) ---- */
+  .axes { position: absolute; left: 0; top: 0; transform-style: preserve-3d; pointer-events: none; }
+  .axis-bar {
+    position: absolute;
+    height: 2px;
+    background: #8a93a8;
+    transform-origin: 0 50%;
+  }
+  .axis-head {
+    position: absolute;
+    width: 0; height: 0;
+    border-style: solid;
+    border-width: 5px 0 5px 9px;
+    border-color: transparent transparent transparent #8a93a8;
+    transform-origin: 0 50%;
+  }
+  .axis-label {
+    position: absolute;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #5d6678;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    transform-origin: 0 50%;
+  }
+
+  /* ---- info panel ---- */
+  .info h2 {
+    font-size: 1.25rem;
+    margin-bottom: 4px;
+  }
+  .info .scope {
+    font-size: 0.9rem;
+    color: #5a6478;
+    line-height: 1.55;
+    margin-bottom: 16px;
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat {
+    background: #f7f9fc;
+    border: 1px solid #e8edf5;
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .stat .k { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: #99a; font-weight: 700; }
+  .stat .v { font-size: 1.15rem; font-weight: 800; color: #1a1a2e; margin-top: 2px; }
+  .usecase {
+    font-size: 0.85rem;
+    color: #444;
+    background: #fffaf0;
+    border-left: 3px solid #ffb74d;
+    padding: 9px 12px;
+    border-radius: 6px;
+    line-height: 1.5;
+  }
+  .legend {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 18px;
+    font-size: 0.78rem;
+    color: #667;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,0.1); }
+
+  /* ---- comparison table ---- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 28px;
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    font-size: 0.88rem;
+  }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid #eef1f6; vertical-align: top; }
+  thead th { background: #f1f4f9; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: #66708a; }
+  tbody tr { cursor: pointer; transition: background 0.15s; }
+  tbody tr:hover { background: #f7f9fc; }
+  tbody tr.sel { background: #eef4ff; }
+  td .nm { font-weight: 800; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:7px; vertical-align: middle; }
+
+  /* ---- worked numeric example ---- */
+  .example { margin-top: 30px; }
+  .example .ex-head {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px;
+  }
+  .example h3 { font-size: 1.15rem; font-weight: 800; }
+  .example .ex-sub { font-size: 0.85rem; color: #6a7488; line-height: 1.5; margin-bottom: 16px; }
+  .ex-controls { display: flex; gap: 10px; margin-left: auto; }
+  .ex-panels {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 860px) { .ex-panels { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 460px) { .ex-panels { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: #fff;
+    border: 1px solid #e8edf5;
+    border-radius: 12px;
+    padding: 14px 14px 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  }
+  .panel .p-title { font-weight: 800; font-size: 0.95rem; display: flex; align-items: center; gap: 7px; }
+  .panel .p-badge {
+    margin-left: auto; font-size: 0.68rem; font-weight: 700; color: #66708a;
+    background: #f1f4f9; border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+  }
+  .panel .p-dir { font-size: 0.74rem; color: #8a93a8; margin: 3px 0 10px; }
+
+  .ex-grid {
+    display: grid;
+    grid-template-columns: auto repeat(2, auto);
+    gap: 5px 6px;
+    justify-content: center;
+    align-items: center;
+  }
+  .ex-samplecap { font-size: 0.62rem; color: #99a; text-align: center; font-weight: 700; letter-spacing: 0.3px; }
+  .ex-chlab { font-size: 0.62rem; color: #99a; font-weight: 700; text-align: right; padding-right: 2px; }
+  .ex-cell {
+    display: flex; gap: 2px;
+    padding: 3px; border-radius: 6px;
+    background: #f7f9fc; border: 1px solid #eef1f6;
+    transition: background 0.25s ease, border-color 0.25s ease;
+  }
+  .ex-num {
+    width: 17px; height: 19px; line-height: 19px; text-align: center;
+    font-size: 0.7rem; font-weight: 700; color: #44506a;
+    border-radius: 3px; background: #eef1f6;
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+  .ex-cell.on { background: var(--pc, #2d7ef0); border-color: var(--pc, #2d7ef0); }
+  .ex-cell.on .ex-num { background: rgba(255,255,255,0.22); color: #fff; }
+
+  .p-stats {
+    display: flex; gap: 8px; margin-top: 11px; font-size: 0.74rem;
+  }
+  .p-stats .ps {
+    flex: 1; text-align: center; background: #f7f9fc; border: 1px solid #eef1f6;
+    border-radius: 8px; padding: 5px 4px;
+  }
+  .p-stats .ps b { display: block; font-size: 0.95rem; color: #1a1a2e; }
+  .p-stats .ps span { color: #99a; text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.4px; font-weight: 700; }
+
+  .p-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .p-foot .p-count { font-size: 0.7rem; color: #8a93a8; font-weight: 700; }
+  .p-step {
+    padding: 4px 12px; border: none; border-radius: 7px; cursor: pointer;
+    background: #eef1f6; color: #44506a; font-size: 0.75rem; font-weight: 700;
+    transition: background 0.15s;
+  }
+  .p-step:hover { background: #e0e6ef; }
+
+  .ex-legend {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 16px; padding: 10px 14px;
+    background: #f7f9fc; border: 1px solid #eef1f6; border-radius: 10px;
+    font-size: 0.78rem; color: #5a6478;
+  }
+  .ex-legend .lg-cell { display: flex; gap: 3px; }
+  .ex-legend .lg-num {
+    width: 22px; height: 26px; border-radius: 4px; background: #eef1f6;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 0.6rem; font-weight: 800; color: #8a93a8; line-height: 1.1;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Normalization Techniques in Deep Learning</h1>
+  <p class="subtitle">
+    Every method normalizes a feature tensor of shape <b>(N, C, H, W)</b> — but each one pools the
+    mean &amp; variance over a different set of elements. Pick a technique and see <b>which elements get normalized together</b>.
+  </p>
+
+  <div class="controls">
+    <button class="tech-btn active" data-tech="bn">Batch Norm</button>
+    <button class="tech-btn" data-tech="ln">Layer Norm</button>
+    <button class="tech-btn" data-tech="in">Instance Norm</button>
+    <button class="tech-btn" data-tech="gn">Group Norm</button>
+  </div>
+
+  <div class="play-row">
+    <button class="play-btn" id="playBtn">▶ Animate groups</button>
+    <span class="hint">Each highlighted block is normalized independently. Drag the cube to rotate.</span>
+  </div>
+
+  <div class="stage">
+    <div class="scene" id="scene">
+      <div class="cube" id="cube"></div>
+    </div>
+
+    <div class="info">
+      <h2 id="title">Batch Norm</h2>
+      <p class="scope" id="scope"></p>
+      <div class="stat-grid">
+        <div class="stat"><div class="k">Normalized over</div><div class="v" id="statOver"></div></div>
+        <div class="stat"><div class="k">Independent groups</div><div class="v" id="statGroups"></div></div>
+      </div>
+      <div class="usecase" id="usecase"></div>
+      <div class="legend">
+        <span><span class="sw" style="background:rgba(214,221,232,0.7)"></span> tensor element</span>
+        <span><span class="sw" id="legSw" style="background:#2d7ef0"></span> normalized together</span>
+      </div>
+    </div>
+  </div>
+
+  <section class="example">
+    <div class="ex-head">
+      <h3>Worked example: how the statistics are computed</h3>
+      <div class="ex-controls">
+        <button class="play-btn" id="exStep">▶ Step all groups</button>
+        <button class="play-btn" id="exRand" style="background:#3a6df0">⟳ Randomize</button>
+      </div>
+    </div>
+    <p class="ex-sub">
+      The same tiny tensor — <b>2 samples × 4 channels</b>, each channel holding <b>3 spatial values</b> —
+      normalized four ways. Highlighted cells are pooled into one <b>mean</b> &amp; <b>std_dev</b>
+      (population, ÷&nbsp;count). Each method splits the tensor into a different number of independent groups.
+    </p>
+    <div class="ex-panels" id="exPanels"></div>
+    <div class="ex-legend">
+      <span class="lg-cell">
+        <span class="lg-num">f₁</span><span class="lg-num">f₂</span><span class="lg-num">f₃</span>
+      </span>
+      <span>= the <b>H·W features</b> inside one <b>(sample × channel)</b> cell — each box is one feature value.</span>
+    </div>
+  </section>
+
+  <table>
+    <thead>
+      <tr><th>Technique</th><th>Normalization scope (dimensions)</th><th>Best use case</th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+  // ----- tensor dimensions (kept small so the cube stays readable) -----
+  const N = 4, C = 6, HW = 6, GROUP = 3;          // GROUP = channels per group (GN)
+  const CELL = 26, GAP_Z = 26;                    // px
+
+  const TECH = {
+    bn: {
+      name: "Batch Norm (BN)",
+      color: "#2d7ef0",
+      scope: "Across the batch (N) and spatial dims (H, W) — for each channel separately.",
+      over: "N · H · W",
+      groups: C,
+      groupsLabel: C + " channels",
+      use: "Standard CNNs with large batch sizes. Depends on batch statistics, so it struggles with tiny batches.",
+      // a group = one channel c, spanning all N and all HW
+      count: C,
+      test: (n, c, hw, g) => c === g
+    },
+    ln: {
+      name: "Layer Norm (LN)",
+      color: "#18a558",
+      scope: "Across channels (C) and spatial dims (H, W) — for each sample separately.",
+      over: "C · H · W",
+      groups: N,
+      groupsLabel: N + " samples",
+      use: "RNNs, Transformers, and small batch sizes. Independent of batch size.",
+      count: N,
+      test: (n, c, hw, g) => n === g
+    },
+    in: {
+      name: "Instance Norm (IN)",
+      color: "#e8730c",
+      scope: "Across spatial dims (H, W) only — per sample, per channel.",
+      over: "H · W",
+      groups: N * C,
+      groupsLabel: (N * C) + " (sample × channel)",
+      use: "Style transfer and image generation (GANs) — removes per-image contrast/style statistics.",
+      count: N * C,
+      test: (n, c, hw, g) => (n * C + c) === g
+    },
+    gn: {
+      name: "Group Norm (GN)",
+      color: "#8a3ffc",
+      scope: "Across a subset (group) of channels and spatial dims (H, W) — per sample.",
+      over: "(C/G) · H · W",
+      groups: N * (C / GROUP),
+      groupsLabel: N * (C / GROUP) + " (sample × channel-group)",
+      use: "Computer-vision tasks with very small batches (e.g. detection, segmentation).",
+      count: N * (C / GROUP),
+      test: (n, c, hw, g) => {
+        const grp = Math.floor(c / GROUP);
+        return (n * (C / GROUP) + grp) === g;
+      }
+    }
+  };
+
+  // ----- build the 3D cube -----
+  const cube = document.getElementById("cube");
+  const sliceW = C * CELL, sliceH = HW * CELL;
+  // size the cube wrapper and center it
+  cube.style.width = sliceW + "px";
+  cube.style.height = sliceH + "px";
+
+  const cells = []; // {el, n, c, hw}
+  for (let n = 0; n < N; n++) {
+    const slice = document.createElement("div");
+    slice.className = "slice";
+    slice.style.gridTemplateColumns = `repeat(${C}, ${CELL}px)`;
+    slice.style.gridTemplateRows = `repeat(${HW}, ${CELL}px)`;
+    slice.style.left = "0px";
+    slice.style.top = "0px";
+    const z = ((N - 1) / 2 - n) * GAP_Z;   // n=0 closest to viewer
+    slice.style.transform = `translateZ(${z}px)`;
+    slice.style.opacity = "0.96";
+    for (let hw = 0; hw < HW; hw++) {
+      for (let c = 0; c < C; c++) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        slice.appendChild(cell);
+        cells.push({ el: cell, n, c, hw });
+      }
+    }
+    cube.appendChild(slice);
+  }
+
+  // ----- 3D axis arrows (children of the cube, so they rotate with it) -----
+  const frontZ = ((N - 1) / 2) * GAP_Z;   // z of the front slice (n = 0)
+  const depth  = (N - 1) * GAP_Z;         // front-to-back distance
+  const M = 12;                           // margin so arrows start outside the cube
+  const cornerX = -M, cornerY = sliceH + M;   // anchor: front-bottom-left corner
+  const axes = document.createElement("div");
+  axes.className = "axes";
+  cube.appendChild(axes);
+  const axisLabels = [];                  // {el, x, y, z} tip positions (billboarded)
+
+  function makeAxis(len, rot, text, tip) {
+    const base = `translate3d(${cornerX}px, ${cornerY}px, ${frontZ}px) ${rot}`;
+    const bar = document.createElement("div");
+    bar.className = "axis-bar";
+    bar.style.width = len + "px";
+    bar.style.transform = base;
+    axes.appendChild(bar);
+
+    const head = document.createElement("div");
+    head.className = "axis-head";
+    head.style.transform = `${base} translateX(${len}px) translateY(-4px)`;
+    axes.appendChild(head);
+
+    const lab = document.createElement("div");
+    lab.className = "axis-label";
+    lab.textContent = text;
+    axes.appendChild(lab);
+    axisLabels.push({ el: lab, x: tip.x, y: tip.y, z: tip.z });
+  }
+
+  // C → +X (right) ; H,W → up (-Y) ; N → into depth (-Z)
+  makeAxis(sliceW + 2 * M, "",                "C (channels)",
+           { x: cornerX + sliceW + 2 * M + 6, y: cornerY - 6,  z: frontZ });
+  makeAxis(sliceH + 2 * M, "rotateZ(-90deg)", "H, W (features)",
+           { x: cornerX - 8,                  y: -M - 16,       z: frontZ });
+  const N_EXT = 70;   // extra length so the N arrow + label poke past the back face
+  makeAxis(depth + 2 * M + N_EXT, "rotateY(90deg)", "N (samples)",
+           { x: cornerX + 4,                  y: cornerY + 6,   z: frontZ - depth - 2 * M - N_EXT - 6 });
+
+  // ----- rotation (drag) -----
+  let rotX = -20, rotY = -32, dragging = false, lastX = 0, lastY = 0;
+  function applyRot() {
+    cube.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+    // counter-rotate the labels so text always faces the viewer
+    axisLabels.forEach(l => {
+      l.el.style.transform =
+        `translate3d(${l.x}px, ${l.y}px, ${l.z}px) rotateY(${-rotY}deg) rotateX(${-rotX}deg)`;
+    });
+  }
+  applyRot();
+  const scene = document.getElementById("scene");
+  scene.addEventListener("mousedown", e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+  window.addEventListener("mouseup", () => dragging = false);
+  window.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    rotY += (e.clientX - lastX) * 0.4;
+    rotX -= (e.clientY - lastY) * 0.4;
+    rotX = Math.max(-80, Math.min(80, rotX));
+    lastX = e.clientX; lastY = e.clientY;
+    applyRot();
+  });
+
+  // ----- highlighting -----
+  let current = "bn";
+  let animTimer = null, animG = 0;
+
+  function highlight(techKey, g) {
+    const t = TECH[techKey];
+    document.documentElement.style.setProperty("--hi", t.color);
+    cells.forEach(cell => {
+      const on = t.test(cell.n, cell.c, cell.hw, g);
+      cell.el.classList.toggle("active", on);
+    });
+  }
+
+  function pickDefaultGroup(techKey) {
+    // choose a representative group that sits on the front slice & is clearly visible
+    if (techKey === "bn") return Math.floor(C / 2);  // a middle channel, spans all N
+    if (techKey === "ln") return 0;                  // front sample
+    if (techKey === "in") return 0 * C + Math.floor(C / 2); // front sample, middle channel
+    if (techKey === "gn") return 0;                  // front sample, first group
+    return 0;
+  }
+
+  function selectTech(techKey) {
+    current = techKey;
+    stopAnim();
+    const t = TECH[techKey];
+    document.querySelectorAll(".tech-btn").forEach(b =>
+      b.classList.toggle("active", b.dataset.tech === techKey));
+    document.getElementById("title").textContent = t.name;
+    document.getElementById("scope").textContent = t.scope;
+    document.getElementById("statOver").textContent = t.over;
+    document.getElementById("statGroups").textContent = t.groupsLabel;
+    document.getElementById("usecase").textContent = t.use;
+    document.getElementById("legSw").style.background = t.color;
+    document.querySelectorAll("#tbody tr").forEach(tr =>
+      tr.classList.toggle("sel", tr.dataset.tech === techKey));
+    highlight(techKey, pickDefaultGroup(techKey));
+  }
+
+  function stopAnim() {
+    if (animTimer) { clearInterval(animTimer); animTimer = null; }
+    document.getElementById("playBtn").textContent = "▶ Animate groups";
+  }
+
+  function startAnim() {
+    const t = TECH[current];
+    animG = 0;
+    document.getElementById("playBtn").textContent = "⏸ Pause";
+    highlight(current, animG);
+    animTimer = setInterval(() => {
+      animG = (animG + 1) % t.count;
+      highlight(current, animG);
+    }, 650);
+  }
+
+  document.getElementById("playBtn").addEventListener("click", () => {
+    if (animTimer) stopAnim(); else startAnim();
+  });
+
+  document.querySelectorAll(".tech-btn").forEach(b =>
+    b.addEventListener("click", () => selectTech(b.dataset.tech)));
+
+  // ----- comparison table -----
+  const tbody = document.getElementById("tbody");
+  Object.entries(TECH).forEach(([key, t]) => {
+    const tr = document.createElement("tr");
+    tr.dataset.tech = key;
+    tr.innerHTML = `
+      <td><span class="nm"><span class="dot" style="background:${t.color}"></span>${t.name}</span></td>
+      <td>${t.scope}</td>
+      <td>${t.use}</td>`;
+    tr.addEventListener("click", () => selectTech(key));
+    tbody.appendChild(tr);
+  });
+
+  // ===== worked numeric example (all four methods, side by side) =====
+  const N2 = 2, C2 = 4, S = 3, G2 = 2;   // samples, channels, spatial-per-cell, channels-per-group
+  let vals = [];
+
+  function seedFixed() {
+    vals = [
+      [[1,3,8],[3,4,3],[5,6,2],[7,2,1]],
+      [[4,2,6],[2,5,4],[3,3,7],[6,1,2]]
+    ];
+  }
+  function randomize() {
+    vals = [];
+    for (let n = 0; n < N2; n++) {
+      const ch = [];
+      for (let c = 0; c < C2; c++) {
+        const sp = [];
+        for (let s = 0; s < S; s++) sp.push(1 + Math.floor(Math.random() * 9));
+        ch.push(sp);
+      }
+      vals.push(ch);
+    }
+  }
+
+  const EX = [
+    { name: "Batch Norm",    color: TECH.bn.color, count: C2,
+      dir: "→ across samples + spatial (per channel)",
+      member: (n, c, g) => c === g },
+    { name: "Layer Norm",    color: TECH.ln.color, count: N2,
+      dir: "↓ across channels + spatial (per sample)",
+      member: (n, c, g) => n === g },
+    { name: "Instance Norm", color: TECH.in.color, count: N2 * C2,
+      dir: "• across spatial only (per sample, per channel)",
+      member: (n, c, g) => (n * C2 + c) === g },
+    { name: "Group Norm",    color: TECH.gn.color, count: N2 * (C2 / G2),
+      dir: "▣ across a channel-group + spatial (per sample)",
+      member: (n, c, g) => (n * (C2 / G2) + Math.floor(c / G2)) === g }
+  ];
+
+  const exPanels = document.getElementById("exPanels");
+  const exIdx = EX.map(() => 0);          // current group index per panel
+
+  function stats(pool) {
+    const m = pool.reduce((a, b) => a + b, 0) / pool.length;
+    const v = pool.reduce((a, b) => a + (b - m) * (b - m), 0) / pool.length;
+    return { mean: m, std: Math.sqrt(v) };
+  }
+
+  function renderExample() {
+    exPanels.innerHTML = "";
+    EX.forEach((ex, i) => {
+      const g = exIdx[i] % ex.count;
+      const pool = [];
+      for (let n = 0; n < N2; n++)
+        for (let c = 0; c < C2; c++)
+          if (ex.member(n, c, g))
+            for (let s = 0; s < S; s++) pool.push(vals[n][c][s]);
+      const st = stats(pool);
+
+      let grid = '<div class="ex-grid"><div></div>';
+      for (let n = 0; n < N2; n++) grid += `<div class="ex-samplecap">sample ${n + 1}</div>`;
+      for (let c = 0; c < C2; c++) {
+        grid += `<div class="ex-chlab">c${c + 1}</div>`;
+        for (let n = 0; n < N2; n++) {
+          grid += `<div class="ex-cell${ex.member(n, c, g) ? " on" : ""}">`;
+          for (let s = 0; s < S; s++) grid += `<div class="ex-num" title="feature ${s + 1}">${vals[n][c][s]}</div>`;
+          grid += `</div>`;
+        }
+      }
+      grid += `</div>`;
+
+      const panel = document.createElement("div");
+      panel.className = "panel";
+      panel.style.setProperty("--pc", ex.color);
+      panel.innerHTML = `
+        <div class="p-title"><span class="dot" style="background:${ex.color}"></span>${ex.name}
+          <span class="p-badge">${ex.count} groups</span></div>
+        <div class="p-dir">${ex.dir}</div>
+        ${grid}
+        <div class="p-stats">
+          <div class="ps"><span>mean</span><b>${st.mean.toFixed(2)}</b></div>
+          <div class="ps"><span>std_dev</span><b>${st.std.toFixed(2)}</b></div>
+        </div>
+        <div class="p-foot">
+          <button class="p-step" data-panel="${i}">Step ▶</button>
+          <span class="p-count">group ${g + 1} / ${ex.count}</span>
+        </div>`;
+      exPanels.appendChild(panel);
+    });
+  }
+
+  // global: advance every panel by one group (wraps around)
+  document.getElementById("exStep").addEventListener("click", () => {
+    EX.forEach((ex, i) => exIdx[i] = (exIdx[i] + 1) % ex.count);
+    renderExample();
+  });
+  // per-panel: advance only the clicked panel (event delegation survives re-render)
+  exPanels.addEventListener("click", (e) => {
+    const btn = e.target.closest(".p-step");
+    if (!btn) return;
+    const i = +btn.dataset.panel;
+    exIdx[i] = (exIdx[i] + 1) % EX[i].count;
+    renderExample();
+  });
+  document.getElementById("exRand").addEventListener("click", () => { randomize(); renderExample(); });
+
+  seedFixed();
+  renderExample();
+
+  // init
+  selectTech("bn");
+</script>
+</body>
+</html>
