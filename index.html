@@ -135,6 +135,26 @@
   .tag-deep-learning { background: #f3e8fd; color: #7c3aaa; }
   .tag-ai       { background: #fff0f5; color: #b5245a; }
 
+  .verify-badge {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    align-self: flex-start;
+  }
+
+  .card[data-verified="true"]  .verify-badge { background: #e6f9f1; color: #1a7a4a; }
+  .card[data-verified="true"]  .verify-badge::before { content: "✓ Expert-verified"; }
+  .card[data-verified="false"] .verify-badge { background: #fdf3e7; color: #9a5b00; }
+  .card[data-verified="false"] .verify-badge::before { content: "⚠ AI-generated · not expert-verified"; }
+
+  .filter-btn[data-filter="verified"].active {
+    background: #1a7a4a;
+    border-color: #1a7a4a;
+    color: #fff;
+  }
+
   .card-title {
     font-size: 1.05rem;
     font-weight: 700;
@@ -191,13 +211,14 @@
   <button class="filter-btn" data-filter="llms">LLMs</button>
   <button class="filter-btn" data-filter="deep-learning">Deep Learning</button>
   <button class="filter-btn" data-filter="ai">AI</button>
+  <button class="filter-btn" data-filter="verified">✓ Verified</button>
 </div>
 
 <div class="results-info" id="resultsInfo"></div>
 
 <div class="grid" id="grid">
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/llmpretraining.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/llmpretraining.html"
      data-tags="llms ai">
     <div class="card-tags">
       <span class="tag tag-llms">LLMs</span>
@@ -205,10 +226,11 @@
     </div>
     <div class="card-title">LLM Next-Word Prediction</div>
     <div class="card-desc">Visualizes how large language models are pretrained via next-token prediction over a text corpus.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/external_metrics_interactive.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/external_metrics_interactive.html"
      data-tags="ml clustering">
     <div class="card-tags">
       <span class="tag tag-ml">ML</span>
@@ -216,10 +238,11 @@
     </div>
     <div class="card-title">External Clustering Metrics: ARI &amp; NMI</div>
     <div class="card-desc">Drag-and-drop demo showing how Adjusted Rand Index and Normalized Mutual Information respond to different cluster assignments.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/gmm_covariance_interactive.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/gmm_covariance_interactive.html"
      data-tags="ml clustering">
     <div class="card-tags">
       <span class="tag tag-ml">ML</span>
@@ -227,10 +250,11 @@
     </div>
     <div class="card-title">GMM Covariance Types</div>
     <div class="card-desc">Explores how the covariance matrix (full, tied, diagonal, spherical) controls the shape and orientation of Gaussian Mixture Model clusters.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/gmm_em_interactive.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/gmm_em_interactive.html"
      data-tags="ml clustering">
     <div class="card-tags">
       <span class="tag tag-ml">ML</span>
@@ -238,10 +262,11 @@
     </div>
     <div class="card-title">EM Algorithm for GMMs</div>
     <div class="card-desc">Step-through visualization of the Expectation-Maximization algorithm fitting a Gaussian Mixture Model to data.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/linkage_methods_interactive.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/linkage_methods_interactive.html"
      data-tags="ml clustering">
     <div class="card-tags">
       <span class="tag tag-ml">ML</span>
@@ -249,10 +274,11 @@
     </div>
     <div class="card-title">Hierarchical Clustering Linkage Methods</div>
     <div class="card-desc">Compares single, complete, average, and Ward linkage strategies for building hierarchical cluster dendrograms.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/Learning_Rate_Scheduling.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/Learning_Rate_Scheduling.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -260,10 +286,11 @@
     </div>
     <div class="card-title">Learning Rate Scheduling</div>
     <div class="card-desc">Interactive visualization of common learning rate decay strategies: cosine annealing, SGDR, step decay, exponential decay, and linear warm-up + cosine decay.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/dropout.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/dropout.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -271,10 +298,11 @@
     </div>
     <div class="card-title">Dropout Regularization</div>
     <div class="card-desc">Interactive demo showing how dropout randomly deactivates neurons during training to prevent overfitting in neural networks.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/conv.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/conv.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -282,10 +310,11 @@
     </div>
     <div class="card-title">Convolution Visualizer</div>
     <div class="card-desc">Step-by-step visualization of the 2D convolution operation showing how a kernel slides over an input matrix to produce a feature map.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/cnn_output_calculator.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/cnn_output_calculator.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -293,10 +322,11 @@
     </div>
     <div class="card-title">CNN Output Size Calculator</div>
     <div class="card-desc">Interactive calculator that computes the output dimensions of CNN layers (conv, pooling) given input size, kernel size, padding, and stride.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/cnn_intuition.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/cnn_intuition.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -304,10 +334,11 @@
     </div>
     <div class="card-title">Intuitive CNN Feature Map</div>
     <div class="card-desc">Animated 3D visualization of a convolution kernel scanning an input grid and producing a feature map, illustrating the intuition behind CNN feature extraction.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" href="https://mtgca.github.io/widgets_pubic/normalization_techniques.html"
+  <a class="card" data-verified="false" href="https://mtgca.github.io/widgets_pubic/normalization_techniques.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -315,6 +346,7 @@
     </div>
     <div class="card-title">Normalization Techniques</div>
     <div class="card-desc">Interactive 3D tensor comparing Batch, Layer, Instance, and Group Normalization by highlighting which elements of an (N, C, H, W) tensor are normalized together.</div>
+    <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>
 
@@ -336,9 +368,13 @@
 
   function applyFilters() {
     let visible = 0;
+    const wantVerified = activeFilters.has('verified');
+    const tagFilters = [...activeFilters].filter(f => f !== 'verified');
     cards.forEach(card => {
       const tags = card.dataset.tags.split(' ');
-      const show = activeFilters.size === 0 || [...activeFilters].some(f => tags.includes(f));
+      const verifiedOk = !wantVerified || card.dataset.verified === 'true';
+      const tagsOk = tagFilters.length === 0 || tagFilters.some(f => tags.includes(f));
+      const show = verifiedOk && tagsOk;
       card.classList.toggle('hidden', !show);
       if (show) visible++;
     });

@@ -322,6 +322,18 @@
 </style>
 </head>
 <body>
+<!-- verification badge: flip data-verified to "true" after a human expert reviews this widget -->
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
 <div class="wrap">
   <h1>Normalization Techniques in Deep Learning</h1>
   <p class="subtitle">
@@ -506,14 +518,16 @@
     axisLabels.push({ el: lab, x: tip.x, y: tip.y, z: tip.z });
   }
 
+  // extra length so every arrow + label sits well clear of the cube while rotating
+  const EXT = 60;
+  const lenC = sliceW + 2 * M + EXT, lenHW = sliceH + 2 * M + EXT, lenN = depth + 2 * M + EXT;
   // C → +X (right) ; H,W → up (-Y) ; N → into depth (-Z)
-  makeAxis(sliceW + 2 * M, "",                "C (channels)",
-           { x: cornerX + sliceW + 2 * M + 6, y: cornerY - 6,  z: frontZ });
-  makeAxis(sliceH + 2 * M, "rotateZ(-90deg)", "H, W (features)",
-           { x: cornerX - 8,                  y: -M - 16,       z: frontZ });
-  const N_EXT = 70;   // extra length so the N arrow + label poke past the back face
-  makeAxis(depth + 2 * M + N_EXT, "rotateY(90deg)", "N (samples)",
-           { x: cornerX + 4,                  y: cornerY + 6,   z: frontZ - depth - 2 * M - N_EXT - 6 });
+  makeAxis(lenC,  "",                "C (channels)",
+           { x: cornerX + lenC + 6, y: cornerY - 6,          z: frontZ });
+  makeAxis(lenHW, "rotateZ(-90deg)", "H, W (features)",
+           { x: cornerX - 8,        y: cornerY - lenHW - 6,  z: frontZ });
+  makeAxis(lenN,  "rotateY(90deg)",  "N (samples)",
+           { x: cornerX + 4,        y: cornerY + 6,          z: frontZ - lenN - 6 });
 
   // ----- rotation (drag) -----
   let rotX = -20, rotY = -32, dragging = false, lastX = 0, lastY = 0;
