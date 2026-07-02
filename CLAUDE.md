@@ -31,6 +31,11 @@ widgets_pubic/
 - When adding a new widget, **both** `README.md` and `index.html` must be updated (see below).
 - Every widget carries a **verification badge** (`data-verified`) indicating whether a human expert has reviewed it; new widgets start `"false"` (see "Human-Expert Verification").
 
+## Visual Style (maintainer preferences)
+
+- **Use a light theme by default.** The maintainer prefers light color schemes (light backgrounds, dark text, subtle colored accents). Avoid dark-mode / dark-background designs unless explicitly requested.
+- **Avoid gratuitous animations.** Motion (moving arrows, pulsing tokens, flashing transitions) is considered visual noise, not value. Favor a single clear, static diagram over an animated one. Small, purposeful transitions (hover states) are fine; continuous/looping animations are not.
+
 ## Courses Covered
 
 - **Machine Learning**: clustering algorithms, model evaluation metrics, probabilistic models

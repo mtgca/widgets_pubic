@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CNN Architecture Blocks · Interactive</title>
+<!--
+  ============================================================================
+  CNN ARCHITECTURE BLOCKS THAT GAVE BIRTH TO NEW ARCHITECTURES
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget for graduate students familiar with CNNs.
+  Everything (HTML + CSS + JS + data) lives in this one file. No CDNs.
+
+  DESIGN NOTES:
+  - LIGHT academic theme (the maintainer prefers light color schemes).
+  - NO animations by design — each block is explained with a single clear,
+    STATIC architecture diagram. Clarity over motion.
+
+  HOW TO MODIFY:
+  - All architecture content lives in the ARCH array (see the code block).
+    Each entry has: id, year, name, tag, summary, innovation, advantages[],
+    limitations[], influenced[], and a `diagram` key naming a static SVG
+    builder in the DIAGRAMS map.
+  - To add a new architecture: add an object to ARCH and (optionally) a new
+    diagram builder in DIAGRAMS. Timeline, cards, detail panel and the compare
+    dropdowns all populate automatically from ARCH.
+  - Colors / spacing are driven by CSS custom properties in :root.
+  - SVG diagram colors live in the PAL palette (light tints + colored borders).
+  ============================================================================
+-->
+<style>
+  /* ----------------------------------------------------------------------
+     THEME TOKENS — light academic palette. Tweak to restyle everything.
+     ---------------------------------------------------------------------- */
+  :root{
+    --bg:        #f5f8fd;   /* page background        */
+    --bg-soft:   #eef3fa;   /* recessed surfaces      */
+    --panel:     #ffffff;   /* cards / panels         */
+    --panel-2:   #f2f6fc;   /* chips / inputs         */
+    --line:      #d9e2ef;   /* borders                */
+    --text:      #1f2937;   /* primary text           */
+    --text-dim:  #64708a;   /* secondary text         */
+    --accent:    #3b6fd4;   /* primary blue           */
+    --accent-2:  #16957f;   /* teal / efficiency      */
+    --accent-3:  #c07d24;   /* amber / warning        */
+    --accent-4:  #8a52c7;   /* violet / modern        */
+    --good:      #2b9e4d;
+    --bad:       #d34452;
+    --radius:    14px;
+    --shadow:    0 6px 20px rgba(40,70,120,.08);
+    --font: "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(1100px 520px at 82% -10%, #e9f0fb 0%, transparent 60%),
+      radial-gradient(900px 460px at -8% 6%, #eafaf6 0%, transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--font);
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ max-width:1180px; margin:0 auto; padding:32px 22px 80px; }
+
+  /* ---------------------------- Header ---------------------------------- */
+  header.hero{ text-align:center; margin-bottom:26px; }
+  header.hero h1{
+    font-size:clamp(1.5rem, 2.6vw, 2.15rem);
+    margin:0 0 8px;
+    letter-spacing:.2px;
+    background:linear-gradient(90deg,#2b5cc4,#12897a,#7a45bd);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  header.hero p{ color:var(--text-dim); margin:0 auto; max-width:720px; font-size:.98rem; }
+
+  .section-title{
+    font-size:.82rem; text-transform:uppercase; letter-spacing:.16em;
+    color:var(--text-dim); margin:34px 0 14px; font-weight:700;
+    display:flex; align-items:center; gap:10px;
+  }
+  .section-title::after{ content:""; flex:1; height:1px; background:var(--line); }
+
+  /* --------------------------- Timeline --------------------------------- */
+  .timeline{
+    position:relative; display:flex; gap:6px; overflow-x:auto;
+    padding:18px 4px 10px; scrollbar-width:thin;
+  }
+  .timeline::before{
+    content:""; position:absolute; left:0; right:0; top:34px; height:2px;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2),var(--accent-4));
+    opacity:.45;
+  }
+  .tl-node{
+    position:relative; flex:1 0 90px; text-align:center; cursor:pointer;
+    background:none; border:none; color:inherit; font-family:inherit; padding:0;
+  }
+  .tl-dot{
+    width:14px; height:14px; border-radius:50%; margin:26px auto 8px;
+    background:var(--panel); border:2px solid var(--accent);
+    transition:transform .18s, box-shadow .18s, background .18s;
+  }
+  .tl-node:hover .tl-dot{ transform:scale(1.25); }
+  .tl-node.active .tl-dot{ background:var(--accent); box-shadow:0 0 0 5px rgba(59,111,212,.16); }
+  .tl-year{ font-size:.72rem; color:var(--text-dim); }
+  .tl-name{ font-size:.78rem; font-weight:600; margin-top:2px; }
+
+  /* ----------------------------- Cards ---------------------------------- */
+  .grid{
+    display:grid; gap:12px;
+    grid-template-columns:repeat(auto-fill, minmax(180px,1fr));
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 15px; cursor:pointer; text-align:left;
+    transition:transform .16s, border-color .16s, box-shadow .16s;
+    position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:""; position:absolute; inset:0 auto 0 0; width:4px;
+    background:var(--card-accent, var(--accent));
+  }
+  .card:hover{ transform:translateY(-3px); border-color:var(--accent); box-shadow:var(--shadow); }
+  .card.active{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), var(--shadow); }
+  .card .yr{ font-size:.72rem; color:var(--text-dim); }
+  .card .nm{ font-size:1.02rem; font-weight:700; margin:2px 0 4px; }
+  .card .tg{ font-size:.74rem; color:var(--card-accent,var(--accent)); font-weight:600; }
+
+  /* --------------------------- Detail panel ----------------------------- */
+  .detail{
+    margin-top:16px; background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden;
+  }
+  .detail-head{
+    display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+    padding:18px 22px; border-bottom:1px solid var(--line);
+    background:linear-gradient(90deg, rgba(59,111,212,.07), transparent);
+  }
+  .detail-head h2{ margin:0; font-size:1.3rem; }
+  .detail-head .badge{
+    font-size:.72rem; padding:3px 9px; border-radius:20px;
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim);
+  }
+  .detail-body{
+    display:grid; grid-template-columns:1.05fr .95fr; gap:0;
+  }
+  .detail-left{ padding:20px 22px; border-right:1px solid var(--line); }
+  .detail-right{ padding:20px 22px; }
+  .detail-left p.summary{ margin-top:14px; margin-bottom:0; color:var(--text); }
+
+  .diagram-box{
+    background:var(--bg-soft);
+    border:1px solid var(--line); border-radius:12px;
+    padding:14px 12px; min-height:210px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .diagram-box svg{ width:100%; height:auto; max-height:270px; }
+
+  .innovation{
+    background:linear-gradient(90deg, rgba(22,149,127,.12), rgba(22,149,127,.02));
+    border-left:3px solid var(--accent-2); border-radius:8px;
+    padding:10px 14px; margin:4px 0 16px; font-size:.92rem;
+  }
+  .innovation b{ color:var(--accent-2); }
+
+  .cols{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .cols h4{ margin:0 0 6px; font-size:.82rem; text-transform:uppercase; letter-spacing:.08em; }
+  .cols ul{ margin:0; padding-left:18px; font-size:.9rem; color:var(--text-dim); }
+  .cols ul li{ margin-bottom:5px; }
+  .pros h4{ color:var(--good); }
+  .cons h4{ color:var(--bad); }
+
+  .influenced{ margin-top:18px; }
+  .influenced h4{ font-size:.82rem; text-transform:uppercase; letter-spacing:.08em; color:var(--accent-4); margin:0 0 8px; }
+  .chip{
+    display:inline-block; font-size:.78rem; padding:4px 10px; margin:0 6px 6px 0;
+    border-radius:20px; background:var(--panel-2); border:1px solid var(--line);
+    cursor:pointer; transition:background .15s, border-color .15s; color:var(--text);
+  }
+  .chip:hover{ border-color:var(--accent-4); background:rgba(138,82,199,.10); }
+  .chip.dead{ cursor:default; opacity:.7; }
+  .chip.dead:hover{ border-color:var(--line); background:var(--panel-2); }
+
+  /* ---------------------------- Compare --------------------------------- */
+  .compare{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow);
+  }
+  .compare .pickers{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px; }
+  .picker{ flex:1 1 200px; }
+  .picker label{ display:block; font-size:.76rem; color:var(--text-dim); margin-bottom:5px; text-transform:uppercase; letter-spacing:.08em; }
+  select{
+    width:100%; background:var(--panel); color:var(--text);
+    border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-size:.92rem;
+    font-family:inherit;
+  }
+  select:focus{ outline:none; border-color:var(--accent); }
+  table.cmp{ width:100%; border-collapse:collapse; font-size:.9rem; }
+  table.cmp th, table.cmp td{ padding:11px 12px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.cmp thead th{ color:var(--text-dim); font-size:.76rem; text-transform:uppercase; letter-spacing:.06em; }
+  table.cmp td.metric{ color:var(--text-dim); font-weight:600; width:190px; }
+  .cA{ color:var(--accent); } .cB{ color:var(--accent-2); }
+  /* mini bar rating used in compare */
+  .rate{ display:inline-flex; gap:3px; vertical-align:middle; margin-left:8px; }
+  .rate i{ width:8px; height:14px; border-radius:2px; background:var(--line); display:inline-block; }
+  .rate i.on{ background:var(--accent); }
+  .cB .rate i.on{ background:var(--accent-2); }
+
+  /* --------------------------- Takeaway --------------------------------- */
+  .takeaway{
+    background:linear-gradient(120deg, rgba(59,111,212,.08), rgba(138,82,199,.07));
+    border:1px solid var(--line); border-radius:var(--radius); padding:22px 24px;
+  }
+  .flow{ display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:6px 0 16px; }
+  .flow .stage{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:9px 13px; font-size:.86rem; font-weight:600;
+  }
+  .flow .arw{ color:var(--accent); font-size:1.15rem; }
+  .takeaway p{ color:var(--text); margin:6px 0; font-size:.94rem; }
+  .takeaway .lead{ color:var(--text-dim); }
+
+  footer{ text-align:center; color:var(--text-dim); font-size:.78rem; margin-top:40px; }
+
+  /* --------------------------- Responsive ------------------------------- */
+  @media (max-width:820px){
+    .detail-body{ grid-template-columns:1fr; }
+    .detail-left{ border-right:none; border-bottom:1px solid var(--line); }
+    .cols{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<!-- Human-expert verification badge (starts unverified — see CLAUDE.md). -->
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;left:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+<div class="wrap">
+
+  <!-- ============================ HEADER ============================ -->
+  <header class="hero">
+    <h1>CNN Architecture Blocks That Gave Birth to New Architectures</h1>
+    <p>An interactive tour of the building blocks — from LeNet's humble
+       conv&nbsp;+&nbsp;pool to ConvNeXt's modernized residual — and how each
+       idea seeded the next generation. Click a block to see its diagram,
+       innovation, trade-offs, and lineage.</p>
+  </header>
+
+  <!-- ============================ TIMELINE ========================== -->
+  <div class="section-title">Timeline · how the ideas evolved</div>
+  <div class="timeline" id="timeline"><!-- populated by JS --></div>
+
+  <!-- ============================ CARDS ============================= -->
+  <div class="section-title">The building blocks</div>
+  <div class="grid" id="grid"><!-- populated by JS --></div>
+
+  <!-- ============================ DETAIL ============================ -->
+  <div class="detail" id="detail"><!-- populated by JS --></div>
+
+  <!-- ============================ COMPARE =========================== -->
+  <div class="section-title">Compare selected blocks</div>
+  <div class="compare">
+    <div class="pickers">
+      <div class="picker">
+        <label>Architecture A</label>
+        <select id="selA"></select>
+      </div>
+      <div class="picker">
+        <label>Architecture B</label>
+        <select id="selB"></select>
+      </div>
+    </div>
+    <table class="cmp" id="cmpTable"><!-- populated by JS --></table>
+  </div>
+
+  <!-- ============================ TAKEAWAY ========================== -->
+  <div class="section-title">Teaching takeaway</div>
+  <div class="takeaway">
+    <div class="flow">
+      <span class="stage">Plain CNNs</span><span class="arw">→</span>
+      <span class="stage">Multi-scale modules</span><span class="arw">→</span>
+      <span class="stage">Skip connections</span><span class="arw">→</span>
+      <span class="stage">Efficient mobile blocks</span><span class="arw">→</span>
+      <span class="stage">Modern ConvNet blocks</span>
+    </div>
+    <p class="lead">Read the evolution as a sequence of answers to concrete problems:</p>
+    <p><b>1. Plain CNNs (LeNet, AlexNet).</b> Establish the template — learnable
+       convolutions extract features, pooling reduces resolution, ReLU + GPUs
+       make deep training practical.</p>
+    <p><b>2. Depth &amp; multi-scale (VGG, Inception).</b> VGG shows that stacking
+       small 3×3 filters buys depth cheaply; Inception processes multiple
+       receptive fields in parallel and uses 1×1 convs to control cost.</p>
+    <p><b>3. Skip connections (ResNet, DenseNet).</b> Identity/skip paths solve
+       the degradation problem, letting networks reach 100+ layers by making it
+       easy to learn residuals and reuse features.</p>
+    <p><b>4. Efficiency for mobile (MobileNet v1/v2, EfficientNet).</b> Factorize
+       convolution into depthwise + pointwise, then wrap it in an inverted
+       residual and balance width/depth/resolution with compound scaling.</p>
+    <p><b>5. Modern ConvNets (ConvNeXt).</b> Fold Transformer-era design choices
+       back into a pure ConvNet residual block — proving the block, not just the
+       attention, drove much of the recent progress.</p>
+  </div>
+
+  <footer>
+    Built for teaching · self-contained HTML widget · assumes familiarity with basic CNN concepts.
+  </footer>
+</div>
+
+<script>
+/* ==========================================================================
+   1. DATA — every architecture block lives here.
+      `accent` is the CSS color used for the card stripe / tag.
+      `diagram` names a builder in the DIAGRAMS map (see section 3).
+   ========================================================================== */
+const ARCH = [
+  {
+    id:"lenet", year:1998, name:"LeNet-5", tag:"Conv → Pool", accent:"var(--accent)",
+    diagram:"lenet",
+    summary:"The original blueprint of the modern CNN. Alternating convolution and subsampling (pooling) layers learn a spatial feature hierarchy, followed by fully-connected layers for classifying small grayscale digits.",
+    innovation:"Trainable convolutional feature extractors + spatial subsampling, learned end-to-end by backprop — replacing hand-crafted features.",
+    advantages:["Introduced the conv+pool feature-hierarchy template","Weight sharing → far fewer parameters than dense nets","Translation-tolerant features"],
+    limitations:["Shallow; tanh/sigmoid saturate in deeper nets","Designed for tiny (28×28) inputs","No GPU-era tricks (ReLU, dropout, norm)"],
+    influenced:["alexnet"]
+  },
+  {
+    id:"alexnet", year:2012, name:"AlexNet", tag:"Conv + ReLU + MaxPool", accent:"var(--accent)",
+    diagram:"alexnet",
+    summary:"The network that reignited deep learning by winning ImageNet 2012 by a huge margin. Same conv/pool skeleton as LeNet but deeper, wider, GPU-trained, with ReLU activations and aggressive regularization.",
+    innovation:"ReLU non-linearity + dropout + GPU training at ImageNet scale — deep CNNs become practical and dominant.",
+    advantages:["ReLU speeds up convergence, avoids saturation","Dropout curbs overfitting on large nets","Proved CNNs scale to millions of images"],
+    limitations:["Large 11×11 first-layer filters are parameter-heavy","Ad-hoc design, little principled structure","Local Response Norm later found unnecessary"],
+    influenced:["vgg","googlenet"]
+  },
+  {
+    id:"vgg", year:2014, name:"VGGNet", tag:"Stacked 3×3 convs", accent:"var(--accent)",
+    diagram:"vgg",
+    summary:"A study in depth and uniformity: everything is built from 3×3 convolutions and 2×2 pooling. Two stacked 3×3 convs share the receptive field of a 5×5 but with fewer parameters and an extra non-linearity.",
+    innovation:"Replace large filters with stacks of small 3×3 convs — more depth, more non-linearity, fewer parameters per receptive field.",
+    advantages:["Simple, uniform, easy to reason about","Great transferable features (still used as backbones)","Small filters → deeper effective non-linearity"],
+    limitations:["Very heavy: ~138M params, huge FC layers","Expensive to train and deploy","No skip connections → hard to go much deeper"],
+    influenced:["googlenet","resnet"]
+  },
+  {
+    id:"googlenet", year:2014, name:"GoogLeNet / Inception", tag:"Inception module", accent:"var(--accent-3)",
+    diagram:"inception",
+    summary:"Instead of choosing one filter size, the Inception module runs 1×1, 3×3, 5×5 convolutions and pooling in parallel and concatenates the results. 1×1 'bottleneck' convolutions first reduce channels to keep the cost affordable.",
+    innovation:"Multi-scale parallel branches within one block + 1×1 convs as cheap dimensionality-reduction bottlenecks.",
+    advantages:["Captures features at several scales at once","1×1 convs slash compute and parameters","22 layers yet fewer params than AlexNet"],
+    limitations:["Hand-designed, irregular, hard to tweak","Many hyperparameters per branch","Auxiliary classifiers add training complexity"],
+    influenced:["resnet","mobilenetv1","efficientnet"]
+  },
+  {
+    id:"resnet", year:2015, name:"ResNet", tag:"Residual block", accent:"var(--accent-2)",
+    diagram:"resnet",
+    summary:"A residual block learns F(x) and adds the input back: output = F(x) + x. The identity shortcut lets gradients flow directly, so the network only has to learn the residual — enabling 50, 101, even 152+ layers.",
+    innovation:"Identity skip connection → learn residuals, solving the degradation problem and enabling very deep networks.",
+    advantages:["Trains networks 100+ layers deep","Skip path keeps gradients healthy","Easy to learn identity → no accuracy loss with depth"],
+    limitations:["Deeper variants still compute-heavy","Plain addition can bottleneck feature width","BN + block design must be tuned carefully"],
+    influenced:["densenet","mobilenetv2","efficientnet","convnext"]
+  },
+  {
+    id:"densenet", year:2016, name:"DenseNet", tag:"Dense block", accent:"var(--accent-2)",
+    diagram:"densenet",
+    summary:"In a dense block every layer receives the concatenated feature maps of ALL preceding layers. Feature reuse is maximal, so each layer can be very narrow (small growth rate) while the network stays highly parameter-efficient.",
+    innovation:"Dense connectivity via concatenation — every layer sees every earlier feature map, maximizing feature reuse.",
+    advantages:["Very parameter-efficient (feature reuse)","Strong gradient flow to all layers","Narrow layers → compact yet accurate"],
+    limitations:["Concatenation → high memory / activations","Feature maps grow, can be I/O bound","Slower in practice than FLOPs suggest"],
+    influenced:["efficientnet","convnext"]
+  },
+  {
+    id:"mobilenetv1", year:2017, name:"MobileNet V1", tag:"Depthwise separable conv", accent:"var(--accent-4)",
+    diagram:"dwsep",
+    summary:"Factorizes a standard convolution into two cheap steps: a depthwise conv that filters each channel independently, then a 1×1 pointwise conv that mixes channels. Cost drops by roughly 8–9× with minor accuracy loss.",
+    innovation:"Depthwise separable convolution — decouple spatial filtering from channel mixing to cut FLOPs dramatically.",
+    advantages:["~8–9× fewer FLOPs than standard conv","Small enough for phones / edge devices","Width & resolution multipliers for tuning"],
+    limitations:["Some accuracy traded for efficiency","Depthwise convs underuse hardware","No residual connections in v1"],
+    influenced:["mobilenetv2","efficientnet"]
+  },
+  {
+    id:"mobilenetv2", year:2018, name:"MobileNet V2", tag:"Inverted residual", accent:"var(--accent-4)",
+    diagram:"invres",
+    summary:"An inverted residual block expands channels with a 1×1 conv, filters them with a cheap depthwise conv, then projects back down to a narrow bottleneck — with a residual connecting the thin ends. A linear projection avoids ReLU destroying low-dimensional information.",
+    innovation:"Inverted residual + linear bottleneck — skip connects the narrow layers; expansion happens only inside the block.",
+    advantages:["Better accuracy/FLOP than v1","Residual aids gradient flow while staying light","Linear bottleneck preserves information"],
+    limitations:["Expansion factor adds a hyperparameter","Still limited raw capacity vs large nets","Depthwise ops remain hardware-inefficient"],
+    influenced:["efficientnet","convnext"]
+  },
+  {
+    id:"efficientnet", year:2019, name:"EfficientNet", tag:"MBConv + compound scaling", accent:"var(--accent-4)",
+    diagram:"mbconv",
+    summary:"Builds on MobileNetV2's inverted residual (the MBConv block) and adds a squeeze-and-excitation channel-attention step. Its headline idea is compound scaling: grow depth, width, and input resolution together with a single coefficient.",
+    innovation:"MBConv (inverted residual + squeeze-excite) scaled by a principled compound rule across depth/width/resolution.",
+    advantages:["State-of-the-art accuracy per FLOP (in its era)","Compound scaling = one knob, balanced growth","SE attention recalibrates channels cheaply"],
+    limitations:["NAS-derived → costly to design/search","Depthwise + SE can be latency-unfriendly","Large variants still memory-hungry"],
+    influenced:["convnext"]
+  },
+  {
+    id:"convnext", year:2022, name:"ConvNeXt", tag:"Modernized residual", accent:"var(--accent-4)",
+    diagram:"convnext",
+    summary:"Takes a plain ResNet block and modernizes it with lessons from Vision Transformers: a large 7×7 depthwise conv, an inverted MLP-style bottleneck, GELU, LayerNorm, and fewer activations/norms — matching Transformer accuracy with a pure ConvNet.",
+    innovation:"A ConvNet block redesigned with Transformer-era choices (big depthwise kernel, LN, GELU, inverted MLP) — no attention needed.",
+    advantages:["Matches/beats ViTs at similar compute","Pure convolution → simple, efficient inference","Shows block design, not attention, drove gains"],
+    limitations:["Empirically tuned, less 'first-principles'","Large kernels need efficient depthwise kernels","Gains rely on modern training recipes"],
+    influenced:[]
+  }
+];
+
+/* Quick lookup by id */
+const BY_ID = Object.fromEntries(ARCH.map(a => [a.id, a]));
+
+/* ==========================================================================
+   2. COMPARE METRICS — ratings (0–5) + short text per architecture.
+      Keep keys aligned with the rows rendered in renderCompare().
+   ========================================================================== */
+const METRICS = {
+  //            compute(cost) paramEff  accuracy  mobile   keyIdea
+  lenet:        { compute:1, param:5, acc:1, mobile:3, key:"Conv+pool feature hierarchy" },
+  alexnet:      { compute:3, param:2, acc:2, mobile:1, key:"ReLU + dropout + GPU scale" },
+  vgg:          { compute:5, param:1, acc:3, mobile:1, key:"Depth via stacked 3×3 convs" },
+  googlenet:    { compute:2, param:4, acc:3, mobile:2, key:"Parallel multi-scale branches" },
+  resnet:       { compute:4, param:3, acc:4, mobile:2, key:"Identity skip / residual learning" },
+  densenet:     { compute:3, param:5, acc:4, mobile:2, key:"Dense feature reuse via concat" },
+  mobilenetv1:  { compute:1, param:4, acc:3, mobile:5, key:"Depthwise separable convolution" },
+  mobilenetv2:  { compute:1, param:5, acc:3, mobile:5, key:"Inverted residual + linear bottleneck" },
+  efficientnet: { compute:2, param:5, acc:5, mobile:4, key:"MBConv + compound scaling" },
+  convnext:     { compute:3, param:4, acc:5, mobile:3, key:"Transformer-modernized ConvNet block" }
+};
+/* Note: `compute` is COST — higher bars = more expensive. Others: higher = better. */
+
+/* ==========================================================================
+   3. STATIC DIAGRAM BUILDERS — each returns an SVG string.
+      No animation: the goal is one clean, readable architecture diagram.
+
+      PAL: light tint fill + colored border per concept color.
+      Helpers: block(), arrow(), skip(), sumNode(), note().
+   ========================================================================== */
+const NS = "http://www.w3.org/2000/svg";
+const TX = "#233043";   // block label text
+const DIM = "#66728a";  // annotation text
+const ARW = "#94a2ba";  // arrow color
+
+// concept color palette (border `s`, light fill `f`)
+const PAL = {
+  blue:  { s:"#3b6fd4", f:"#e8effb" },
+  teal:  { s:"#16957f", f:"#e1f4f0" },
+  amber: { s:"#c07d24", f:"#fbf0dd" },
+  violet:{ s:"#8a52c7", f:"#f1e8fb" },
+  gray:  { s:"#8593a8", f:"#eef2f8" },
+  good:  { s:"#2b9e4d", f:"#e5f6ea" }
+};
+
+function svg(inner, vb){ return `<svg viewBox="${vb}" xmlns="${NS}">${inner}</svg>`; }
+
+/* A rounded block. `label` may be a string or an array of lines.
+   `x,y` is the TOP-LEFT corner. */
+function block(x, y, w, h, label, key){
+  const p = PAL[key] || PAL.gray;
+  const cx = x + w/2, cy = y + h/2;
+  let txt;
+  if(Array.isArray(label)){
+    const lh = 13, top = cy - (label.length - 1) * lh / 2;
+    txt = label.map((l,i) =>
+      `<text x="${cx}" y="${top + i*lh}" fill="${TX}" font-size="11" font-weight="600"
+         text-anchor="middle" dominant-baseline="central">${l}</text>`).join('');
+  } else {
+    txt = `<text x="${cx}" y="${cy}" fill="${TX}" font-size="11.5" font-weight="600"
+             text-anchor="middle" dominant-baseline="central">${label}</text>`;
+  }
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8"
+            fill="${p.f}" stroke="${p.s}" stroke-width="1.6"/>${txt}`;
+}
+
+/* Static horizontal arrow from x1 to x2 at height y. */
+function arrow(x1, y, x2, color){
+  color = color || ARW;
+  return `<line x1="${x1}" y1="${y}" x2="${x2-8}" y2="${y}" stroke="${color}" stroke-width="2"/>
+          <path d="M${x2-8},${y-4.5} L${x2},${y} L${x2-8},${y+4.5} Z" fill="${color}"/>`;
+}
+
+/* A small annotation label. */
+function note(x, y, text, color, anchor){
+  return `<text x="${x}" y="${y}" fill="${color||DIM}" font-size="11"
+            text-anchor="${anchor||'start'}">${text}</text>`;
+}
+
+/* A "+" summation node centered at (cx,cy). */
+function sumNode(cx, cy){
+  return `<circle cx="${cx}" cy="${cy}" r="15" fill="#ffffff" stroke="${PAL.good.s}" stroke-width="2"/>
+          <text x="${cx}" y="${cy}" fill="${PAL.good.s}" font-size="17" font-weight="700"
+            text-anchor="middle" dominant-baseline="central">+</text>`;
+}
+
+/* A residual/skip arc that goes UP and over, ending with a down-arrow into a
+   sum node at x2. arcTop = the y of the top of the arc. */
+function skip(x1, x2, yc, arcTop, color, label){
+  const c = color || PAL.amber.s;
+  const d = `M${x1},${yc-24} C${x1},${arcTop} ${x2},${arcTop} ${x2},${yc-19}`;
+  return `<path d="${d}" fill="none" stroke="${c}" stroke-width="2.2"/>
+          <path d="M${x2-4.5},${yc-26} L${x2},${yc-17} L${x2+4.5},${yc-26} Z" fill="${c}"/>
+          <text x="${(x1+x2)/2}" y="${arcTop-6}" fill="${c}" font-size="11.5" font-weight="600"
+            text-anchor="middle">${label}</text>`;
+}
+
+const DIAGRAMS = {
+  /* ---- LeNet: linear Conv → Pool → Conv → Pool → FC -------------------- */
+  lenet(){
+    const yc = 96, h = 52, w = 78, gap = 30;
+    const stops = [
+      ["Input","gray"], [["Conv","5×5"],"blue"], [["Avg","Pool"],"gray"],
+      [["Conv","5×5"],"blue"], [["Avg","Pool"],"gray"], ["FC","violet"]
+    ];
+    let x = 14, inner = "";
+    stops.forEach((s,i) => {
+      inner += block(x, yc-h/2, w, h, s[0], s[1]);
+      x += w;
+      if(i < stops.length-1){ inner += arrow(x, yc, x+gap); x += gap; }
+    });
+    inner += note(14, yc+58, "A plain feature hierarchy: convolutions extract features, pooling shrinks resolution.", DIM);
+    return svg(inner, "0 0 660 175");
+  },
+
+  /* ---- AlexNet: repeating Conv → ReLU → MaxPool unit ------------------- */
+  alexnet(){
+    const yc = 100, h = 50, w = 80, gap = 26;
+    const stops = [
+      [["Conv","11×11"],"blue"], ["ReLU","teal"], [["Max","Pool"],"gray"],
+      [["Conv","5×5"],"blue"], ["ReLU","teal"], [["Max","Pool"],"gray"]
+    ];
+    let x = 16, inner = "", xs = [];
+    stops.forEach((s,i) => {
+      xs.push(x);
+      inner += block(x, yc-h/2, w, h, s[0], s[1]);
+      x += w;
+      if(i < stops.length-1){ inner += arrow(x, yc, x+gap); x += gap; }
+    });
+    // dashed rectangle around the first Conv→ReLU→MaxPool unit
+    const rx = xs[0]-6, rw = (xs[2]+w) - xs[0] + 12;
+    inner += `<rect x="${rx}" y="${yc-h/2-10}" width="${rw}" height="${h+20}" rx="10"
+                fill="none" stroke="${PAL.amber.s}" stroke-width="1.6" stroke-dasharray="5 5"/>`;
+    inner += note(rx, yc-h/2-16, "the repeating block: Conv → ReLU → MaxPool", PAL.amber.s);
+    inner += note(16, yc+56, "Same skeleton as LeNet, but ReLU replaces tanh and training runs at ImageNet scale on GPUs.", DIM);
+    return svg(inner, "0 0 680 180");
+  },
+
+  /* ---- VGG: two stacked 3×3 convs == one 5×5 receptive field ---------- */
+  vgg(){
+    const yc = 82, h = 50;
+    let inner = "";
+    inner += block(14, yc-h/2, 76, h, "Input", "gray");
+    inner += arrow(90, yc, 124);
+    inner += block(124, yc-h/2, 90, h, ["3×3","Conv"], "blue");
+    inner += arrow(214, yc, 248);
+    inner += block(248, yc-h/2, 90, h, ["3×3","Conv"], "blue");
+    inner += arrow(338, yc, 372);
+    inner += block(372, yc-h/2, 84, h, ["2×2","Pool"], "gray");
+    // brace under the two conv blocks
+    const bx1 = 124, bx2 = 338, by = yc + h/2 + 12;
+    inner += `<path d="M${bx1},${by} L${bx1},${by+8} L${bx2},${by+8} L${bx2},${by}"
+                fill="none" stroke="${PAL.amber.s}" stroke-width="1.6"/>`;
+    inner += note((bx1+bx2)/2, by+26, "two 3×3 convs ≈ one 5×5 receptive field — fewer params, one extra non-linearity", PAL.amber.s, "middle");
+    return svg(inner, "0 0 470 170");
+  },
+
+  /* ---- Inception: parallel 1×1 / 3×3 / 5×5 / pool → concat ----------- */
+  inception(){
+    const inX = 14, cy = 130;
+    let inner = "";
+    inner += block(inX, cy-26, 72, 52, "Input", "gray");
+    // four parallel branches
+    const branches = [
+      { label:"1×1 conv",           key:"blue",   y:32  },
+      { label:["1×1  →  3×3"],      key:"teal",   y:96  },
+      { label:["1×1  →  5×5"],      key:"amber",  y:164 },
+      { label:["3×3 pool  →  1×1"], key:"violet", y:228 }
+    ];
+    const bx = 176, bw = 176, bh = 44;
+    const concatX = 468, concatW = 84;
+    branches.forEach(b => {
+      const p = PAL[b.key];
+      // split connector from input → branch
+      inner += `<path d="M86,${cy} C138,${cy} 150,${b.y} ${bx},${b.y}"
+                  fill="none" stroke="${p.s}" stroke-width="1.8"/>`;
+      inner += block(bx, b.y-bh/2, bw, bh, b.label, b.key);
+      // merge connector from branch → concat
+      inner += `<path d="M${bx+bw},${b.y} C${concatX-46},${b.y} ${concatX-34},${cy} ${concatX},${cy}"
+                  fill="none" stroke="${p.s}" stroke-width="1.8"/>`;
+    });
+    inner += block(concatX, cy-30, concatW, 60, "Concat", "good");
+    inner += arrow(concatX+concatW, cy, concatX+concatW+34);
+    inner += block(concatX+concatW+34, cy-26, 72, 52, "Output", "gray");
+    inner += note(inX, 268, "Several filter sizes run in parallel; 1×1 convs first cut channels to keep the cost low; outputs are concatenated.", DIM);
+    return svg(inner, "0 0 680 285");
+  },
+
+  /* ---- ResNet: F(x) path + identity skip, summed at "+" -------------- */
+  resnet(){
+    const yc = 120, h = 50;
+    const splitX = 96, sumX = 452;
+    let inner = "";
+    inner += block(14, yc-h/2, 62, h, "x", "gray");
+    inner += arrow(76, yc, 116);
+    inner += block(116, yc-h/2, 96, h, ["3×3","Conv"], "teal");
+    inner += arrow(212, yc, 250);
+    inner += block(250, yc-h/2, 96, h, ["3×3","Conv"], "teal");
+    inner += arrow(346, yc, sumX-18);
+    inner += skip(splitX, sumX, yc, 44, PAL.amber.s, "identity shortcut ( + x )");
+    inner += sumNode(sumX, yc);
+    inner += arrow(sumX+15, yc, sumX+52);
+    inner += block(sumX+52, yc-h/2, 74, h, "ReLU", "gray");
+    inner += note(14, yc+58, "The block learns the residual F(x); the input is added back so gradients flow through the shortcut.", DIM);
+    return svg(inner, "0 0 600 195");
+  },
+
+  /* ---- DenseNet: each layer takes concat of ALL previous ------------- */
+  densenet(){
+    const yc = 168, h = 46, w = 80, gap = 44;
+    const labels = ["Input","Layer 1","Layer 2","Layer 3","Layer 4"];
+    let x = 16, xs = [], inner = "";
+    labels.forEach((l,i) => { xs.push(x); inner += block(x, yc-h/2, w, h, l, i===0?"gray":"teal"); x += w + gap; });
+    // consecutive arrows
+    for(let i=0;i<labels.length-1;i++){ inner += arrow(xs[i]+w, yc, xs[i+1]); }
+    // dense skip arcs from every earlier layer to every later (skip the direct neighbor)
+    const arcColors = [PAL.blue.s, PAL.violet.s, PAL.amber.s];
+    for(let i=0;i<labels.length;i++){
+      for(let j=i+2;j<labels.length;j++){
+        const x1 = xs[i]+w/2, x2 = xs[j]+w/2;
+        const lift = 34 + (j-i)*22;
+        const col = arcColors[(j-i-2) % arcColors.length];
+        inner += `<path d="M${x1},${yc-24} C${x1},${yc-lift} ${x2},${yc-lift} ${x2},${yc-24}"
+                    fill="none" stroke="${col}" stroke-width="1.6" opacity="0.85"/>`;
+      }
+    }
+    inner += note(16, yc+52, "Every layer receives the concatenated feature maps of ALL preceding layers — maximal feature reuse.", DIM);
+    return svg(inner, "0 0 640 235");
+  },
+
+  /* ---- MobileNet v1: depthwise (per-channel) + pointwise (1×1 mix) ---- */
+  dwsep(){
+    const yc = 108, h = 50;
+    let inner = "";
+    inner += block(14, yc-h/2, 72, h, "Input", "gray");
+    inner += arrow(86, yc, 120);
+    // depthwise: three stacked per-channel filter rows
+    const dx = 120, dwW = 118, rowH = 22, rows = 3;
+    const dwTop = yc - (rows*rowH + (rows-1)*6)/2;
+    for(let i=0;i<rows;i++){
+      const ry = dwTop + i*(rowH+6);
+      inner += block(dx, ry, dwW, rowH, "channel "+(i+1)+" filter", "violet");
+    }
+    inner += note(dx + dwW/2, dwTop-10, "Depthwise 3×3 · one filter per channel", PAL.violet.s, "middle");
+    inner += arrow(dx+dwW, yc, dx+dwW+34);
+    // pointwise
+    const px = dx+dwW+34;
+    inner += block(px, yc-h/2, 108, h, ["Pointwise","1×1"], "teal");
+    inner += note(px+54, yc-h/2-10, "mix channels", PAL.teal.s, "middle");
+    inner += arrow(px+108, yc, px+142);
+    inner += block(px+142, yc-h/2, 72, h, "Output", "gray");
+    inner += note(14, yc+64, "Spatial filtering (depthwise) is decoupled from channel mixing (pointwise) → roughly 8–9× cheaper.", DIM);
+    return svg(inner, "0 0 620 190");
+  },
+
+  /* ---- MobileNet v2: expand → depthwise → project, residual on thin ends -- */
+  invres(){
+    const yc = 122;
+    let inner = "";
+    // heights encode channel width: thin ends, wide middle
+    inner += block(14, yc-16, 66, 32, ["x","(thin)"], "gray");
+    inner += arrow(80, yc, 116);
+    inner += block(116, yc-32, 100, 64, ["1×1","Expand"], "teal");
+    inner += arrow(216, yc, 252);
+    inner += block(252, yc-36, 100, 72, ["3×3","Depthwise"], "violet");
+    inner += arrow(352, yc, 388);
+    inner += block(388, yc-18, 100, 36, ["1×1 Project","(linear)"], "blue");
+    const sumX = 540;
+    inner += arrow(488, yc, sumX-18);
+    inner += sumNode(sumX, yc);
+    inner += skip(48, sumX, yc, 42, PAL.amber.s, "residual connects the NARROW ends");
+    inner += note(14, yc+60, "Expand channels → filter cheaply with depthwise → project back down. The linear bottleneck preserves low-dim info.", DIM);
+    return svg(inner, "0 0 590 200");
+  },
+
+  /* ---- EfficientNet MBConv: inverted residual + Squeeze-Excite ------- */
+  mbconv(){
+    const yc = 122;
+    let inner = "";
+    inner += block(14, yc-16, 58, 32, "x", "gray");
+    inner += arrow(72, yc, 106);
+    inner += block(106, yc-30, 88, 60, ["1×1","Expand"], "teal");
+    inner += arrow(194, yc, 228);
+    inner += block(228, yc-34, 88, 68, ["3×3","Depthwise"], "violet");
+    inner += arrow(316, yc, 350);
+    inner += block(350, yc-26, 84, 52, ["Squeeze-","Excite"], "amber");
+    inner += arrow(434, yc, 468);
+    inner += block(468, yc-18, 88, 36, ["1×1","Project"], "blue");
+    const sumX = 606;
+    inner += arrow(556, yc, sumX-18);
+    inner += sumNode(sumX, yc);
+    inner += skip(42, sumX, yc, 42, PAL.good.s, "inverted residual skip");
+    inner += note(392, yc+30, "channel re-weighting", PAL.amber.s, "middle");
+    inner += note(14, yc+58, "MobileNetV2's block + a squeeze-excite step that re-weights channels; whole network scaled by one compound coefficient.", DIM);
+    return svg(inner, "0 0 660 200");
+  },
+
+  /* ---- ConvNeXt: big 7×7 depthwise → LN → 1×1 up → GELU → 1×1 down + skip -- */
+  convnext(){
+    const yc = 120, h = 50;
+    let inner = "";
+    inner += block(14, yc-16, 58, 32, "x", "gray");
+    inner += arrow(72, yc, 106);
+    inner += block(106, yc-h/2, 104, h, ["7×7","Depthwise"], "violet");
+    inner += arrow(210, yc, 244);
+    inner += block(244, yc-h/2, 58, h, "LN", "gray");
+    inner += arrow(302, yc, 336);
+    inner += block(336, yc-h/2, 92, h, ["1×1 ↑","(4× wide)"], "teal");
+    inner += arrow(428, yc, 462);
+    inner += block(462, yc-h/2, 64, h, "GELU", "amber");
+    inner += arrow(526, yc, 560);
+    inner += block(560, yc-h/2, 78, h, "1×1 ↓", "blue");
+    const sumX = 688;
+    inner += arrow(638, yc, sumX-18);
+    inner += sumNode(sumX, yc);
+    inner += skip(42, sumX, yc, 42, PAL.good.s, "residual skip (ResNet DNA)");
+    inner += note(14, yc+58, "A ResNet block modernized with a big depthwise kernel, LayerNorm, GELU and an inverted MLP bottleneck — pure convolution.", DIM);
+    return svg(inner, "0 0 740 195");
+  }
+};
+
+/* ==========================================================================
+   4. RENDERING
+   ========================================================================== */
+let activeId = ARCH[0].id;
+
+/* -- timeline -- */
+function renderTimeline(){
+  const el = document.getElementById("timeline");
+  el.innerHTML = ARCH.map(a => `
+    <button class="tl-node ${a.id===activeId?'active':''}" data-id="${a.id}" title="${a.name}">
+      <div class="tl-dot"></div>
+      <div class="tl-year">${a.year}</div>
+      <div class="tl-name">${a.name.split(' ')[0].replace('/','')}</div>
+    </button>`).join('');
+  el.querySelectorAll('.tl-node').forEach(n =>
+    n.addEventListener('click', () => select(n.dataset.id)));
+}
+
+/* -- cards grid -- */
+function renderCards(){
+  const el = document.getElementById("grid");
+  el.innerHTML = ARCH.map(a => `
+    <button class="card ${a.id===activeId?'active':''}" data-id="${a.id}" style="--card-accent:${a.accent}">
+      <div class="yr">${a.year}</div>
+      <div class="nm">${a.name}</div>
+      <div class="tg">${a.tag}</div>
+    </button>`).join('');
+  el.querySelectorAll('.card').forEach(c =>
+    c.addEventListener('click', () => select(c.dataset.id)));
+}
+
+/* -- detail panel for the active architecture -- */
+function renderDetail(){
+  const a = BY_ID[activeId];
+  const infl = a.influenced.length
+    ? a.influenced.map(id => `<span class="chip" data-id="${id}">${BY_ID[id].name} →</span>`).join('')
+    : `<span class="chip dead">the current frontier — its ideas feed into ViT-era hybrids</span>`;
+
+  const el = document.getElementById("detail");
+  el.innerHTML = `
+    <div class="detail-head">
+      <h2>${a.name}</h2>
+      <span class="badge">${a.year}</span>
+      <span class="badge" style="color:var(--accent)">${a.tag}</span>
+    </div>
+    <div class="detail-body">
+      <div class="detail-left">
+        <div class="diagram-box">${DIAGRAMS[a.diagram]()}</div>
+        <p class="summary">${a.summary}</p>
+      </div>
+      <div class="detail-right">
+        <div class="innovation"><b>Main innovation:</b> ${a.innovation}</div>
+        <div class="cols">
+          <div class="pros">
+            <h4>✓ Advantages</h4>
+            <ul>${a.advantages.map(x=>`<li>${x}</li>`).join('')}</ul>
+          </div>
+          <div class="cons">
+            <h4>✗ Limitations</h4>
+            <ul>${a.limitations.map(x=>`<li>${x}</li>`).join('')}</ul>
+          </div>
+        </div>
+        <div class="influenced">
+          <h4>Influenced →</h4>
+          ${infl}
+        </div>
+      </div>
+    </div>`;
+
+  // clickable lineage chips jump to the influenced architecture
+  el.querySelectorAll('.chip[data-id]').forEach(ch =>
+    ch.addEventListener('click', () => select(ch.dataset.id)));
+}
+
+/* -- master selection: keep timeline, cards, detail in sync -- */
+function select(id){
+  activeId = id;
+  renderTimeline();
+  renderCards();
+  renderDetail();
+  document.getElementById("detail").scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+/* ==========================================================================
+   5. COMPARE SECTION
+   ========================================================================== */
+function ratingBars(n){
+  let s = '<span class="rate">';
+  for(let i=0;i<5;i++) s += `<i class="${i<n?'on':''}"></i>`;
+  return s + '</span>';
+}
+function renderComparePickers(){
+  const a = document.getElementById("selA"), b = document.getElementById("selB");
+  const opts = ARCH.map(x => `<option value="${x.id}">${x.name} (${x.year})</option>`).join('');
+  a.innerHTML = opts; b.innerHTML = opts;
+  a.value = "resnet"; b.value = "mobilenetv2";   // sensible default contrast
+  a.addEventListener('change', renderCompare);
+  b.addEventListener('change', renderCompare);
+}
+function renderCompare(){
+  const A = BY_ID[document.getElementById("selA").value];
+  const B = BY_ID[document.getElementById("selB").value];
+  const mA = METRICS[A.id], mB = METRICS[B.id];
+  // For "compute", MORE bars = MORE cost, so we label it explicitly below.
+  const rows = [
+    ["Key idea",            A.tag,       B.tag,       "text"],
+    ["Computation cost",    mA.compute,  mB.compute,  "bars"],
+    ["Parameter efficiency",mA.param,    mB.param,    "bars"],
+    ["Accuracy focus",      mA.acc,      mB.acc,      "bars"],
+    ["Mobile suitability",  mA.mobile,   mB.mobile,   "bars"],
+    ["In one line",         mA.key,      mB.key,      "text"]
+  ];
+  const body = rows.map(r => {
+    let cA, cB;
+    if(r[3] === "text"){ cA = r[1]; cB = r[2]; }
+    else { cA = ratingBars(r[1]); cB = ratingBars(r[2]); }
+    return `<tr>
+        <td class="metric">${r[0]}</td>
+        <td class="cA">${cA}</td>
+        <td class="cB">${cB}</td>
+      </tr>`;
+  }).join('');
+  document.getElementById("cmpTable").innerHTML = `
+    <thead><tr>
+      <th></th>
+      <th class="cA">${A.name}</th>
+      <th class="cB">${B.name}</th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+    <tfoot><tr><td colspan="3" style="color:var(--text-dim);border:none;padding-top:12px;font-size:.8rem">
+      Ratings are qualitative teaching estimates (0–5). For “Computation cost”, more bars = more expensive.
+    </td></tr></tfoot>`;
+}
+
+/* ==========================================================================
+   6. INIT
+   ========================================================================== */
+renderTimeline();
+renderCards();
+renderDetail();
+renderComparePickers();
+renderCompare();
+</script>
+</body>
+</html>
