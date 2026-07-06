@@ -36,6 +36,22 @@ widgets_pubic/
 - **Use a light theme by default.** The maintainer prefers light color schemes (light backgrounds, dark text, subtle colored accents). Avoid dark-mode / dark-background designs unless explicitly requested.
 - **Avoid gratuitous animations.** Motion (moving arrows, pulsing tokens, flashing transitions) is considered visual noise, not value. Favor a single clear, static diagram over an animated one. Small, purposeful transitions (hover states) are fine; continuous/looping animations are not.
 
+## Math Notation
+
+Widgets that show equations must render them with **LaTeX-like quality using only native HTML/CSS** — no MathJax, KaTeX, or any CDN library (widgets must stay self-contained). Reference implementation: `rnn_unrolling_interactive.html`.
+
+**In HTML text:**
+
+- Define a math font stack once and reuse it: `--math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;`
+- Identifiers (variables, function names) go in `<var>` styled as italic math-serif: `var{ font-family: var(--math); font-style: italic; }`. Wrap whole equations in a `.eq` span using the same font stack, upright, so operators/parentheses render in serif but not italic.
+- Subscripts/superscripts use real `<sub>`/`<sup>` tags (letter indices italic via nested `<var>`, digit indices upright). Example: `<var>h</var><sub><var>t</var>−1</sub>` → *h*ₜ₋₁.
+- Use proper Unicode glyphs, never ASCII lookalikes: minus `−` (U+2212, not hyphen), `ŷ`, `θ`, `·`, `…`, `→`. Prefer a real precomposed glyph (e.g. `ŷ`) over combining accents.
+
+**Inside inline SVG — critical pitfall:**
+
+- **Never use `<var>`, `<sub>`, `<sup>`, `<b>`, `<i>`, `<span>` or other HTML tags inside `<svg>` text.** They are HTML5 *foreign-content breakout tags*: the parser silently exits the SVG at that point and the rest of the diagram is dumped as plain HTML text.
+- Instead, render math in SVG with `<text>`/`<tspan>`: set `font-family` to the math stack and `font-style="italic"` on the identifier, and build subscripts with `<tspan dy="…" font-size="…">` (italic for letter indices, upright for digits).
+
 ## Courses Covered
 
 - **Machine Learning**: clustering algorithms, model evaluation metrics, probabilistic models
