@@ -436,7 +436,7 @@
       <span class="tag tag-ai">AI</span>
     </div>
     <div class="card-title">How Word Embeddings Are Learned: Train a Tiny Next-Word Predictor</div>
-    <div class="card-desc">Trains a real embedding-table + linear-layer next-word model in the browser on a 14-sentence toy corpus: extracts the (input → next word) pairs, sketches the full architecture (embedding layer → linear layer → softmax → cross-entropy on the actual next word), follows a word through lookup → logits → softmax with live weights, lets students step training epoch by epoch while the 8-D embedding space self-organizes on a live PCA-projected map, then compares learned probabilities against dataset frequencies — including the love/hate "identical contexts" surprise and the frozen "pasta" row gotcha.</div>
+    <div class="card-desc">Trains a real embedding-table + linear-layer next-word model in the browser on a 14-sentence toy corpus: extracts the (input → next word) pairs, sketches the full architecture (embedding layer → linear layer → softmax → cross-entropy on the actual next word), follows a word through lookup → logits → softmax with live weights, lets students step training epoch by epoch while the 8-D embedding space self-organizes on a live PCA-projected map, then compares learned probabilities against dataset frequencies — including the love/hate "identical contexts" surprise and the frozen "pasta" row gotcha. A GPT-2-style weight-tying toggle (W = E) lets students compare parameter counts, loss curves, and which rows receive gradients.</div>
     <span class="verify-badge"></span>
     <div class="card-arrow">Open widget →</div>
   </a>

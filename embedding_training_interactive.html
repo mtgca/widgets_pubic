@@ -222,6 +222,14 @@
   .controls button.ghost{ background: #fff; color: var(--blue-dark); }
   .controls button.ghost:hover{ background: #f0f4fd; }
   .controls button:disabled{ opacity: 0.45; cursor: default; }
+  .tie-toggle{
+    display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+    font-size: 0.85rem; font-weight: 650; color: var(--ink);
+    padding: 7px 13px; border: 1.5px solid var(--line); border-radius: 9px; background: #fafbfe;
+  }
+  .tie-toggle input{ accent-color: var(--blue); width: 15px; height: 15px; cursor: pointer; margin: 0; }
+  .tie-toggle .hint{ font-size: 0.72rem; font-weight: 500; color: var(--muted); }
+  .tie-toggle.on{ border-color: var(--blue); background: var(--blue-bg); color: var(--blue-dark); }
   .readout{
     margin-left: auto; display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap;
     font-size: 0.85rem; color: var(--muted);
@@ -365,7 +373,7 @@
     <text x="183" y="30" font-size="11" font-weight="800" letter-spacing="0.6" fill="#1c5cab" text-anchor="middle">EMBEDDING LAYER</text>
     <text x="183" y="46" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">E</tspan> ∈ ℝ<tspan dy="-4" font-size="8">11×8</tspan></text>
     <text x="411" y="30" font-size="11" font-weight="800" letter-spacing="0.6" fill="#1c5cab" text-anchor="middle">LINEAR LAYER</text>
-    <text x="411" y="46" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">z</tspan> = <tspan font-style="italic">W</tspan><tspan font-style="italic">e</tspan> + <tspan font-style="italic">b</tspan></text>
+    <text id="archLinEq" x="411" y="46" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">z</tspan> = <tspan font-style="italic">W</tspan><tspan font-style="italic">e</tspan> + <tspan font-style="italic">b</tspan></text>
     <text x="655" y="30" font-size="11" font-weight="800" letter-spacing="0.6" fill="#1c5cab" text-anchor="middle">PROBABILITIES</text>
     <text x="655" y="46" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">p</tspan> = softmax(<tspan font-style="italic">z</tspan>)</text>
 
@@ -456,7 +464,7 @@
     <!-- backpropagation -->
     <path d="M 922 214 V 314 H 182 V 305" fill="none" stroke="#eb6834" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arO)"/>
     <path d="M 411 314 V 302" fill="none" stroke="#eb6834" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arO)"/>
-    <text x="560" y="329" font-size="10" fill="#b34515" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">backpropagation — gradients from the loss update <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">W</tspan>, <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">b</tspan>, and only row <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">x</tspan> of <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">E</tspan> (the input word’s row)</text>
+    <text id="archBackLabel" x="560" y="329" font-size="10" fill="#b34515" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">backpropagation — gradients from the loss update <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">W</tspan>, <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">b</tspan>, and only row <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">x</tspan> of <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">E</tspan> (the input word’s row)</text>
   </svg>
   </div>
   <p class="arch-cap">The whole model on one training pair from the dataset — input <b>“i”</b>, actual next word <b>“like”</b> (from “i&#160;like&#160;pizza”). This picture is schematic; the panels below show the same layers with their real, live numbers.</p>
@@ -465,7 +473,7 @@
     <div class="eq"><math><mi>e</mi><mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mi>x</mi><mo stretchy="false">]</mo></math>
       <div class="eq-note">lookup: take row <math><mi>x</mi></math> of the table</div></div>
     <div class="eq"><math><mi>z</mi><mo>=</mo><mi>W</mi><mi>e</mi><mo>+</mo><mi>b</mi></math>
-      <div class="eq-note">linear layer: <math><mi>W</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>11</mn><mo>×</mo><mn>8</mn></mrow></msup></math>, one logit per word</div></div>
+      <div class="eq-note" id="eqLin">linear layer: <math><mi>W</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>11</mn><mo>×</mo><mn>8</mn></mrow></msup></math>, one logit per word</div></div>
     <div class="eq"><math><mi>p</mi><mo>=</mo><mi>softmax</mi><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo></math>
       <div class="eq-note">scores → probability distribution</div></div>
     <div class="eq"><math><mi>L</mi><mo>=</mo><mo>−</mo><mi>log</mi><mo>⁡</mo><msub><mi>p</mi><mi>y</mi></msub></math>
@@ -498,10 +506,9 @@
     <div class="flow-arrow"><span class="glyph">→</span><math><mi>W</mi><mi>e</mi><mo>+</mo><mi>b</mi></math></div>
 
     <div class="stage" style="flex:2 1 470px; max-width:560px; overflow-x:auto;">
-      <h3>Linear layer → logits <math><mi>z</mi></math></h3>
+      <h3>Linear layer → logits <math><mi>z</mi></math><span id="linTiedFlag" style="color:var(--orange-deep);"></span></h3>
       <table class="lin" id="linTable"></table>
-      <div class="stage-caption">Row <math><mi>k</mi></math> of <math><mi>W</mi></math> scores word <math><mi>k</mi></math>:
-        <math><msub><mi>z</mi><mi>k</mi></msub><mo>=</mo><msub><mi>W</mi><mrow><mi>k</mi><mn>1</mn></mrow></msub><msub><mi>e</mi><mn>1</mn></msub><mo>+</mo><mo>⋯</mo><mo>+</mo><msub><mi>W</mi><mrow><mi>k</mi><mn>8</mn></mrow></msub><msub><mi>e</mi><mn>8</mn></msub><mo>+</mo><msub><mi>b</mi><mi>k</mi></msub></math></div>
+      <div class="stage-caption" id="linCap"></div>
     </div>
 
     <div class="flow-arrow"><span class="glyph">→</span>softmax</div>
@@ -521,16 +528,25 @@
     and gradients nudge <math><mi>W</mi></math>, <math><mi>b</mi></math> <b>and the embedding rows</b> to make the
     true next words more likely. The 8-D embedding vectors can’t be drawn directly, so the map below projects them
     onto their two directions of largest variance (<b>PCA</b>), with trails.
-    Click the buttons and watch words that behave alike drift together.</p>
+    Click the buttons and watch words that behave alike drift together.
+    The <b>tie-weights</b> toggle reuses the embedding table as the output layer
+    (<math><mi>W</mi><mo>=</mo><mi>E</mi></math>, as in GPT-2) — flip it to see how sharing one matrix
+    changes the loss, the geometry, and which rows get gradients.</p>
 
   <div class="controls">
     <button id="btn1">Train 1 epoch</button>
     <button id="btn10">+10 epochs</button>
     <button id="btn50">+50 epochs</button>
     <button id="btnReset" class="ghost">↺ Reset to random</button>
+    <label class="tie-toggle" id="tieToggleWrap">
+      <input type="checkbox" id="tieToggle">
+      <span>Tie weights <math><mo stretchy="false">(</mo><mi>W</mi><mo>=</mo><mi>E</mi><mo stretchy="false">)</mo></math></span>
+      <span class="hint">resets training</span>
+    </label>
     <div class="readout">
       <span>epoch <b id="epochLabel">0</b></span>
       <span>avg loss <b id="lossLabel">–</b></span>
+      <span>params <b id="paramLabel">187</b></span>
     </div>
   </div>
 
@@ -548,12 +564,7 @@
   </div>
 
   <div class="note-grad">
-    <b>Where does the “learning” of an embedding happen?</b> Each pair
-    (<i>x</i> → <i>y</i>) sends a gradient back through the linear layer into <b>exactly one row</b> of the table:
-    <math><mfrac><mrow><mo>∂</mo><mi>L</mi></mrow><mrow><mo>∂</mo><mi>E</mi><mo stretchy="false">[</mo><mi>x</mi><mo stretchy="false">]</mo></mrow></mfrac></math>
-    — the row of the current input word. All other rows are untouched by that pair.
-    Two words that are followed by the <b>same kinds of words</b> keep receiving the <b>same kinds of nudges</b>,
-    so their rows converge to nearby points. Meaning is never given to the model — it precipitates out of prediction errors.
+    <b>Where does the “learning” of an embedding happen?</b> <span id="gradModeNote"></span>
     <br><span style="font-size:0.82rem;color:var(--muted);">The map above is a <b>PCA projection</b>: the 8-D vectors are flattened onto the 2-D plane that preserves the most variance. This is exactly what you do for real models too (with PCA, t-SNE, UMAP…), since their embeddings have hundreds of dimensions.</span>
   </div>
 </section>
@@ -587,22 +598,22 @@
           <b>Words used in similar contexts get similar vectors.</b> The model never sees definitions —
           only which words follow which. Distributional similarity becomes geometric closeness.</div>
         <div class="insight good"><span class="tag">Look for it</span>
-          After training, the pronouns <b>i / you / we</b> become each other’s nearest neighbors (all are followed by like, love, eat, hate…).
-          Even more striking: <b>love</b> and <b>hate</b> also end up as mutual nearest neighbors — opposite meanings, but
-          <i>identical contexts</i> (both followed by pizza or pasta). Embeddings capture how words are <b>used</b>, not what they mean to us.
-          <b>like</b> sits farther from love/hate than they sit from each other, because it alone is also followed by “to”.</div>
+          <span id="lookForNote"></span></div>
         <div class="insight warn"><span class="tag">Gotcha</span>
-          <b>“pasta” never moves.</b> In these 14 sentences, <i>pasta</i> only ever appears as the <b>last</b> word,
-          so it is never an input — its embedding row never receives a gradient and stays at its random start.
-          A word’s vector is only as good as the contexts it is <i>used</i> in.
-          (Check the map: every other word grows a trail; pasta’s trail collapses to a single dot — it can shift on screen
-          only when the PCA axes themselves rotate.)</div>
+          <span id="gotchaNote"></span></div>
+        <div class="insight plain" id="tiedInsight" style="display:none;"><span class="tag">Tied weights</span>
+          <b>Half the parameters, one constraint.</b> Sharing drops this model from 187 to 99 parameters — in a real LM
+          tying saves an entire <math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>×</mo><mi>d</mi></math>
+          matrix (GPT-2 ties exactly like this). The price:
+          <math><mi>E</mi><mo stretchy="false">[</mo><mi>y</mi><mo stretchy="false">]</mo><mo>·</mo><mi>E</mi><mo stretchy="false">[</mo><mi>x</mi><mo stretchy="false">]</mo></math>
+          is symmetric, so “like after i” and “i after like” can’t be scored independently — only the bias breaks the tie —
+          and on this asymmetric little corpus the loss floors near 1.06 instead of 0.91.</div>
       </div>
     </div>
   </div>
 </section>
 
-<footer class="foot">Vocabulary of 11 words · 34 (input → next-word) training pairs · embedding dimension d = 8 · full-batch Adam, learning rate 0.1 · map: 2-D PCA projection</footer>
+<footer class="foot">Vocabulary of 11 words · 34 (input → next-word) training pairs · embedding dimension d = 8 · full-batch Adam, learning rate 0.1 · map: 2-D PCA projection · optional weight tying (W = E)</footer>
 
 </div>
 
@@ -648,6 +659,8 @@ const MAX_EPOCH = 500, LR = 0.1, B1 = 0.9, B2 = 0.999, EPS = 1e-8;
 let prevPCs = null;                // PCA sign stabilization between redraws
 let rng, E, W, b, adam, epoch, lossHist, embHist;
 let sel = stoi["i"];               // globally selected word
+let tied = false;                  // weight tying: reuse E as the output layer
+let ghost = null;                  // previous run's loss curve {hist, tied} for comparison
 
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function gauss(){let u=0,v=0;while(u===0)u=rng();while(v===0)v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
@@ -673,9 +686,10 @@ function softmaxArr(z){
 }
 function forwardWord(x){
   const e = E[x];
+  const M = tied ? E : W;          // tied: logit_k = E[k]·e + b_k
   const z = b.map((bk,k)=>{
     let s = bk;
-    for(let j=0;j<D;j++) s += W[k][j]*e[j];
+    for(let j=0;j<D;j++) s += M[k][j]*e[j];
     return s;
   });
   return {e, z, p:softmaxArr(z)};
@@ -696,9 +710,16 @@ function trainEpochs(n){
       for(let k=0;k<V;k++){
         const d = (p[k] - (k===y?1:0)) / N;      // dL/dz_k, batch-averaged
         gb[k] += d;
-        for(let j=0;j<D;j++){
-          gW[k][j] += d*e[j];
-          gE[x][j] += d*W[k][j];
+        if(tied){
+          for(let j=0;j<D;j++){
+            gE[k][j] += d*e[j];                  // E used as the output layer: every row
+            gE[x][j] += d*E[k][j];               // E used as the lookup: the input row
+          }
+        }else{
+          for(let j=0;j<D;j++){
+            gW[k][j] += d*e[j];
+            gE[x][j] += d*W[k][j];
+          }
         }
       }
     }
@@ -709,9 +730,11 @@ function trainEpochs(n){
         adam.mE[i][j] = B1*adam.mE[i][j] + (1-B1)*gE[i][j];
         adam.vE[i][j] = B2*adam.vE[i][j] + (1-B2)*gE[i][j]*gE[i][j];
         E[i][j] -= LR*(adam.mE[i][j]/c1)/(Math.sqrt(adam.vE[i][j]/c2)+EPS);
-        adam.mW[i][j] = B1*adam.mW[i][j] + (1-B1)*gW[i][j];
-        adam.vW[i][j] = B2*adam.vW[i][j] + (1-B2)*gW[i][j]*gW[i][j];
-        W[i][j] -= LR*(adam.mW[i][j]/c1)/(Math.sqrt(adam.vW[i][j]/c2)+EPS);
+        if(!tied){
+          adam.mW[i][j] = B1*adam.mW[i][j] + (1-B1)*gW[i][j];
+          adam.vW[i][j] = B2*adam.vW[i][j] + (1-B2)*gW[i][j]*gW[i][j];
+          W[i][j] -= LR*(adam.mW[i][j]/c1)/(Math.sqrt(adam.vW[i][j]/c2)+EPS);
+        }
       }
       adam.mb[i] = B1*adam.mb[i] + (1-B1)*gb[i];
       adam.vb[i] = B2*adam.vb[i] + (1-B2)*gb[i]*gb[i];
@@ -823,14 +846,15 @@ function renderSection2(){
   document.getElementById("eVecLabel").innerHTML =
     `<math><mi>e</mi><mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mn>${sel}</mn><mo stretchy="false">]</mo></math>`;
 
+  const M = tied ? E : W, sym = tied ? "E" : "W";
   let lin = `<tr><th></th>`;
   for(let j=0;j<D;j++)
-    lin += `<th><math><msub><mi>W</mi><mrow><mi>k</mi><mn>${j+1}</mn></mrow></msub></math></th>`;
+    lin += `<th><math><msub><mi>${sym}</mi><mrow><mi>k</mi><mn>${j+1}</mn></mrow></msub></math></th>`;
   lin += `<th><math><msub><mi>b</mi><mi>k</mi></msub></math></th>` +
          `<th><math><msub><mi>z</mi><mi>k</mi></msub></math></th></tr>`;
   for(let k=0;k<V;k++){
     lin += `<tr class="${k===zmax?'zmax':''}"><td class="wname">${vocab[k]}</td>`;
-    for(let j=0;j<D;j++) lin += `<td>${W[k][j].toFixed(2)}</td>`;
+    for(let j=0;j<D;j++) lin += `<td>${M[k][j].toFixed(2)}</td>`;
     lin += `<td>${b[k].toFixed(2)}</td><td class="zcol">${z[k].toFixed(2)}</td></tr>`;
   }
   document.getElementById("linTable").innerHTML = lin;
@@ -964,8 +988,10 @@ const LW = 520, LH = 260, LP = {l:46, r:14, t:12, b:34};
 function renderLoss(){
   const svg = document.getElementById("lossChart");
   const pw = LW-LP.l-LP.r, ph = LH-LP.t-LP.b;
-  const maxE = Math.max(epoch, 50);
-  const maxL = lossHist.length ? Math.max(...lossHist)*1.08 : 3;
+  const maxE = Math.max(epoch, ghost ? ghost.hist.length : 0, 50);
+  const peak = Math.max(lossHist.length ? Math.max(...lossHist) : 0,
+                        ghost ? Math.max(...ghost.hist) : 0);
+  const maxL = peak ? peak*1.08 : 3;
   const X = i => LP.l + (i/maxE)*pw;
   const Y = v => LP.t + ph - (v/maxL)*ph;
 
@@ -983,6 +1009,10 @@ function renderLoss(){
   g += `<line x1="${LP.l}" y1="${LP.t+ph}" x2="${LP.l+pw}" y2="${LP.t+ph}" stroke="#c3c2b7" stroke-width="1"/>`;
   g += `<text x="${LP.l+pw/2}" y="${LH-4}" font-size="10" fill="#898781" text-anchor="middle">epoch</text>`;
 
+  if(ghost && ghost.hist.length){
+    const gpts = ghost.hist.map((v,i)=>`${X(i+1).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    g += `<polyline points="${gpts}" fill="none" stroke="#c3c2b7" stroke-width="1.7" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
+  }
   if(lossHist.length){
     const pts = lossHist.map((v,i)=>`${X(i+1).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
     g += `<polyline points="${pts}" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>`;
@@ -990,8 +1020,14 @@ function renderLoss(){
     g += `<circle cx="${X(epoch).toFixed(1)}" cy="${Y(last).toFixed(1)}" r="3.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"/>`;
     g += `<circle id="lossHover" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5" style="display:none"/>`;
     g += `<rect id="lossPad" x="${LP.l}" y="${LP.t}" width="${pw}" height="${ph}" fill="transparent"/>`;
-  }else{
+  }else if(!ghost){
     g += `<text x="${LP.l+pw/2}" y="${LP.t+ph/2}" font-size="12" fill="#898781" text-anchor="middle">train at least one epoch to see the curve</text>`;
+  }
+  if(ghost){
+    g += `<line x1="${LW-192}" y1="21" x2="${LW-168}" y2="21" stroke="#2a78d6" stroke-width="2"/>` +
+         `<text x="${LW-162}" y="24.5" font-size="9.5" fill="#52514e">current (${tied?"tied":"untied"})</text>` +
+         `<line x1="${LW-192}" y1="35" x2="${LW-168}" y2="35" stroke="#c3c2b7" stroke-width="2" stroke-dasharray="5 4"/>` +
+         `<text x="${LW-162}" y="38.5" font-size="9.5" fill="#52514e">previous run (${ghost.tied?"tied":"untied"})</text>`;
   }
   svg.innerHTML = g;
 
@@ -1035,7 +1071,9 @@ function renderInspect(){
   document.getElementById("cmpNote").innerHTML = hasData
     ? `“${w}” appears as an input in <b>${inputCount[sel]}</b> pairs. With enough training the blue bars approach the gray ones — the model is learning the dataset’s conditional distribution
        <math><mi>p</mi><mo stretchy="false">(</mo><mtext>next</mtext><mo>∣</mo><mtext>${w}</mtext><mo stretchy="false">)</mo></math>.`
-    : `“${w}” never appears as an input (it always ends its sentence), so there are no gray bars — and nothing ever trained this row. The blue bars are leftovers of random initialization.`;
+    : (tied
+      ? `“${w}” never appears as an input (it always ends its sentence), so there are no gray bars. With <b>tied weights</b> its row was still trained — but only in its role as a <i>candidate next word</i>. Using it as an input, like these blue bars do, is a role it never practiced — notice it mostly predicts <i>itself</i>, since with <math><msub><mi>z</mi><mi>k</mi></msub><mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mi>k</mi><mo stretchy="false">]</mo><mo>·</mo><mi>e</mi><mo>+</mo><msub><mi>b</mi><mi>k</mi></msub></math> nothing beats a vector’s dot product with itself.`
+      : `“${w}” never appears as an input (it always ends its sentence), so there are no gray bars — and nothing ever trained this row. The blue bars are leftovers of random initialization.`);
 
   const dists = vocab.map((_,k)=>({k, d:Math.hypot(...E[sel].map((v,j)=>v-E[k][j]))}))
                      .filter(o=>o.k!==sel).sort((a,c)=>a.d-c.d);
@@ -1044,8 +1082,70 @@ function renderInspect(){
       <span class="dist">distance ${o.d.toFixed(2)}</span></div>`).join("");
 }
 
+/* ================= mode-dependent text ================= */
+const svgIt = s=>`<tspan font-style="italic">${s}</tspan>`;
+const svgItM = s=>`<tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">${s}</tspan>`;
+const mEk = `<math><mi>E</mi><mo stretchy="false">[</mo><mi>k</mi><mo stretchy="false">]</mo><mo>·</mo><mi>e</mi><mo>+</mo><msub><mi>b</mi><mi>k</mi></msub></math>`;
+function updateModeTexts(){
+  document.getElementById("paramLabel").textContent = tied ? "99" : "187";
+
+  document.getElementById("eqLin").innerHTML = tied
+    ? `tied: <math><mi>W</mi><mo>=</mo><mi>E</mi></math> — logit <math><msub><mi>z</mi><mi>k</mi></msub></math> = ${mEk}`
+    : `linear layer: <math><mi>W</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>11</mn><mo>×</mo><mn>8</mn></mrow></msup></math>, one logit per word`;
+
+  document.getElementById("linTiedFlag").innerHTML = tied
+    ? ` · <math><mi>W</mi><mo>=</mo><mi>E</mi></math>` : "";
+  document.getElementById("linCap").innerHTML = tied
+    ? `<b>Tied:</b> these rows <b>are</b> the embedding table above. The logit is a dot product in embedding space:
+       <math><msub><mi>z</mi><mi>k</mi></msub></math> = ${mEk} — “predict the word whose vector best aligns with the current one.”`
+    : `Row <math><mi>k</mi></math> of <math><mi>W</mi></math> scores word <math><mi>k</mi></math>:
+       <math><msub><mi>z</mi><mi>k</mi></msub><mo>=</mo><msub><mi>W</mi><mrow><mi>k</mi><mn>1</mn></mrow></msub><msub><mi>e</mi><mn>1</mn></msub><mo>+</mo><mo>⋯</mo><mo>+</mo><msub><mi>W</mi><mrow><mi>k</mi><mn>8</mn></mrow></msub><msub><mi>e</mi><mn>8</mn></msub><mo>+</mo><msub><mi>b</mi><mi>k</mi></msub></math>`;
+
+  document.getElementById("archLinEq").innerHTML = tied
+    ? `${svgIt("z")} = ${svgIt("E")}${svgIt("e")} + ${svgIt("b")}&#160;&#160;(${svgIt("W")} = ${svgIt("E")}, shared)`
+    : `${svgIt("z")} = ${svgIt("W")}${svgIt("e")} + ${svgIt("b")}`;
+  document.getElementById("archBackLabel").innerHTML = tied
+    ? `backpropagation — gradients update ${svgItM("b")} and ${svgItM("E")} via two paths: every row as a candidate next word, plus row ${svgItM("x")} as the input`
+    : `backpropagation — gradients from the loss update ${svgItM("W")}, ${svgItM("b")}, and only row ${svgItM("x")} of ${svgItM("E")} (the input word’s row)`;
+
+  document.getElementById("gradModeNote").innerHTML = tied
+    ? `With <b>tied weights</b>, every pair (<i>x</i> → <i>y</i>) reaches <math><mi>E</mi></math> through <b>two doors</b>:
+       as the lookup, row <math><mi>x</mi></math> gets the input-side gradient; and as the output layer,
+       <b>every row</b> gets an output-side gradient, because every word is a softmax candidate.
+       That second door is why even a word that never appears as an input — pasta — now learns.
+       Meaning still precipitates out of prediction errors; it just flows in from both sides.`
+    : `Each pair (<i>x</i> → <i>y</i>) sends a gradient back through the linear layer into <b>exactly one row</b> of the table:
+       <math><mfrac><mrow><mo>∂</mo><mi>L</mi></mrow><mrow><mo>∂</mo><mi>E</mi><mo stretchy="false">[</mo><mi>x</mi><mo stretchy="false">]</mo></mrow></mfrac></math>
+       — the row of the current input word. All other rows are untouched by that pair.
+       Two words that are followed by the <b>same kinds of words</b> keep receiving the <b>same kinds of nudges</b>,
+       so their rows converge to nearby points. Meaning is never given to the model — it precipitates out of prediction errors.`;
+
+  document.getElementById("lookForNote").innerHTML = tied
+    ? `The pronouns <b>i / you / we</b> still end up together. But the map changes character: since the logit is ${mEk},
+       frequent (input → next-word) pairs also pull vectors into alignment (like ↔ pizza) — “similar contexts” and
+       “tends to follow” now mix in one geometry, because one vector is doing two jobs.`
+    : `After training, the pronouns <b>i / you / we</b> become each other’s nearest neighbors (all are followed by like, love, eat, hate…).
+       Even more striking: <b>love</b> and <b>hate</b> also end up as mutual nearest neighbors — opposite meanings, but
+       <i>identical contexts</i> (both followed by pizza or pasta). Embeddings capture how words are <b>used</b>, not what they mean to us.
+       <b>like</b> sits farther from love/hate than they sit from each other, because it alone is also followed by “to”.`;
+
+  document.getElementById("gotchaNote").innerHTML = tied
+    ? `In these 14 sentences, <i>pasta</i> only ever appears as the <b>last</b> word, so it is never an input.
+       With untied weights its row would never move. But with <b>tied weights on</b>, <math><mi>E</mi></math> doubles as
+       the output layer, so pasta’s row still learns — it has to compete as a <i>candidate next word</i> after love, eat, and.
+       Check the map: pasta grows a trail now. Flip the toggle off and watch it freeze instead.`
+    : `<b>“pasta” never moves.</b> In these 14 sentences, <i>pasta</i> only ever appears as the <b>last</b> word,
+       so it is never an input — its embedding row never receives a gradient and stays at its random start.
+       A word’s vector is only as good as the contexts it is <i>used</i> in.
+       (Check the map: every other word grows a trail; pasta’s trail collapses to a single dot — it can shift on screen
+       only when the PCA axes themselves rotate.)`;
+
+  document.getElementById("tiedInsight").style.display = tied ? "" : "none";
+}
+
 /* ================= glue ================= */
 function renderAll(){
+  updateModeTexts();
   renderChips();
   renderSection2();
   renderScatter();
@@ -1064,10 +1164,19 @@ buildSection2();
 resetModel();
 renderAll();
 
+function saveGhost(){ if(lossHist.length) ghost = {hist: lossHist.slice(), tied}; }
+
 document.getElementById("btn1").addEventListener("click", ()=>trainEpochs(1));
 document.getElementById("btn10").addEventListener("click", ()=>trainEpochs(10));
 document.getElementById("btn50").addEventListener("click", ()=>trainEpochs(50));
-document.getElementById("btnReset").addEventListener("click", ()=>{ resetModel(); renderAll(); });
+document.getElementById("btnReset").addEventListener("click", ()=>{ saveGhost(); resetModel(); renderAll(); });
+document.getElementById("tieToggle").addEventListener("change", ev=>{
+  saveGhost();
+  tied = ev.target.checked;
+  document.getElementById("tieToggleWrap").classList.toggle("on", tied);
+  resetModel();
+  renderAll();
+});
 </script>
 
 </body>
