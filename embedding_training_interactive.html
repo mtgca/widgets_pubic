@@ -119,6 +119,14 @@
   .wchip:hover{ border-color: var(--blue); background: #f0f4fd; }
   .wchip.sel{ background: var(--orange-bg); border-color: var(--orange); color: var(--orange-deep); }
 
+  /* ---------- architecture figure ---------- */
+  .arch-wrap{
+    border: 1px solid var(--line); border-radius: 12px; background: #fafbfe;
+    padding: 12px 10px 6px; margin-bottom: 8px; overflow-x: auto;
+  }
+  .arch-wrap svg{ display: block; min-width: 940px; width: 100%; height: auto; }
+  .arch-cap{ font-size: 0.8rem; color: var(--muted); text-align: center; margin: 0 8px 18px; }
+
   /* ---------- equations strip ---------- */
   .eqs{ display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
   .eq{
@@ -344,6 +352,114 @@
     A <b>linear layer</b> turns that row into one score per vocabulary word, and softmax turns scores into probabilities.
     All numbers below are <b>live</b> — they show the model as it is right now, and they change when you train it in step 3.
     <span class="click-hint">Click an input word</span> to follow it through.</p>
+
+  <div class="arch-wrap">
+  <svg viewBox="0 0 1040 340" role="img" aria-label="High-level architecture: input word, embedding lookup, linear layer, softmax probabilities, and next-word cross-entropy loss">
+    <defs>
+      <marker id="arB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#2a78d6"/></marker>
+      <marker id="arO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#eb6834"/></marker>
+    </defs>
+
+    <!-- column titles -->
+    <text x="54" y="102" font-size="9" font-weight="700" letter-spacing="0.8" fill="#898781" text-anchor="middle">INPUT WORD</text>
+    <text x="183" y="30" font-size="11" font-weight="800" letter-spacing="0.6" fill="#1c5cab" text-anchor="middle">EMBEDDING LAYER</text>
+    <text x="183" y="46" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">E</tspan> ∈ ℝ<tspan dy="-4" font-size="8">11×8</tspan></text>
+    <text x="411" y="30" font-size="11" font-weight="800" letter-spacing="0.6" fill="#1c5cab" text-anchor="middle">LINEAR LAYER</text>
+    <text x="411" y="46" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">z</tspan> = <tspan font-style="italic">W</tspan><tspan font-style="italic">e</tspan> + <tspan font-style="italic">b</tspan></text>
+    <text x="655" y="30" font-size="11" font-weight="800" letter-spacing="0.6" fill="#1c5cab" text-anchor="middle">PROBABILITIES</text>
+    <text x="655" y="46" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">p</tspan> = softmax(<tspan font-style="italic">z</tspan>)</text>
+
+    <!-- input chip -->
+    <rect x="12" y="112" width="84" height="34" rx="8" fill="#fde8dd" stroke="#f0b088" stroke-width="1.3"/>
+    <text x="54" y="135" font-size="16" font-weight="700" fill="#b34515" text-anchor="middle">i</text>
+    <text x="54" y="164" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif">index <tspan font-style="italic">x</tspan> = 3</text>
+    <line x1="100" y1="129" x2="122" y2="129" stroke="#2a78d6" stroke-width="1.6" marker-end="url(#arB)"/>
+
+    <!-- embedding table: one row per word, row of "i" highlighted -->
+    <g font-size="9.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">
+      <rect x="128" y="53"  width="110" height="20" rx="3" fill="#eef1f7"/><text x="183" y="66.5" fill="#3a4560" text-anchor="middle">and</text>
+      <rect x="128" y="75"  width="110" height="20" rx="3" fill="#eef1f7"/><text x="183" y="88.5" fill="#3a4560" text-anchor="middle">eat</text>
+      <rect x="128" y="97"  width="110" height="20" rx="3" fill="#eef1f7"/><text x="183" y="110.5" fill="#3a4560" text-anchor="middle">hate</text>
+      <rect x="128" y="119" width="110" height="20" rx="3" fill="#fde8dd" stroke="#eb6834" stroke-width="1.4"/><text x="183" y="132.5" fill="#8a4a00" font-weight="700" text-anchor="middle">i&#160;&#160;→&#160;&#160;row 3</text>
+      <rect x="128" y="141" width="110" height="20" rx="3" fill="#eef1f7"/><text x="183" y="154.5" fill="#3a4560" text-anchor="middle">like</text>
+      <rect x="128" y="163" width="110" height="20" rx="3" fill="#eef1f7"/><text x="183" y="176.5" fill="#3a4560" text-anchor="middle">love</text>
+      <rect x="128" y="185" width="110" height="20" rx="3" fill="#eef1f7"/><text x="183" y="198.5" fill="#3a4560" text-anchor="middle">pasta</text>
+      <rect x="128" y="207" width="110" height="20" rx="3" fill="#eef1f7"/><text x="183" y="220.5" fill="#3a4560" text-anchor="middle">pizza</text>
+      <rect x="128" y="229" width="110" height="20" rx="3" fill="#eef1f7"/><text x="183" y="242.5" fill="#3a4560" text-anchor="middle">to</text>
+      <rect x="128" y="251" width="110" height="20" rx="3" fill="#eef1f7"/><text x="183" y="264.5" fill="#3a4560" text-anchor="middle">we</text>
+      <rect x="128" y="273" width="110" height="20" rx="3" fill="#eef1f7"/><text x="183" y="286.5" fill="#3a4560" text-anchor="middle">you</text>
+    </g>
+
+    <!-- lookup arrow -->
+    <line x1="242" y1="129" x2="312" y2="129" stroke="#2a78d6" stroke-width="1.6" marker-end="url(#arB)"/>
+    <text x="277" y="119" font-size="11" fill="#1f2937" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">e</tspan> = <tspan font-style="italic">E</tspan>[<tspan font-style="italic">x</tspan>]</text>
+    <text x="277" y="145" font-size="9" fill="#898781" text-anchor="middle">copy row 3</text>
+
+    <!-- fully-connected lines (8 → 11) -->
+    <g stroke="#dce3ee" stroke-width="0.6">
+      <line x1="341" y1="89"  x2="481" y2="63"/><line x1="341" y1="89"  x2="481" y2="85"/><line x1="341" y1="89"  x2="481" y2="107"/><line x1="341" y1="89"  x2="481" y2="129"/><line x1="341" y1="89"  x2="481" y2="151"/><line x1="341" y1="89"  x2="481" y2="173"/><line x1="341" y1="89"  x2="481" y2="195"/><line x1="341" y1="89"  x2="481" y2="217"/><line x1="341" y1="89"  x2="481" y2="239"/><line x1="341" y1="89"  x2="481" y2="261"/><line x1="341" y1="89"  x2="481" y2="283"/>
+      <line x1="341" y1="113" x2="481" y2="63"/><line x1="341" y1="113" x2="481" y2="85"/><line x1="341" y1="113" x2="481" y2="107"/><line x1="341" y1="113" x2="481" y2="129"/><line x1="341" y1="113" x2="481" y2="151"/><line x1="341" y1="113" x2="481" y2="173"/><line x1="341" y1="113" x2="481" y2="195"/><line x1="341" y1="113" x2="481" y2="217"/><line x1="341" y1="113" x2="481" y2="239"/><line x1="341" y1="113" x2="481" y2="261"/><line x1="341" y1="113" x2="481" y2="283"/>
+      <line x1="341" y1="137" x2="481" y2="63"/><line x1="341" y1="137" x2="481" y2="85"/><line x1="341" y1="137" x2="481" y2="107"/><line x1="341" y1="137" x2="481" y2="129"/><line x1="341" y1="137" x2="481" y2="151"/><line x1="341" y1="137" x2="481" y2="173"/><line x1="341" y1="137" x2="481" y2="195"/><line x1="341" y1="137" x2="481" y2="217"/><line x1="341" y1="137" x2="481" y2="239"/><line x1="341" y1="137" x2="481" y2="261"/><line x1="341" y1="137" x2="481" y2="283"/>
+      <line x1="341" y1="161" x2="481" y2="63"/><line x1="341" y1="161" x2="481" y2="85"/><line x1="341" y1="161" x2="481" y2="107"/><line x1="341" y1="161" x2="481" y2="129"/><line x1="341" y1="161" x2="481" y2="151"/><line x1="341" y1="161" x2="481" y2="173"/><line x1="341" y1="161" x2="481" y2="195"/><line x1="341" y1="161" x2="481" y2="217"/><line x1="341" y1="161" x2="481" y2="239"/><line x1="341" y1="161" x2="481" y2="261"/><line x1="341" y1="161" x2="481" y2="283"/>
+      <line x1="341" y1="185" x2="481" y2="63"/><line x1="341" y1="185" x2="481" y2="85"/><line x1="341" y1="185" x2="481" y2="107"/><line x1="341" y1="185" x2="481" y2="129"/><line x1="341" y1="185" x2="481" y2="151"/><line x1="341" y1="185" x2="481" y2="173"/><line x1="341" y1="185" x2="481" y2="195"/><line x1="341" y1="185" x2="481" y2="217"/><line x1="341" y1="185" x2="481" y2="239"/><line x1="341" y1="185" x2="481" y2="261"/><line x1="341" y1="185" x2="481" y2="283"/>
+      <line x1="341" y1="209" x2="481" y2="63"/><line x1="341" y1="209" x2="481" y2="85"/><line x1="341" y1="209" x2="481" y2="107"/><line x1="341" y1="209" x2="481" y2="129"/><line x1="341" y1="209" x2="481" y2="151"/><line x1="341" y1="209" x2="481" y2="173"/><line x1="341" y1="209" x2="481" y2="195"/><line x1="341" y1="209" x2="481" y2="217"/><line x1="341" y1="209" x2="481" y2="239"/><line x1="341" y1="209" x2="481" y2="261"/><line x1="341" y1="209" x2="481" y2="283"/>
+      <line x1="341" y1="233" x2="481" y2="63"/><line x1="341" y1="233" x2="481" y2="85"/><line x1="341" y1="233" x2="481" y2="107"/><line x1="341" y1="233" x2="481" y2="129"/><line x1="341" y1="233" x2="481" y2="151"/><line x1="341" y1="233" x2="481" y2="173"/><line x1="341" y1="233" x2="481" y2="195"/><line x1="341" y1="233" x2="481" y2="217"/><line x1="341" y1="233" x2="481" y2="239"/><line x1="341" y1="233" x2="481" y2="261"/><line x1="341" y1="233" x2="481" y2="283"/>
+      <line x1="341" y1="257" x2="481" y2="63"/><line x1="341" y1="257" x2="481" y2="85"/><line x1="341" y1="257" x2="481" y2="107"/><line x1="341" y1="257" x2="481" y2="129"/><line x1="341" y1="257" x2="481" y2="151"/><line x1="341" y1="257" x2="481" y2="173"/><line x1="341" y1="257" x2="481" y2="195"/><line x1="341" y1="257" x2="481" y2="217"/><line x1="341" y1="257" x2="481" y2="239"/><line x1="341" y1="257" x2="481" y2="261"/><line x1="341" y1="257" x2="481" y2="283"/>
+    </g>
+
+    <!-- embedding units (e, 8-D) -->
+    <g fill="#e2ebfd" stroke="#2a78d6" stroke-width="1.3">
+      <circle cx="332" cy="89" r="9"/><circle cx="332" cy="113" r="9"/><circle cx="332" cy="137" r="9"/><circle cx="332" cy="161" r="9"/><circle cx="332" cy="185" r="9"/><circle cx="332" cy="209" r="9"/><circle cx="332" cy="233" r="9"/><circle cx="332" cy="257" r="9"/>
+    </g>
+
+    <!-- output units (z, one per vocabulary word) -->
+    <g fill="#eef1f7" stroke="#55627a" stroke-width="1.1">
+      <circle cx="490" cy="63" r="9"/><circle cx="490" cy="85" r="9"/><circle cx="490" cy="107" r="9"/><circle cx="490" cy="129" r="9"/><circle cx="490" cy="151" r="9"/><circle cx="490" cy="173" r="9"/><circle cx="490" cy="195" r="9"/><circle cx="490" cy="217" r="9"/><circle cx="490" cy="239" r="9"/><circle cx="490" cy="261" r="9"/><circle cx="490" cy="283" r="9"/>
+    </g>
+
+    <!-- softmax arrow -->
+    <line x1="503" y1="129" x2="545" y2="129" stroke="#2a78d6" stroke-width="1.6" marker-end="url(#arB)"/>
+    <text x="524" y="119" font-size="9" fill="#898781" text-anchor="middle">softmax</text>
+
+    <!-- probability bars, one per word; “like” is the target -->
+    <g font-size="9.5" fill="#3a4560" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">
+      <text x="593" y="66.5">and</text><text x="593" y="88.5">eat</text><text x="593" y="110.5">hate</text><text x="593" y="132.5">i</text><text x="593" y="154.5" font-weight="700">like</text><text x="593" y="176.5">love</text><text x="593" y="198.5">pasta</text><text x="593" y="220.5">pizza</text><text x="593" y="242.5">to</text><text x="593" y="264.5">we</text><text x="593" y="286.5">you</text>
+    </g>
+    <g fill="#2a78d6">
+      <rect x="600" y="57.5"  width="2"  height="11" rx="2"/>
+      <rect x="600" y="79.5"  width="40" height="11" rx="2"/>
+      <rect x="600" y="101.5" width="20" height="11" rx="2"/>
+      <rect x="600" y="123.5" width="2"  height="11" rx="2"/>
+      <rect x="600" y="145.5" width="60" height="11" rx="2"/>
+      <rect x="600" y="167.5" width="20" height="11" rx="2"/>
+      <rect x="600" y="189.5" width="1.5" height="11" rx="1"/>
+      <rect x="600" y="211.5" width="1.5" height="11" rx="1"/>
+      <rect x="600" y="233.5" width="1.5" height="11" rx="1"/>
+      <rect x="600" y="255.5" width="1.5" height="11" rx="1"/>
+      <rect x="600" y="277.5" width="1.5" height="11" rx="1"/>
+    </g>
+
+    <!-- target ring on “like” -->
+    <rect x="556" y="141" width="210" height="20" rx="6" fill="none" stroke="#1a7a4a" stroke-width="1.4"/>
+    <text x="760" y="155" font-size="9.5" font-weight="700" fill="#1a7a4a" text-anchor="end">✓ target</text>
+
+    <!-- loss -->
+    <line x1="770" y1="151" x2="804" y2="151" stroke="#2a78d6" stroke-width="1.6" marker-end="url(#arB)"/>
+    <rect x="810" y="88" width="224" height="126" rx="10" fill="#fffaf6" stroke="#f0b088" stroke-width="1.3"/>
+    <text x="922" y="110" font-size="10" font-weight="800" letter-spacing="0.5" fill="#b34515" text-anchor="middle">LOSS — NEXT-WORD PREDICTION</text>
+    <text x="922" y="131" font-size="9.5" fill="#52514e" text-anchor="middle">the target is the word that actually came next:</text>
+    <text x="922" y="148" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif">here <tspan font-style="italic">y</tspan> = <tspan font-weight="700" fill="#1a7a4a" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">“like”</tspan></text>
+    <text x="922" y="175" font-size="15" fill="#1f2937" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">L</tspan> = −log <tspan font-style="italic">p</tspan><tspan dy="3.5" font-size="10" font-style="italic">y</tspan></text>
+    <text x="922" y="196" font-size="9" fill="#898781" text-anchor="middle">≈ 0 when the model was confident in “like”;</text>
+    <text x="922" y="207" font-size="9" fill="#898781" text-anchor="middle">large when it was surprised.</text>
+
+    <!-- backpropagation -->
+    <path d="M 922 214 V 314 H 182 V 305" fill="none" stroke="#eb6834" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arO)"/>
+    <path d="M 411 314 V 302" fill="none" stroke="#eb6834" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arO)"/>
+    <text x="560" y="329" font-size="10" fill="#b34515" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">backpropagation — gradients from the loss update <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">W</tspan>, <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">b</tspan>, and only row <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">x</tspan> of <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">E</tspan> (the input word’s row)</text>
+  </svg>
+  </div>
+  <p class="arch-cap">The whole model on one training pair from the dataset — input <b>“i”</b>, actual next word <b>“like”</b> (from “i&#160;like&#160;pizza”). This picture is schematic; the panels below show the same layers with their real, live numbers.</p>
 
   <div class="eqs">
     <div class="eq"><math><mi>e</mi><mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mi>x</mi><mo stretchy="false">]</mo></math>
