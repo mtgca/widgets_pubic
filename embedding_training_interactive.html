@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How Word Embeddings Are Learned — Train a Tiny Next-Word Predictor</title>
+<style>
+  :root{
+    --math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;
+    --ink: #1f2937;
+    --muted: #5a6478;
+    --axis-muted: #898781;
+    --panel: #ffffff;
+    --page: #f4f6f9;
+    --line: #e3e9f2;
+    --grid: #e1e0d9;
+    --blue: #2a78d6;
+    --blue-dark: #1c5cab;
+    --blue-bg: #e2ebfd;
+    --orange: #eb6834;
+    --orange-deep: #b34515;
+    --orange-bg: #fde8dd;
+    --orange-line: #f0b088;
+    --green: #1a7a4a;
+    --green-bg: #e6f9f1;
+    --gray-bar: #c3c2b7;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  math { font-family: var(--math); }
+
+  body{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--page);
+    color: var(--ink);
+    line-height: 1.55;
+    padding: 28px 16px 60px;
+  }
+  .wrap{ max-width: 1100px; margin: 0 auto; }
+
+  header.hero{ text-align: center; margin-bottom: 26px; }
+  header.hero h1{
+    font-size: 1.7rem; font-weight: 800; letter-spacing: -0.4px;
+    color: #16213e; margin-bottom: 6px;
+  }
+  header.hero p{ color: var(--muted); font-size: 0.98rem; max-width: 780px; margin: 0 auto; }
+
+  section.panel{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 24px 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  section.panel > h2{
+    font-size: 1.12rem; font-weight: 750; color: #16213e;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+  }
+  .step-num{
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--blue); color: #fff; font-size: 0.85rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lede{ color: var(--muted); font-size: 0.92rem; margin-bottom: 18px; max-width: 900px; }
+  .lede b{ color: var(--ink); }
+  .click-hint{ font-size: 0.83rem; color: var(--orange-deep); font-weight: 650; }
+
+  /* ---------- section 1: dataset ---------- */
+  .data-cols{ display: flex; gap: 22px; flex-wrap: wrap; }
+  .data-col{ flex: 1 1 320px; min-width: 290px; }
+  .data-col h3{
+    font-size: 0.8rem; font-weight: 800; letter-spacing: 0.6px;
+    text-transform: uppercase; color: var(--blue-dark); margin-bottom: 8px;
+  }
+  ul.sentences{ list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  ul.sentences li{
+    padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: #fafbfe; font-size: 0.88rem; cursor: pointer; user-select: none;
+  }
+  ul.sentences li:hover{ background: #f0f4fd; }
+  ul.sentences li.sel{ background: var(--orange-bg); border-color: var(--orange-line); font-weight: 650; }
+
+  table.vocab{ border-collapse: collapse; font-size: 0.86rem; }
+  table.vocab th{
+    background: #e8eef8; color: #2b3a55; font-size: 0.74rem;
+    padding: 4px 12px; border: 1px solid #d5deed; font-weight: 700;
+  }
+  table.vocab td{
+    padding: 2px 12px; border: 1px solid #d5deed; text-align: center; background: #fff;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pairs-box{
+    margin-top: 12px; border: 1px dashed var(--orange-line); border-radius: 10px;
+    background: #fffaf6; padding: 10px 12px;
+  }
+  .pairs-box .pb-title{ font-size: 0.78rem; font-weight: 700; color: var(--orange-deep); margin-bottom: 6px; }
+  .pair-chips{ display: flex; flex-wrap: wrap; gap: 6px; }
+  .pair-chip{
+    font-size: 0.83rem; background: #fff; border: 1px solid var(--orange-line);
+    border-radius: 999px; padding: 2px 10px; white-space: nowrap;
+  }
+  .pair-chip b{ color: var(--orange-deep); }
+  .pair-chip .arr{ color: var(--muted); padding: 0 3px; }
+
+  .keypoint{
+    margin-top: 16px; border-left: 4px solid var(--blue); background: #f2f7ff;
+    border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 0.9rem;
+  }
+  .keypoint b{ color: var(--blue-dark); }
+
+  /* ---------- word chips ---------- */
+  .chip-row{ display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 16px; }
+  .wchip{
+    font-size: 0.88rem; font-weight: 600; padding: 4px 13px; border-radius: 999px;
+    border: 1.5px solid var(--line); background: #fafbfe; color: var(--ink);
+    cursor: pointer; user-select: none;
+  }
+  .wchip:hover{ border-color: var(--blue); background: #f0f4fd; }
+  .wchip.sel{ background: var(--orange-bg); border-color: var(--orange); color: var(--orange-deep); }
+
+  /* ---------- equations strip ---------- */
+  .eqs{ display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+  .eq{
+    flex: 1 1 200px; min-width: 185px; border: 1px solid var(--line); border-radius: 10px;
+    background: #fafbfe; padding: 8px 12px; text-align: center;
+  }
+  .eq math{ font-size: 1.05rem; }
+  .eq .eq-note{ font-size: 0.75rem; color: var(--muted); margin-top: 3px; }
+
+  /* ---------- pipeline ---------- */
+  .pipeline{ display: flex; align-items: stretch; justify-content: center; gap: 6px; flex-wrap: wrap; }
+  .stage{
+    flex: 1 1 210px; max-width: 330px; min-width: 200px;
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 12px 12px; background: #fafbfe;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .stage h3{
+    font-size: 0.78rem; font-weight: 800; letter-spacing: 0.6px;
+    text-transform: uppercase; color: var(--blue-dark); text-align: center;
+  }
+  .stage .stage-caption{
+    font-size: 0.78rem; color: var(--muted); text-align: center;
+    border-top: 1px dashed var(--line); padding-top: 8px; margin-top: auto;
+  }
+  .stage .stage-caption b{ color: var(--ink); }
+  .flow-arrow{
+    flex: 0 0 auto; align-self: center; text-align: center;
+    color: var(--muted); font-size: 0.7rem; font-weight: 600; padding: 0 2px; max-width: 86px;
+  }
+  .flow-arrow .glyph{ font-size: 1.4rem; color: var(--blue); line-height: 1; display: block; }
+
+  /* matrices */
+  .matrix{ position: relative; padding: 6px 9px; }
+  .matrix::before, .matrix::after{
+    content: ""; position: absolute; top: 0; bottom: 0; width: 7px; border: 2px solid #55627a;
+  }
+  .matrix::before{ left: 0; border-right: none; border-radius: 3px 0 0 3px; }
+  .matrix::after{ right: 0; border-left: none; border-radius: 0 3px 3px 0; }
+  .mgrid{ display: grid; gap: 3px; }
+  .cell{
+    min-width: 46px; height: 24px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.76rem; font-variant-numeric: tabular-nums;
+    background: #eef1f7; color: #3a4560;
+  }
+  .cell.hot{ background: var(--orange-bg); color: #8a4a00; font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--orange-line); }
+  .cell.res{ background: var(--blue-bg); color: #24457f; font-weight: 600; }
+  .row-tags{ display: grid; gap: 3px; margin-right: 5px; }
+  .row-tag{
+    height: 24px; display: flex; align-items: center; justify-content: flex-end;
+    font-size: 0.72rem; color: #7a86a0; padding-right: 3px; white-space: nowrap;
+  }
+  .row-tag.sel{ color: var(--orange); font-weight: 700; }
+  .mat-with-labels{ display: flex; align-items: center; }
+  .stack{ display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .vec-label{ text-align: center; font-size: 0.78rem; color: var(--muted); line-height: 1.35; }
+
+  /* linear-layer table */
+  table.lin{ border-collapse: collapse; font-size: 0.78rem; }
+  table.lin th{
+    background: #e8eef8; color: #2b3a55; padding: 3px 10px; border: 1px solid #d5deed;
+    font-weight: 700; font-size: 0.74rem;
+  }
+  table.lin td{
+    padding: 2px 10px; border: 1px solid #d5deed; text-align: right; background: #fff;
+    font-variant-numeric: tabular-nums;
+  }
+  table.lin td.wname{ text-align: right; color: #7a86a0; font-size: 0.72rem; background: #fafbfe; }
+  table.lin td.zcol{ background: var(--blue-bg); color: #24457f; font-weight: 600; }
+  table.lin tr.zmax td.zcol{ box-shadow: inset 0 0 0 1.5px var(--blue); }
+
+  /* probability bars */
+  .pbars{ width: 100%; display: grid; grid-template-columns: auto 1fr auto; gap: 3px 8px; align-items: center; }
+  .pbars .pw{ font-size: 0.78rem; color: #3a4560; text-align: right; white-space: nowrap; }
+  .pbars .pw.top{ font-weight: 750; color: var(--blue-dark); }
+  .pbars .ptrack{ height: 12px; border-radius: 0 4px 4px 0; background: #eef1f7; position: relative; overflow: hidden; }
+  .pbars .pfill{ position: absolute; left: 0; top: 0; bottom: 0; background: var(--blue); border-radius: 0 4px 4px 0; }
+  .pbars .pval{ font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; min-width: 44px; }
+
+  /* ---------- section 3: training ---------- */
+  .controls{
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;
+  }
+  .controls button{
+    font: 650 0.88rem/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 8px 16px; border-radius: 9px; border: 1.5px solid var(--blue);
+    background: var(--blue); color: #fff; cursor: pointer;
+  }
+  .controls button:hover{ background: var(--blue-dark); border-color: var(--blue-dark); }
+  .controls button.ghost{ background: #fff; color: var(--blue-dark); }
+  .controls button.ghost:hover{ background: #f0f4fd; }
+  .controls button:disabled{ opacity: 0.45; cursor: default; }
+  .readout{
+    margin-left: auto; display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap;
+    font-size: 0.85rem; color: var(--muted);
+  }
+  .readout b{ font-size: 1.15rem; color: #16213e; font-variant-numeric: tabular-nums; }
+
+  .charts{ display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .chart-box{ flex: 1 1 460px; min-width: 320px; }
+  .chart-box h3{ font-size: 0.85rem; font-weight: 750; color: #16213e; margin-bottom: 2px; }
+  .chart-box .sub{ font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; }
+  .chart-box svg{ width: 100%; height: auto; display: block; background: #fcfcfb; border: 1px solid var(--grid); border-radius: 10px; }
+
+  #tip{
+    position: fixed; pointer-events: none; z-index: 999; display: none;
+    background: #16213e; color: #fff; font-size: 0.76rem; line-height: 1.4;
+    padding: 5px 9px; border-radius: 7px; box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+    max-width: 220px;
+  }
+  #tip b{ color: #ffd9a8; }
+
+  .note-grad{
+    margin-top: 16px; border-left: 4px solid var(--orange); background: #fffaf6;
+    border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 0.9rem;
+  }
+  .note-grad b{ color: var(--orange-deep); }
+
+  /* ---------- section 4 ---------- */
+  .inspect-cols{ display: flex; gap: 22px; flex-wrap: wrap; }
+  .inspect-col{ flex: 1 1 420px; min-width: 320px; }
+  .inspect-col h3{ font-size: 0.85rem; font-weight: 750; color: #16213e; margin-bottom: 8px; }
+
+  .legend{ display: flex; gap: 16px; align-items: center; font-size: 0.78rem; color: var(--muted); margin-bottom: 8px; }
+  .legend .sw{ display: inline-block; width: 14px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: baseline; }
+
+  .cbars{ width: 100%; display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: center; }
+  .cbars .cw{ font-size: 0.8rem; color: #3a4560; text-align: right; grid-row: span 2; white-space: nowrap; }
+  .cbars .ctrack{ height: 9px; border-radius: 0 4px 4px 0; background: #f2f2ee; position: relative; overflow: hidden; }
+  .cbars .cfill{ position: absolute; left: 0; top: 0; bottom: 0; border-radius: 0 4px 4px 0; }
+  .cbars .cfill.model{ background: var(--blue); }
+  .cbars .cfill.data{ background: var(--gray-bar); }
+  .cbars .cval{ font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; min-width: 44px; }
+  .cbars .rowgap{ grid-column: 1 / -1; height: 5px; }
+
+  .nb-list{ display: flex; flex-direction: column; gap: 6px; }
+  .nb-item{
+    display: flex; align-items: baseline; gap: 10px; border: 1px solid var(--line);
+    border-radius: 9px; background: #fafbfe; padding: 6px 12px; font-size: 0.88rem;
+  }
+  .nb-item b{ color: var(--blue-dark); }
+  .nb-item .dist{ margin-left: auto; font-size: 0.76rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .insights{ display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+  .insight{
+    border: 1px solid var(--line); border-radius: 10px; background: #fafbfe;
+    padding: 10px 14px; font-size: 0.88rem;
+  }
+  .insight.good{ border-color: #9ad9bb; background: var(--green-bg); }
+  .insight.warn{ border-color: var(--orange-line); background: #fffaf6; }
+  .insight b{ color: #16213e; }
+  .insight .tag{
+    display: inline-block; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.5px;
+    text-transform: uppercase; border-radius: 5px; padding: 1px 7px; margin-right: 7px;
+  }
+  .insight.good .tag{ background: #cdeedd; color: var(--green); }
+  .insight.warn .tag{ background: var(--orange-bg); color: var(--orange-deep); }
+  .insight.plain .tag{ background: #e2ebfd; color: var(--blue-dark); }
+
+  footer.foot{ text-align: center; font-size: 0.78rem; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div id="tip"></div>
+
+<div class="wrap">
+
+<header class="hero">
+  <h1>How Word Embeddings Are Learned</h1>
+  <p>Nobody writes embedding vectors by hand. They start as <b>random numbers</b> and are shaped by
+    one simple training signal: <b>predict the next word</b>. Here you will train a tiny model on a
+    tiny dataset — step by step — and watch meaningful geometry emerge from noise.</p>
+</header>
+
+<!-- ================= 1 · DATASET ================= -->
+<section class="panel">
+  <h2><span class="step-num">1</span>A tiny dataset — and where the training pairs come from</h2>
+  <p class="lede">Our whole “corpus” is 14 short sentences. There are <b>no human labels</b>:
+    every consecutive pair of words becomes one training example
+    (<i>input word</i> → <i>the word that actually came next</i>). The text supervises itself.
+    <span class="click-hint">Click a sentence</span> to see the pairs it contributes.</p>
+
+  <div class="data-cols">
+    <div class="data-col" style="flex:1.4 1 340px;">
+      <h3>The 14 sentences</h3>
+      <ul class="sentences" id="sentList"></ul>
+    </div>
+    <div class="data-col">
+      <h3>Vocabulary — every distinct word gets an index</h3>
+      <table class="vocab" id="vocabTable"></table>
+      <div class="pairs-box">
+        <div class="pb-title" id="pairsTitle"></div>
+        <div class="pair-chips" id="pairChips"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="keypoint" id="pairTotal"></div>
+</section>
+
+<!-- ================= 2 · MODEL ================= -->
+<section class="panel">
+  <h2><span class="step-num">2</span>The model: embedding lookup → linear layer → next-word probabilities</h2>
+  <p class="lede">Each vocabulary word owns one row of an <b>embedding table</b>
+    <math><mi>E</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>11</mn><mo>×</mo><mn>2</mn></mrow></msup></math>
+    (we use <math><mi>d</mi><mo>=</mo><mn>2</mn></math> dimensions so we can draw the space).
+    A <b>linear layer</b> turns that row into one score per vocabulary word, and softmax turns scores into probabilities.
+    All numbers below are <b>live</b> — they show the model as it is right now, and they change when you train it in step 3.
+    <span class="click-hint">Click an input word</span> to follow it through.</p>
+
+  <div class="eqs">
+    <div class="eq"><math><mi>e</mi><mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mi>x</mi><mo stretchy="false">]</mo></math>
+      <div class="eq-note">lookup: take row <math><mi>x</mi></math> of the table</div></div>
+    <div class="eq"><math><mi>z</mi><mo>=</mo><mi>W</mi><mi>e</mi><mo>+</mo><mi>b</mi></math>
+      <div class="eq-note">linear layer: <math><mi>W</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>11</mn><mo>×</mo><mn>2</mn></mrow></msup></math>, one logit per word</div></div>
+    <div class="eq"><math><mi>p</mi><mo>=</mo><mi>softmax</mi><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo></math>
+      <div class="eq-note">scores → probability distribution</div></div>
+    <div class="eq"><math><mi>L</mi><mo>=</mo><mo>−</mo><mi>log</mi><mo>⁡</mo><msub><mi>p</mi><mi>y</mi></msub></math>
+      <div class="eq-note">loss: how surprised it was by the true next word <math><mi>y</mi></math></div></div>
+  </div>
+
+  <div class="chip-row" id="chips2"></div>
+
+  <div class="pipeline">
+    <div class="stage" style="min-width:190px;">
+      <h3>Embedding table <math><mi>E</mi></math></h3>
+      <div class="mat-with-labels">
+        <div class="row-tags" id="embTags"></div>
+        <div class="matrix"><div class="mgrid" id="embGrid" style="grid-template-columns:repeat(2,auto);"></div></div>
+      </div>
+      <div class="stage-caption" id="embCap"></div>
+    </div>
+
+    <div class="flow-arrow"><span class="glyph">→</span>copy one row</div>
+
+    <div class="stage" style="min-width:150px; max-width:200px;">
+      <h3>Vector <math><mi>e</mi></math></h3>
+      <div class="stack" style="margin-top:6px;">
+        <div class="matrix"><div class="mgrid" id="eVec" style="grid-template-columns:auto;"></div></div>
+        <div class="vec-label" id="eVecLabel"></div>
+      </div>
+      <div class="stage-caption">This is the word’s current <b>embedding</b> — 2 learned numbers.</div>
+    </div>
+
+    <div class="flow-arrow"><span class="glyph">→</span><math><mi>W</mi><mi>e</mi><mo>+</mo><mi>b</mi></math></div>
+
+    <div class="stage" style="min-width:230px;">
+      <h3>Linear layer → logits <math><mi>z</mi></math></h3>
+      <table class="lin" id="linTable"></table>
+      <div class="stage-caption">Row <math><mi>k</mi></math> of <math><mi>W</mi></math> scores word <math><mi>k</mi></math>:
+        <math><msub><mi>z</mi><mi>k</mi></msub><mo>=</mo><msub><mi>W</mi><mrow><mi>k</mi><mn>1</mn></mrow></msub><msub><mi>e</mi><mn>1</mn></msub><mo>+</mo><msub><mi>W</mi><mrow><mi>k</mi><mn>2</mn></mrow></msub><msub><mi>e</mi><mn>2</mn></msub><mo>+</mo><msub><mi>b</mi><mi>k</mi></msub></math></div>
+    </div>
+
+    <div class="flow-arrow"><span class="glyph">→</span>softmax</div>
+
+    <div class="stage" style="min-width:230px; max-width:300px;">
+      <h3>Probability of the next word</h3>
+      <div class="pbars" id="probBars"></div>
+      <div class="stage-caption" id="targetCap"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 3 · TRAIN ================= -->
+<section class="panel">
+  <h2><span class="step-num">3</span>Train it — and watch the embedding space organize itself</h2>
+  <p class="lede">One <b>epoch</b> = one pass over all 34 pairs: the model predicts, the loss measures its surprise,
+    and gradients nudge <math><mi>W</mi></math>, <math><mi>b</mi></math> <b>and the embedding rows</b> to make the
+    true next words more likely. The map below shows all 11 embedding vectors, with their trails.
+    Click the buttons and watch words that behave alike drift together.</p>
+
+  <div class="controls">
+    <button id="btn1">Train 1 epoch</button>
+    <button id="btn10">+10 epochs</button>
+    <button id="btn50">+50 epochs</button>
+    <button id="btnReset" class="ghost">↺ Reset to random</button>
+    <div class="readout">
+      <span>epoch <b id="epochLabel">0</b></span>
+      <span>avg loss <b id="lossLabel">–</b></span>
+    </div>
+  </div>
+
+  <div class="charts">
+    <div class="chart-box">
+      <h3>The embedding space (the 2 columns of <math><mi>E</mi></math>, drawn as coordinates)</h3>
+      <div class="sub">Each dot is one row of the table. Gray trails show where each word has been. Hover a dot for its values; the <span style="color:var(--orange-deep);font-weight:650;">orange</span> dot is the word selected above.</div>
+      <svg id="scatter" viewBox="0 0 520 430" role="img" aria-label="Scatter plot of the 11 word embedding vectors"></svg>
+    </div>
+    <div class="chart-box">
+      <h3>Training loss</h3>
+      <div class="sub">Average cross-entropy over the 34 pairs. Hover the curve to read values.</div>
+      <svg id="lossChart" viewBox="0 0 520 260" role="img" aria-label="Line chart of training loss per epoch"></svg>
+    </div>
+  </div>
+
+  <div class="note-grad">
+    <b>Where does the “learning” of an embedding happen?</b> Each pair
+    (<i>x</i> → <i>y</i>) sends a gradient back through the linear layer into <b>exactly one row</b> of the table:
+    <math><mfrac><mrow><mo>∂</mo><mi>L</mi></mrow><mrow><mo>∂</mo><mi>E</mi><mo stretchy="false">[</mo><mi>x</mi><mo stretchy="false">]</mo></mrow></mfrac></math>
+    — the row of the current input word. All other rows are untouched by that pair.
+    Two words that are followed by the <b>same kinds of words</b> keep receiving the <b>same kinds of nudges</b>,
+    so their rows converge to nearby points. Meaning is never given to the model — it precipitates out of prediction errors.
+    <br><span style="font-size:0.82rem;color:var(--muted);">Here the space is genuinely 2-D, so this map <i>is</i> the embedding space. Real models use hundreds of dimensions; to draw a map like this you would first project them down (PCA, t-SNE, UMAP…).</span>
+  </div>
+</section>
+
+<!-- ================= 4 · INSPECT ================= -->
+<section class="panel">
+  <h2><span class="step-num">4</span>Inspect what it learned</h2>
+  <p class="lede">Train the model above (≈ 100–300 epochs), then probe it.
+    <span class="click-hint">Click a word</span> to compare the model’s next-word probabilities against the
+    actual frequencies in the 14 sentences, and to see which words ended up closest in the embedding space.</p>
+
+  <div class="chip-row" id="chips4"></div>
+
+  <div class="inspect-cols">
+    <div class="inspect-col">
+      <h3 id="cmpTitle">Next-word distribution</h3>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--blue);"></span>model’s probability</span>
+        <span><span class="sw" style="background:var(--gray-bar);"></span>frequency in the dataset</span>
+      </div>
+      <div class="cbars" id="cmpBars"></div>
+      <div id="cmpNote" style="font-size:0.82rem;color:var(--muted);margin-top:8px;"></div>
+    </div>
+    <div class="inspect-col" style="max-width:420px;">
+      <h3 id="nbTitle">Nearest neighbors in the embedding space</h3>
+      <div class="nb-list" id="nbList"></div>
+
+      <div class="insights">
+        <div class="insight plain"><span class="tag">Principle</span>
+          <b>Words used in similar contexts get similar vectors.</b> The model never sees definitions —
+          only which words follow which. Distributional similarity becomes geometric closeness.</div>
+        <div class="insight good"><span class="tag">Look for it</span>
+          After training, the pronouns <b>i / you / we</b> land near each other (all are followed by like, love, eat, hate…).
+          Even more striking: <b>love</b> and <b>hate</b> end up almost on top of each other — opposite meanings, but
+          <i>identical contexts</i> (both followed by pizza or pasta). Embeddings capture how words are <b>used</b>, not what they mean to us.
+          And <b>like</b> drifts away from love/hate because it alone is also followed by “to”.</div>
+        <div class="insight warn"><span class="tag">Gotcha</span>
+          <b>“pasta” never moves.</b> In these 14 sentences, <i>pasta</i> only ever appears as the <b>last</b> word,
+          so it is never an input — its embedding row never receives a gradient and stays at its random start.
+          A word’s vector is only as good as the contexts it is <i>used</i> in. (Check its trail on the map!)</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="foot">Vocabulary of 11 words · 34 (input → next-word) training pairs · embedding dimension d = 2 · full-batch Adam, learning rate 0.1</footer>
+
+</div>
+
+<script>
+"use strict";
+/* ================= data ================= */
+const TEXTS = [
+  "i like pizza",
+  "i like pasta",
+  "i love pizza",
+  "you like pizza",
+  "i eat pizza",
+  "i eat pasta",
+  "you love pasta",
+  "we like pizza and pasta",
+  "i hate pizza",
+  "you hate pasta",
+  "we love pasta",
+  "i like to eat",
+  "you like to eat",
+  "we eat and love pasta"
+];
+const vocab = [...new Set(TEXTS.join(" ").split(" "))].sort();
+const V = vocab.length;            // 11
+const D = 2;
+const stoi = {}; vocab.forEach((w,i)=>stoi[w]=i);
+
+const pairs = [];
+const sentPairs = TEXTS.map(s=>{
+  const ids = s.split(" ").map(w=>stoi[w]);
+  const ps = [];
+  for(let i=0;i<ids.length-1;i++){ ps.push([ids[i],ids[i+1]]); pairs.push([ids[i],ids[i+1]]); }
+  return ps;
+});
+const N = pairs.length;            // 34
+
+const nextCounts = vocab.map(()=>new Array(V).fill(0));
+const inputCount = new Array(V).fill(0);
+pairs.forEach(([a,b])=>{ nextCounts[a][b]++; inputCount[a]++; });
+
+/* ================= model ================= */
+const MAX_EPOCH = 500, LR = 0.1, B1 = 0.9, B2 = 0.999, EPS = 1e-8;
+let rng, E, W, b, adam, epoch, lossHist, embHist;
+let sel = stoi["i"];               // globally selected word
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function gauss(){let u=0,v=0;while(u===0)u=rng();while(v===0)v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+const zeros2 = ()=>Array.from({length:V},()=>new Array(D).fill(0));
+
+function resetModel(){
+  rng = mulberry32(42);
+  E = Array.from({length:V},()=>[gauss(),gauss()]);
+  const k = 1/Math.sqrt(D);
+  W = Array.from({length:V},()=>[(rng()*2-1)*k,(rng()*2-1)*k]);
+  b = Array.from({length:V},()=>(rng()*2-1)*k);
+  adam = {t:0, mE:zeros2(), vE:zeros2(), mW:zeros2(), vW:zeros2(),
+          mb:new Array(V).fill(0), vb:new Array(V).fill(0)};
+  epoch = 0; lossHist = []; embHist = [E.map(r=>r.slice())];
+}
+
+function softmaxArr(z){
+  const m = Math.max(...z);
+  const ex = z.map(v=>Math.exp(v-m));
+  const s = ex.reduce((a,c)=>a+c,0);
+  return ex.map(v=>v/s);
+}
+function forwardWord(x){
+  const e = E[x];
+  const z = b.map((bk,k)=>bk + W[k][0]*e[0] + W[k][1]*e[1]);
+  return {e, z, p:softmaxArr(z)};
+}
+function currentLoss(){
+  let L = 0;
+  for(const [x,y] of pairs) L += -Math.log(forwardWord(x).p[y] + 1e-12);
+  return L/N;
+}
+
+function trainEpochs(n){
+  for(let it=0; it<n && epoch<MAX_EPOCH; it++){
+    const gE = zeros2(), gW = zeros2(), gb = new Array(V).fill(0);
+    let L = 0;
+    for(const [x,y] of pairs){
+      const {e,p} = forwardWord(x);
+      L += -Math.log(p[y] + 1e-12);
+      for(let k=0;k<V;k++){
+        const d = (p[k] - (k===y?1:0)) / N;      // dL/dz_k, batch-averaged
+        gb[k] += d;
+        gW[k][0] += d*e[0];  gW[k][1] += d*e[1];
+        gE[x][0] += d*W[k][0];  gE[x][1] += d*W[k][1];
+      }
+    }
+    adam.t++;
+    const c1 = 1 - Math.pow(B1, adam.t), c2 = 1 - Math.pow(B2, adam.t);
+    for(let i=0;i<V;i++){
+      for(let j=0;j<D;j++){
+        adam.mE[i][j] = B1*adam.mE[i][j] + (1-B1)*gE[i][j];
+        adam.vE[i][j] = B2*adam.vE[i][j] + (1-B2)*gE[i][j]*gE[i][j];
+        E[i][j] -= LR*(adam.mE[i][j]/c1)/(Math.sqrt(adam.vE[i][j]/c2)+EPS);
+        adam.mW[i][j] = B1*adam.mW[i][j] + (1-B1)*gW[i][j];
+        adam.vW[i][j] = B2*adam.vW[i][j] + (1-B2)*gW[i][j]*gW[i][j];
+        W[i][j] -= LR*(adam.mW[i][j]/c1)/(Math.sqrt(adam.vW[i][j]/c2)+EPS);
+      }
+      adam.mb[i] = B1*adam.mb[i] + (1-B1)*gb[i];
+      adam.vb[i] = B2*adam.vb[i] + (1-B2)*gb[i]*gb[i];
+      b[i] -= LR*(adam.mb[i]/c1)/(Math.sqrt(adam.vb[i]/c2)+EPS);
+    }
+    epoch++;
+    lossHist.push(L/N);
+    embHist.push(E.map(r=>r.slice()));
+  }
+  renderAll();
+}
+
+/* ================= tooltip ================= */
+const tip = document.getElementById("tip");
+function showTip(html, ev){
+  tip.innerHTML = html; tip.style.display = "block";
+  const pad = 14;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  const r = tip.getBoundingClientRect();
+  if(x + r.width > window.innerWidth - 8)  x = ev.clientX - r.width - pad;
+  if(y + r.height > window.innerHeight - 8) y = ev.clientY - r.height - pad;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip(){ tip.style.display = "none"; }
+
+/* ================= section 1 ================= */
+let selSent = 0;
+function buildSection1(){
+  const ul = document.getElementById("sentList");
+  TEXTS.forEach((s,i)=>{
+    const li = document.createElement("li");
+    li.textContent = "“" + s + "”";
+    li.addEventListener("click", ()=>{ selSent = i; renderSentences(); });
+    ul.appendChild(li);
+  });
+
+  const tbl = document.getElementById("vocabTable");
+  let html = "<tr><th>index</th><th>word</th></tr>";
+  vocab.forEach((w,i)=>{ html += `<tr><td>${i}</td><td>${w}</td></tr>`; });
+  tbl.innerHTML = html;
+
+  document.getElementById("pairTotal").innerHTML =
+    `<b>${N} training pairs in total.</b> That single column of (input → next word) examples is
+     <i>everything</i> the model will ever see. It is never told what any word means, which words are
+     pronouns or foods — only “given this word, guess the next one.”`;
+
+  renderSentences();
+}
+function renderSentences(){
+  document.querySelectorAll("#sentList li").forEach((li,i)=>li.classList.toggle("sel", i===selSent));
+  document.getElementById("pairsTitle").textContent =
+    `Pairs from sentence ${selSent+1}: “${TEXTS[selSent]}”`;
+  document.getElementById("pairChips").innerHTML = sentPairs[selSent]
+    .map(([a,c])=>`<span class="pair-chip"><b>${vocab[a]}</b><span class="arr">→</span>${vocab[c]}</span>`)
+    .join("");
+}
+
+/* ================= word chips ================= */
+function buildChips(id){
+  const box = document.getElementById(id);
+  vocab.forEach((w,i)=>{
+    const c = document.createElement("span");
+    c.className = "wchip"; c.textContent = w;
+    c.addEventListener("click", ()=>{ sel = i; renderAll(); });
+    box.appendChild(c);
+  });
+}
+function renderChips(){
+  document.querySelectorAll(".wchip").forEach((c,idx)=>{
+    c.classList.toggle("sel", (idx % V) === sel);
+  });
+}
+
+/* ================= section 2 ================= */
+function buildSection2(){
+  const tags = document.getElementById("embTags");
+  vocab.forEach(w=>{
+    const t = document.createElement("div");
+    t.className = "row-tag"; t.textContent = w;
+    tags.appendChild(t);
+  });
+  const grid = document.getElementById("embGrid");
+  for(let i=0;i<V*D;i++){
+    const c = document.createElement("div");
+    c.className = "cell"; grid.appendChild(c);
+  }
+  const ev = document.getElementById("eVec");
+  for(let j=0;j<D;j++){
+    const c = document.createElement("div");
+    c.className = "cell hot"; ev.appendChild(c);
+  }
+}
+function renderSection2(){
+  const {e, z, p} = forwardWord(sel);
+  const zmax = z.indexOf(Math.max(...z));
+
+  document.querySelectorAll("#embTags .row-tag").forEach((t,i)=>t.classList.toggle("sel", i===sel));
+  const cells = document.querySelectorAll("#embGrid .cell");
+  for(let i=0;i<V;i++)for(let j=0;j<D;j++){
+    const c = cells[i*D+j];
+    c.textContent = E[i][j].toFixed(2);
+    c.classList.toggle("hot", i===sel);
+  }
+  document.getElementById("embCap").innerHTML =
+    `Row of <b>${vocab[sel]}</b> (index ${sel}) is selected — the lookup just copies it.`;
+
+  const ev = document.querySelectorAll("#eVec .cell");
+  ev[0].textContent = e[0].toFixed(2);
+  ev[1].textContent = e[1].toFixed(2);
+  document.getElementById("eVecLabel").innerHTML =
+    `<math><mi>e</mi><mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mn>${sel}</mn><mo stretchy="false">]</mo></math>`;
+
+  let lin = `<tr><th></th><th><math><msub><mi>W</mi><mrow><mi>k</mi><mn>1</mn></mrow></msub></math></th>` +
+            `<th><math><msub><mi>W</mi><mrow><mi>k</mi><mn>2</mn></mrow></msub></math></th>` +
+            `<th><math><msub><mi>b</mi><mi>k</mi></msub></math></th>` +
+            `<th><math><msub><mi>z</mi><mi>k</mi></msub></math></th></tr>`;
+  for(let k=0;k<V;k++){
+    lin += `<tr class="${k===zmax?'zmax':''}"><td class="wname">${vocab[k]}</td>` +
+           `<td>${W[k][0].toFixed(2)}</td><td>${W[k][1].toFixed(2)}</td>` +
+           `<td>${b[k].toFixed(2)}</td><td class="zcol">${z[k].toFixed(2)}</td></tr>`;
+  }
+  document.getElementById("linTable").innerHTML = lin;
+
+  let bars = "";
+  for(let k=0;k<V;k++){
+    const top = k===zmax;
+    bars += `<div class="pw ${top?'top':''}">${vocab[k]}${top?' ★':''}</div>` +
+            `<div class="ptrack"><div class="pfill" style="width:${(p[k]*100).toFixed(1)}%"></div></div>` +
+            `<div class="pval">${(p[k]*100).toFixed(1)}%</div>`;
+  }
+  document.getElementById("probBars").innerHTML = bars;
+
+  const obs = [];
+  for(let k=0;k<V;k++) if(nextCounts[sel][k]>0) obs.push(`${vocab[k]} ×${nextCounts[sel][k]}`);
+  document.getElementById("targetCap").innerHTML = obs.length
+    ? `In the dataset, after <b>${vocab[sel]}</b> comes: ${obs.join(", ")}. Training pushes probability onto those words.`
+    : `<b>${vocab[sel]}</b> never appears as an input in the dataset (it always ends the sentence), so no pair ever trains this prediction.`;
+}
+
+/* ================= scatter ================= */
+const SW = 520, SH = 430, SP = {l:46, r:14, t:14, b:34};
+function tickStep(range, target){
+  const cands = [0.1,0.2,0.25,0.5,1,2,5,10];
+  for(const c of cands) if(range/c <= target) return c;
+  return 10;
+}
+function renderScatter(){
+  const svg = document.getElementById("scatter");
+  const pw = SW-SP.l-SP.r, ph = SH-SP.t-SP.b;
+
+  let xmin=Infinity,xmax=-Infinity,ymin=Infinity,ymax=-Infinity;
+  for(const snap of embHist) for(const [x,y] of snap){
+    if(x<xmin)xmin=x; if(x>xmax)xmax=x; if(y<ymin)ymin=y; if(y>ymax)ymax=y;
+  }
+  const padX = Math.max(0.35,(xmax-xmin)*0.14), padY = Math.max(0.35,(ymax-ymin)*0.14);
+  xmin-=padX; xmax+=padX; ymin-=padY; ymax+=padY;
+  const s = Math.max((xmax-xmin)/pw, (ymax-ymin)/ph);   // equal scale on both axes
+  const xmid=(xmin+xmax)/2, ymid=(ymin+ymax)/2;
+  const X = v => SP.l + pw/2 + (v-xmid)/s;
+  const Y = v => SP.t + ph/2 - (v-ymid)/s;
+
+  let g = "";
+  const stepX = tickStep(pw*s, 8);
+  const loX = Math.ceil((xmid-pw/2*s)/stepX)*stepX, hiX = xmid+pw/2*s;
+  for(let v=loX; v<=hiX; v+=stepX){
+    g += `<line x1="${X(v).toFixed(1)}" y1="${SP.t}" x2="${X(v).toFixed(1)}" y2="${SP.t+ph}" stroke="#e1e0d9" stroke-width="1"/>` +
+         `<text x="${X(v).toFixed(1)}" y="${SP.t+ph+16}" font-size="10" fill="#898781" text-anchor="middle">${(+v.toFixed(2))}</text>`;
+  }
+  const loY = Math.ceil((ymid-ph/2*s)/stepX)*stepX, hiY = ymid+ph/2*s;
+  for(let v=loY; v<=hiY; v+=stepX){
+    g += `<line x1="${SP.l}" y1="${Y(v).toFixed(1)}" x2="${SP.l+pw}" y2="${Y(v).toFixed(1)}" stroke="#e1e0d9" stroke-width="1"/>` +
+         `<text x="${SP.l-6}" y="${Y(v).toFixed(1)}" font-size="10" fill="#898781" text-anchor="end" dominant-baseline="middle">${(+v.toFixed(2))}</text>`;
+  }
+  g += `<text x="${SP.l+pw/2}" y="${SH-4}" font-size="10.5" fill="#898781" text-anchor="middle" font-style="italic" font-family="STIX Two Math, Cambria Math, Times New Roman, serif">e</text>` +
+       `<text x="${SP.l+pw/2+5}" y="${SH-2}" font-size="8" fill="#898781" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, serif">1</text>` +
+       `<text x="12" y="${SP.t+ph/2}" font-size="10.5" fill="#898781" text-anchor="middle" font-style="italic" font-family="STIX Two Math, Cambria Math, Times New Roman, serif">e</text>` +
+       `<text x="17" y="${SP.t+ph/2+2}" font-size="8" fill="#898781" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, serif">2</text>`;
+
+  // trails
+  if(embHist.length > 1){
+    for(let i=0;i<V;i++){
+      const pts = embHist.map(snap=>`${X(snap[i][0]).toFixed(1)},${Y(snap[i][1]).toFixed(1)}`).join(" ");
+      g += `<polyline points="${pts}" fill="none" stroke="#d9d8d0" stroke-width="1"/>`;
+    }
+  }
+
+  // label placement with a simple collision nudge
+  const labels = vocab.map((w,i)=>({i, w, lx:X(E[i][0])+8, ly:Y(E[i][1])-8}));
+  for(let pass=0; pass<3; pass++){
+    for(let a=0;a<labels.length;a++) for(let bI=a+1;bI<labels.length;bI++){
+      const A=labels[a], B=labels[bI];
+      if(Math.abs(A.lx-B.lx)<48 && Math.abs(A.ly-B.ly)<13){
+        (A.ly<=B.ly ? B : A).ly += 13;
+      }
+    }
+  }
+
+  for(const L of labels){
+    const i=L.i, cx=X(E[i][0]), cy=Y(E[i][1]), isSel=i===sel;
+    g += `<circle class="sc-dot" data-i="${i}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${isSel?6.5:5}"` +
+         ` fill="${isSel?'#eb6834':'#2a78d6'}" stroke="#fcfcfb" stroke-width="1.5" style="cursor:default"/>`;
+    g += `<text x="${L.lx.toFixed(1)}" y="${L.ly.toFixed(1)}" font-size="12" ` +
+         `fill="${isSel?'#b34515':'#1f2937'}" font-weight="${isSel?700:500}" ` +
+         `stroke="#fcfcfb" stroke-width="3" paint-order="stroke" style="pointer-events:none">${L.w}</text>`;
+  }
+  svg.innerHTML = g;
+
+  svg.querySelectorAll(".sc-dot").forEach(dot=>{
+    const i = +dot.dataset.i;
+    dot.addEventListener("pointermove", ev=>showTip(
+      `<b>${vocab[i]}</b><br>e = (${E[i][0].toFixed(2)}, ${E[i][1].toFixed(2)})<br>row ${i} of the table`, ev));
+    dot.addEventListener("pointerleave", hideTip);
+    dot.addEventListener("click", ()=>{ sel = i; renderAll(); });
+  });
+}
+
+/* ================= loss chart ================= */
+const LW = 520, LH = 260, LP = {l:46, r:14, t:12, b:34};
+function renderLoss(){
+  const svg = document.getElementById("lossChart");
+  const pw = LW-LP.l-LP.r, ph = LH-LP.t-LP.b;
+  const maxE = Math.max(epoch, 50);
+  const maxL = lossHist.length ? Math.max(...lossHist)*1.08 : 3;
+  const X = i => LP.l + (i/maxE)*pw;
+  const Y = v => LP.t + ph - (v/maxL)*ph;
+
+  let g = "";
+  const stepY = tickStep(maxL, 6);
+  for(let v=0; v<=maxL+1e-9; v+=stepY){
+    g += `<line x1="${LP.l}" y1="${Y(v).toFixed(1)}" x2="${LP.l+pw}" y2="${Y(v).toFixed(1)}" stroke="#e1e0d9" stroke-width="1"/>` +
+         `<text x="${LP.l-6}" y="${Y(v).toFixed(1)}" font-size="10" fill="#898781" text-anchor="end" dominant-baseline="middle">${+v.toFixed(2)}</text>`;
+  }
+  const stepXe = maxE<=60 ? 10 : (maxE<=160 ? 25 : (maxE<=320 ? 50 : 100));
+  for(let v=0; v<=maxE; v+=stepXe){
+    g += `<line x1="${X(v).toFixed(1)}" y1="${LP.t}" x2="${X(v).toFixed(1)}" y2="${LP.t+ph}" stroke="#efeee8" stroke-width="1"/>` +
+         `<text x="${X(v).toFixed(1)}" y="${LP.t+ph+15}" font-size="10" fill="#898781" text-anchor="middle">${v}</text>`;
+  }
+  g += `<line x1="${LP.l}" y1="${LP.t+ph}" x2="${LP.l+pw}" y2="${LP.t+ph}" stroke="#c3c2b7" stroke-width="1"/>`;
+  g += `<text x="${LP.l+pw/2}" y="${LH-4}" font-size="10" fill="#898781" text-anchor="middle">epoch</text>`;
+
+  if(lossHist.length){
+    const pts = lossHist.map((v,i)=>`${X(i+1).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    g += `<polyline points="${pts}" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>`;
+    const last = lossHist[lossHist.length-1];
+    g += `<circle cx="${X(epoch).toFixed(1)}" cy="${Y(last).toFixed(1)}" r="3.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"/>`;
+    g += `<circle id="lossHover" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5" style="display:none"/>`;
+    g += `<rect id="lossPad" x="${LP.l}" y="${LP.t}" width="${pw}" height="${ph}" fill="transparent"/>`;
+  }else{
+    g += `<text x="${LP.l+pw/2}" y="${LP.t+ph/2}" font-size="12" fill="#898781" text-anchor="middle">train at least one epoch to see the curve</text>`;
+  }
+  svg.innerHTML = g;
+
+  const pad = svg.querySelector("#lossPad");
+  if(pad){
+    const hover = svg.querySelector("#lossHover");
+    pad.addEventListener("pointermove", ev=>{
+      const r = svg.getBoundingClientRect();
+      const mx = (ev.clientX - r.left) * (LW/r.width);
+      let i = Math.round((mx-LP.l)/pw*maxE);
+      i = Math.min(Math.max(i,1), lossHist.length);
+      hover.style.display = "";
+      hover.setAttribute("cx", X(i));
+      hover.setAttribute("cy", Y(lossHist[i-1]));
+      showTip(`epoch <b>${i}</b><br>loss ${lossHist[i-1].toFixed(4)}`, ev);
+    });
+    pad.addEventListener("pointerleave", ()=>{ hover.style.display="none"; hideTip(); });
+  }
+}
+
+/* ================= section 4 ================= */
+function renderInspect(){
+  const w = vocab[sel];
+  document.getElementById("cmpTitle").textContent = `Next-word distribution after “${w}”`;
+  document.getElementById("nbTitle").textContent = `Nearest neighbors of “${w}”`;
+
+  const {p} = forwardWord(sel);
+  const hasData = inputCount[sel] > 0;
+  const order = vocab.map((_,k)=>k).sort((a,c)=>p[c]-p[a]);
+  let html = "";
+  for(const k of order){
+    const freq = hasData ? nextCounts[sel][k]/inputCount[sel] : 0;
+    html += `<div class="cw">${vocab[k]}</div>` +
+            `<div class="ctrack"><div class="cfill model" style="width:${(p[k]*100).toFixed(1)}%"></div></div>` +
+            `<div class="cval">${(p[k]*100).toFixed(1)}%</div>` +
+            `<div class="ctrack"><div class="cfill data" style="width:${(freq*100).toFixed(1)}%"></div></div>` +
+            `<div class="cval">${hasData ? (freq*100).toFixed(1)+"%" : "—"}</div>` +
+            `<div class="rowgap"></div>`;
+  }
+  document.getElementById("cmpBars").innerHTML = html;
+  document.getElementById("cmpNote").innerHTML = hasData
+    ? `“${w}” appears as an input in <b>${inputCount[sel]}</b> pairs. With enough training the blue bars approach the gray ones — the model is learning the dataset’s conditional distribution
+       <math><mi>p</mi><mo stretchy="false">(</mo><mtext>next</mtext><mo>∣</mo><mtext>${w}</mtext><mo stretchy="false">)</mo></math>.`
+    : `“${w}” never appears as an input (it always ends its sentence), so there are no gray bars — and nothing ever trained this row. The blue bars are leftovers of random initialization.`;
+
+  const dists = vocab.map((_,k)=>({k, d:Math.hypot(E[sel][0]-E[k][0], E[sel][1]-E[k][1])}))
+                     .filter(o=>o.k!==sel).sort((a,c)=>a.d-c.d);
+  document.getElementById("nbList").innerHTML = dists.slice(0,3)
+    .map((o,rank)=>`<div class="nb-item"><span>${rank+1}.</span><b>${vocab[o.k]}</b>
+      <span class="dist">distance ${o.d.toFixed(2)}</span></div>`).join("");
+}
+
+/* ================= glue ================= */
+function renderAll(){
+  renderChips();
+  renderSection2();
+  renderScatter();
+  renderLoss();
+  renderInspect();
+  document.getElementById("epochLabel").textContent = epoch;
+  document.getElementById("lossLabel").textContent = currentLoss().toFixed(3);
+  const done = epoch >= MAX_EPOCH;
+  ["btn1","btn10","btn50"].forEach(id=>document.getElementById(id).disabled = done);
+}
+
+buildSection1();
+buildChips("chips2");
+buildChips("chips4");
+buildSection2();
+resetModel();
+renderAll();
+
+document.getElementById("btn1").addEventListener("click", ()=>trainEpochs(1));
+document.getElementById("btn10").addEventListener("click", ()=>trainEpochs(10));
+document.getElementById("btn50").addEventListener("click", ()=>trainEpochs(50));
+document.getElementById("btnReset").addEventListener("click", ()=>{ resetModel(); renderAll(); });
+</script>
+
+</body>
+</html>
