@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RNNs: Unrolling the Computational Graph · Interactive</title>
+<!--
+  ============================================================================
+  RECURRENT NEURAL NETWORKS — UNROLLING THE COMPUTATIONAL GRAPH
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget. Everything (HTML + CSS + JS) in this file.
+
+  DESIGN NOTES:
+  - LIGHT academic theme (maintainer preference).
+  - NO looping animations — the user steps through the unrolling manually.
+    Each state is a clear static diagram.
+  - Math notation is rendered natively (no CDN): identifiers in an italic
+    math serif font (<var> + .eq classes), real Unicode glyphs (ŷ, −),
+    proper <sub> subscripts. SVG math uses the same font stack.
+  - Colors follow the lecture slide: blue = input x, green = hidden state h,
+    purple = output ŷ.
+
+  HOW TO MODIFY:
+  - Sequence length options: see the T_CHOICES array.
+  - Step narrations: see narration().
+  - Diagram geometry: the GEO object.
+  ============================================================================
+-->
+<style>
+  :root{
+    --bg:       #f5f8fd;
+    --bg-soft:  #eef3fa;
+    --panel:    #ffffff;
+    --panel-2:  #f2f6fc;
+    --line:     #d9e2ef;
+    --text:     #1f2937;
+    --text-dim: #64708a;
+    --accent:   #3b6fd4;
+    --x-fill:  #d7e7f7; --x-line:  #6f9cc4;   /* input  x  (blue)   */
+    --h-fill:  #dcefd2; --h-line:  #74a95f;   /* hidden h  (green)  */
+    --y-fill:  #e7ddf6; --y-line:  #a08ad0;   /* output ŷ  (purple) */
+    --fg-col:  #b45309;                        /* shared params f, g */
+    --radius: 14px;
+    --shadow: 0 6px 20px rgba(40,70,120,.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(1100px 520px at 82% -10%, #e9f0fb 0%, transparent 60%),
+      radial-gradient(900px 460px at -8% 6%, #eafaf6 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.55;
+  }
+  .wrap{ max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
+
+  /* ---------------------------- math rendering ---------------------------- */
+  var{ font-family: var(--math); font-style: italic; font-weight: 400; }
+  .eq{ font-family: var(--math); font-style: normal; }
+  .eq sub, var sub{ font-size: .72em; }
+  sub var{ font-size: 1em; }
+
+  /* ------------------------------- header -------------------------------- */
+  .hero{ text-align:center; margin: 26px 0 20px; }
+  .hero h1{ font-size: 1.65rem; margin: 0 0 8px; letter-spacing:-.3px; }
+  .hero p{ color: var(--text-dim); max-width: 780px; margin: 0 auto; font-size:.95rem; }
+
+  /* ----------------------------- main panel ------------------------------ */
+  .panel{ background: var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 20px 22px 18px; }
+  .panel-head{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .panel-head h2{ margin:0; font-size:1.12rem; }
+  .t-row{ display:flex; align-items:center; gap:8px; }
+  .t-row .lbl{ font-size:.8rem; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.5px; }
+  .t-btn{ padding:5px 12px; border-radius:999px; border:1.5px solid var(--line); background:var(--panel);
+          font-size:.85rem; cursor:pointer; font-family:var(--font); color:var(--text); }
+  .t-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .t-btn.active{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+
+  .stage{ background: var(--bg-soft); border:1px solid var(--line); border-radius: 12px;
+          padding: 8px 6px 2px; overflow-x:auto; }
+  .stage svg{ display:block; margin: 0 auto; }
+  .stage .nd{ transition: opacity .15s; }
+  .stage[data-hl] .nd{ opacity:.18; }
+  .stage[data-hl="x"]   .k-x  { opacity:1; }
+  .stage[data-hl="h"]   .k-h  { opacity:1; }
+  .stage[data-hl="rec"] .k-rec{ opacity:1; }
+  .stage[data-hl="y"]   .k-y  { opacity:1; }
+  .stage[data-hl="f"]   .k-f  { opacity:1; }
+  .stage[data-hl="g"]   .k-g  { opacity:1; }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:16px; justify-content:center; margin:10px 0 2px;
+           font-size:.8rem; color:var(--text-dim); }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .chip{ width:14px; height:10px; border-radius:3px; display:inline-block; border:1.5px solid; }
+  .chip.x{ background:var(--x-fill); border-color:var(--x-line); }
+  .chip.h{ background:var(--h-fill); border-color:var(--h-line); }
+  .chip.y{ background:var(--y-fill); border-color:var(--y-line); }
+
+  /* step controls */
+  .controls{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin: 14px 0 6px; }
+  .btn{ padding: 8px 18px; border-radius: 10px; border: 1.5px solid var(--line);
+        background: var(--panel); font-size:.9rem; font-weight:600; cursor:pointer;
+        color: var(--text); font-family: var(--font); }
+  .btn:hover:not(:disabled){ border-color: var(--accent); color: var(--accent); }
+  .btn.primary{ background: var(--accent); border-color: var(--accent); color:#fff; }
+  .btn.primary:hover:not(:disabled){ background:#2f5cb5; color:#fff; }
+  .btn:disabled{ opacity:.4; cursor:default; }
+  .controls input[type="range"]{ flex:1; min-width:140px; accent-color: var(--accent); }
+  .step-count{ font-size:.82rem; color:var(--text-dim); min-width:86px; text-align:right;
+               font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  /* narration */
+  .story{ background: #f4f8ff; border:1px solid #cfdcf5; border-left: 4px solid var(--accent);
+          border-radius: 10px; padding: 12px 16px; font-size:.95rem; min-height: 3.4em; margin-bottom: 10px; }
+  .story b{ color: var(--accent); }
+  .story .eq{ font-size:1.06em; }
+  .param-line{ font-size:.85rem; color:var(--text-dim); background: var(--panel-2);
+               border:1px dashed var(--line); border-radius: 10px; padding: 9px 14px; }
+  .param-line b{ color:var(--fg-col); }
+
+  /* ---------------------------- equation panel --------------------------- */
+  .eq-panel{ background: var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+             box-shadow: var(--shadow); padding: 18px 22px 14px; margin-top: 22px; }
+  .eq-panel h2{ margin:0 0 4px; font-size:1.12rem; }
+  .eq-panel .hint{ color:var(--text-dim); font-size:.85rem; margin: 0 0 14px; }
+  .eq-rows{ display:flex; flex-wrap:wrap; gap: 18px 56px; align-items:flex-start; padding: 4px 6px 2px; }
+  .eq-line{ display:inline-flex; align-items:flex-start; gap: 2px; font-size:1.45rem; }
+  .eq-line .op{ font-family: var(--math); padding: 0 6px; }
+  .term{ display:inline-flex; flex-direction:column; align-items:center; cursor:default; border-radius:6px; padding:0 3px; }
+  .term .tx{ line-height:1.25; border-bottom: 3px solid transparent; }
+  .term .lbl{ font-size:.62rem; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+              margin-top:3px; padding:1px 7px; border-radius:999px; white-space:nowrap; }
+  .term:hover{ background: var(--bg-soft); }
+  .term.c-x  .tx{ border-color: var(--x-line); }  .term.c-x  .lbl{ background:var(--x-fill); color:#33608a; }
+  .term.c-h  .tx{ border-color: var(--h-line); }  .term.c-h  .lbl{ background:var(--h-fill); color:#3e6e2e; }
+  .term.c-y  .tx{ border-color: var(--y-line); }  .term.c-y  .lbl{ background:var(--y-fill); color:#63489c; }
+  .term.c-fg .tx{ border-color: var(--fg-col); }  .term.c-fg .lbl{ background:#fdeeda; color:var(--fg-col); }
+
+  /* ----------------------------- concept cards --------------------------- */
+  .facts{ display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:22px; }
+  @media (max-width: 860px){ .facts{ grid-template-columns: 1fr; } }
+  .fact-card{ background: var(--panel); border:1px solid var(--line); border-radius: 12px;
+              padding: 14px 17px; box-shadow: var(--shadow); }
+  .fact-card h3{ margin:0 0 7px; font-size:.95rem; }
+  .fact-card p{ margin:0 0 6px; font-size:.88rem; color:var(--text); }
+  .fact-card p.sub{ color:var(--text-dim); font-size:.84rem; }
+
+  footer{ text-align:center; color:var(--text-dim); font-size:.78rem; margin-top: 34px; }
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>Recurrent Neural Networks: Unrolling the Computational Graph</h1>
+    <p>An RNN is one cell with a <b>feedback loop</b>: its hidden state
+       <span class="eq"><var>h</var><sub><var>t</var></sub></span> is fed back as input to the next time step,
+       acting as a memory of everything seen so far. <b>Unrolling</b> that loop over time turns it into a chain —
+       one copy of the <em>same</em> cell per time step. Step through the unrolling below.</p>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Compact loop&nbsp;→&nbsp;unrolled chain</h2>
+      <div class="t-row" id="tRow">
+        <span class="lbl">Sequence length <span class="eq"><var>T</var></span>:</span>
+      </div>
+    </div>
+
+    <div class="stage" id="stage"><div id="svgHost"></div></div>
+    <div class="legend">
+      <span><span class="chip x"></span> input <span class="eq"><var>x</var><sub><var>t</var></sub></span></span>
+      <span><span class="chip h"></span> hidden state <span class="eq"><var>h</var><sub><var>t</var></sub></span> (memory)</span>
+      <span><span class="chip y"></span> output <span class="eq"><var>ŷ</var><sub><var>t</var></sub></span></span>
+      <span><span style="color:var(--fg-col);font-weight:700;font-family:var(--math);font-style:italic;">f, g</span>&nbsp;shared functions</span>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="btnReset">⟲ Reset</button>
+      <button class="btn" id="btnPrev">‹ Prev</button>
+      <button class="btn primary" id="btnNext">Next ›</button>
+      <input type="range" id="stepSlider" min="0" value="0">
+      <span class="step-count" id="stepCount"></span>
+    </div>
+
+    <div class="story" id="story"></div>
+    <div class="param-line" id="paramLine"></div>
+  </section>
+
+  <section class="eq-panel">
+    <h2>The two equations of an RNN</h2>
+    <p class="hint">Hover any highlighted term (or <span class="eq"><var>f</var></span>, <span class="eq"><var>g</var></span>) to see where it lives in the diagram above.</p>
+    <div class="eq-rows">
+      <span class="eq-line eq">
+        <span class="term c-h" data-hl="h"><span class="tx"><var>h</var><sub><var>t</var></sub></span><span class="lbl">current state</span></span>
+        <span class="op">=</span>
+        <span class="term c-fg" data-hl="f"><span class="tx"><var>f</var></span><span class="lbl">same every step</span></span>
+        <span class="op">(</span>
+        <span class="term c-x" data-hl="x"><span class="tx"><var>x</var><sub><var>t</var></sub></span><span class="lbl">current input</span></span>
+        <span class="op">,</span>
+        <span class="term c-h" data-hl="rec"><span class="tx"><var>h</var><sub><var>t</var>−1</sub></span><span class="lbl">past · memory</span></span>
+        <span class="op">)</span>
+      </span>
+      <span class="eq-line eq">
+        <span class="term c-y" data-hl="y"><span class="tx"><var>ŷ</var><sub><var>t</var></sub></span><span class="lbl">output</span></span>
+        <span class="op">=</span>
+        <span class="term c-fg" data-hl="g"><span class="tx"><var>g</var></span><span class="lbl">same every step</span></span>
+        <span class="op">(</span>
+        <span class="term c-h" data-hl="h"><span class="tx"><var>h</var><sub><var>t</var></sub></span><span class="lbl">current state</span></span>
+        <span class="op">)</span>
+      </span>
+    </div>
+  </section>
+
+  <section class="facts">
+    <div class="fact-card">
+      <h3>🧠 Recurrence and memory</h3>
+      <p>The network has a feedback loop: the hidden state
+         <span class="eq"><var>h</var><sub><var>t</var></sub></span> is an internal memory of past inputs.</p>
+      <p class="sub"><span class="eq"><var>h</var><sub><var>t</var></sub></span> summarizes the sequence history up to step
+         <span class="eq"><var>t</var></span> — the whole past, compressed into one vector.</p>
+    </div>
+    <div class="fact-card">
+      <h3>⛓️ Sequential dependence</h3>
+      <p>Unlike a feed-forward network, the state at time <span class="eq"><var>t</var></span> depends on both the current
+         input <span class="eq"><var>x</var><sub><var>t</var></sub></span> and the previous context
+         <span class="eq"><var>h</var><sub><var>t</var>−1</sub></span>.</p>
+      <p class="sub">Order matters: feeding the same inputs in a different order produces different states.</p>
+    </div>
+    <div class="fact-card">
+      <h3>♻️ Parameter sharing</h3>
+      <p>The same functions <span class="eq"><var>f</var></span> and <span class="eq"><var>g</var></span>
+         (and their underlying parameters) are reused at <b>every</b> time step.</p>
+      <p class="sub">This lets the model process sequences of arbitrary length with a fixed number of parameters —
+         unrolling adds time steps, never new weights.</p>
+    </div>
+  </section>
+
+  <footer>Single-file teaching widget · math rendered natively (no external libraries) ·
+          colors follow the lecture-slide convention (blue inputs, green hidden states, purple outputs)</footer>
+</div>
+
+<script>
+"use strict";
+
+/* ============================== APP STATE =============================== */
+
+const T_CHOICES = [3, 4, 5];
+const state = { T: 3, step: 0 };
+/* steps: 0 = compact loop · 1..T = unroll step t · T+1 = parameter sharing */
+const maxStep = () => state.T + 1;
+
+const $ = id => document.getElementById(id);
+
+/* ============================ MATH SNIPPETS ============================= */
+/* Native math rendering: <var> = italic math-serif identifier, <sub> = index,
+   real Unicode ŷ and − (minus). Used in narration strings. */
+
+const M = {
+  ht:   '<var>h</var><sub><var>t</var></sub>',
+  xt:   '<var>x</var><sub><var>t</var></sub>',
+  htm1: '<var>h</var><sub><var>t</var>−1</sub>',
+  yt:   '<var>ŷ</var><sub><var>t</var></sub>',
+  f:    '<var>f</var>',
+  g:    '<var>g</var>'
+};
+const hi = t => `<var>h</var><sub>${t}</sub>`;
+const xi = t => `<var>x</var><sub>${t}</sub>`;
+const yi = t => `<var>ŷ</var><sub>${t}</sub>`;
+const stateEq  = t => `<span class="eq">${hi(t)} = ${M.f}(${xi(t)}, ${hi(t-1)})</span>`;
+const outEq    = t => `<span class="eq">${yi(t)} = ${M.g}(${hi(t)})</span>`;
+
+/* ============================= NARRATION ================================ */
+
+function narration(step, T){
+  if (step === 0){
+    return `<b>Compact view:</b> the whole RNN is <b>one</b> recurrent cell. At every time step it reads the ` +
+           `input <span class="eq">${M.xt}</span>, updates its hidden state ` +
+           `<span class="eq">${M.ht} = ${M.f}(${M.xt}, ${M.htm1})</span>, emits ` +
+           `<span class="eq">${M.yt} = ${M.g}(${M.ht})</span> — and feeds <span class="eq">${M.ht}</span> ` +
+           `back into itself (the loop). Press <b>Next ›</b> to unroll this loop over time.`;
+  }
+  if (step === 1){
+    return `<b>Step t = 1:</b> the memory starts empty, <span class="eq">${hi(0)} = 0</span>. The cell combines the ` +
+           `first input with it: ${stateEq(1)}, then emits ${outEq(1)}. ` +
+           `So far <span class="eq">${hi(1)}</span> only knows about <span class="eq">${xi(1)}</span>.`;
+  }
+  if (step <= T){
+    const t = step;
+    return `<b>Step t = ${t}:</b> the previous state <span class="eq">${hi(t-1)}</span> travels along the ` +
+           `horizontal arrow and meets the new input: ${stateEq(t)}, then ${outEq(t)}. ` +
+           `Because <span class="eq">${hi(t-1)}</span> already summarized steps 1…${t-1}, ` +
+           `<span class="eq">${hi(t)}</span> now summarizes the whole history up to <span class="eq">${xi(t)}</span> — ` +
+           `that is the <b>memory</b>.`;
+  }
+  return `<b>Parameter sharing:</b> every green cell applies the <b>same</b> function ` +
+         `<span class="eq" style="color:var(--fg-col)">${M.f}</span> and every output uses the <b>same</b> ` +
+         `<span class="eq" style="color:var(--fg-col)">${M.g}</span> — the unrolled chain is ${T} copies of one cell, ` +
+         `not ${T} different cells. Change <span class="eq"><var>T</var></span> above: the chain grows, ` +
+         `but the parameter count never does. That is how an RNN handles sequences of arbitrary length.`;
+}
+
+function paramLine(step, T){
+  const unrolled = Math.min(Math.max(step, 0), T);
+  const n = step === 0 ? "— (loop not yet unrolled)" : `${unrolled} of ${T}`;
+  return `Time steps unrolled: ${n} &nbsp;·&nbsp; distinct parameter sets: <b>2, always</b> ` +
+         `(<b><span class="eq"><var>θ</var><sub><var>f</var></sub></span></b> shared by all cells, ` +
+         `<b><span class="eq"><var>θ</var><sub><var>g</var></sub></span></b> shared by all outputs)`;
+}
+
+/* ============================ SVG RENDERING ============================= */
+
+const GEO = {
+  H: 300,
+  yY: 44, hY: 112, hH: 52, xY: 240,   /* row centers / cell top */
+  r: 21,                               /* circle radius */
+  cCx: 118,                            /* compact diagram center x */
+  divX: 248,                           /* divider x */
+  ux: 352,                             /* unrolled first-column center x */
+  colW: 142,
+  cellW: 96
+};
+
+const MATH_FONT = 'STIX Two Math, Cambria Math, Times New Roman, Georgia, serif';
+
+function mtext(x, y, main, sub, size, fill, anchor){
+  /* NOTE: no <var>/<sub> here — those HTML tags break out of SVG foreign
+     content and destroy the diagram. Subscripts are plain <tspan>s:
+     italic for letter indices (t), upright for digits (0, 1, …). */
+  size = size || 16; fill = fill || 'var(--text)'; anchor = anchor || 'middle';
+  const subT = sub === undefined || sub === null ? '' :
+    `<tspan dy="4.5" font-size="${size*0.68}" font-style="${/^[0-9]/.test(sub) ? 'normal' : 'italic'}">${sub}</tspan>`;
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="${MATH_FONT}" font-style="italic"
+          font-size="${size}" fill="${fill}">${main}${subT}</text>`;
+}
+
+function circleNode(cx, cy, kind, main, sub, op, active){
+  const cols = { x:['var(--x-fill)','var(--x-line)'], y:['var(--y-fill)','var(--y-line)'] };
+  const [fill, line] = cols[kind];
+  const ring = active ? `<circle cx="${cx}" cy="${cy}" r="${GEO.r+5}" fill="none" stroke="${line}" stroke-opacity=".35" stroke-width="5"/>` : '';
+  return `<g class="nd k-${kind}" opacity="${op}">${ring}
+    <circle cx="${cx}" cy="${cy}" r="${GEO.r}" fill="${fill}" stroke="${line}" stroke-width="${active?2.6:1.6}"/>
+    ${mtext(cx, cy+5.5, main, sub, 15.5)}</g>`;
+}
+
+function cellRect(x, y, w, op, active, share){
+  const ring = active ? `<rect x="${x-4}" y="${y-4}" width="${w+8}" height="${GEO.hH+8}" rx="12" fill="none" stroke="var(--h-line)" stroke-opacity=".35" stroke-width="5"/>` : '';
+  const fRing = share ? `<circle cx="${x+w/2}" cy="${y+GEO.hH/2}" r="14" fill="#fdeeda" stroke="var(--fg-col)" stroke-width="1.4"/>` : '';
+  return `<g class="nd k-h" opacity="${op}">${ring}
+    <rect x="${x}" y="${y}" width="${w}" height="${GEO.hH}" rx="9" fill="var(--h-fill)" stroke="var(--h-line)" stroke-width="${active?2.6:1.6}"/></g>
+    <g class="nd k-f" opacity="${op}">${fRing}${mtext(x+w/2, y+GEO.hH/2+6, 'f', null, 18, share ? 'var(--fg-col)' : '#4a7a38')}</g>`;
+}
+
+function vArrow(x, y1, y2, op){
+  return `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="#41506a" stroke-width="1.9"
+          marker-end="url(#mA)" opacity="${op}"/>`;
+}
+
+function gLabel(x, y, op, share){
+  const ring = share ? `<circle cx="${x}" cy="${y-5}" r="11" fill="#fdeeda" stroke="var(--fg-col)" stroke-width="1.3"/>` : '';
+  return `<g class="nd k-g" opacity="${op}">${ring}${mtext(x, y, 'g', null, 15, share ? 'var(--fg-col)' : '#41506a')}</g>`;
+}
+
+function drawSVG(step, T){
+  const g = GEO;
+  const share = step === T + 1;
+  const unrolled = Math.min(step, T);          /* columns fully revealed   */
+  const activeCol = (step >= 1 && step <= T) ? step : -1;
+  const compactOp = step === 0 ? 1 : 0.45;
+  const totalW = g.ux + (T-1)*g.colW + g.cellW/2 + 46;
+  const hMidY = g.hY + g.hH/2;
+
+  let s = `<defs>
+    <marker id="mA" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#41506a"/></marker>
+    <marker id="mG" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#74a95f"/></marker>
+  </defs>`;
+
+  /* ------------------------------ compact ------------------------------ */
+  const cx = g.cCx, cw = 132, cxl = cx - cw/2;
+  s += `<g opacity="${compactOp}">`;
+  s += vArrow(cx, g.xY - g.r - 2, g.hY + g.hH + 6, 1);
+  s += vArrow(cx, g.hY - 2, g.yY + g.r + 6, 1);
+  s += gLabel(cx + 14, (g.hY + g.yY + g.r)/2 + 2, 1, share);
+  /* feedback loop: branch off the output arrow, around the right, back into the cell */
+  s += `<g class="nd k-rec">
+    <path d="M ${cx} 90 H ${cx + 106} V ${hMidY} H ${cxl + cw + 3}" fill="none" stroke="#41506a"
+          stroke-width="1.9" marker-end="url(#mA)"/>
+    ${mtext(cx + 62, 82, 'h', 't', 15, '#3e6e2e')}</g>`;
+  s += `<g class="nd k-h">
+    <rect x="${cxl}" y="${g.hY}" width="${cw}" height="${g.hH}" rx="9" fill="var(--h-fill)" stroke="var(--h-line)" stroke-width="${step===0?2.6:1.6}"/>
+    <text x="${cx}" y="${g.hY + 24}" text-anchor="middle" font-family="var(--font)" font-size="11.5" fill="#3e6e2e">recurrent</text>
+    <text x="${cx}" y="${g.hY + 39}" text-anchor="middle" font-family="var(--font)" font-size="11.5" fill="#3e6e2e">cell</text>
+  </g>`;
+  s += `<g class="nd k-f">${mtext(cxl + cw - 13, g.hY + g.hH - 8, 'f', null, 15, share ? 'var(--fg-col)' : '#4a7a38')}</g>`;
+  s += circleNode(cx, g.xY, 'x', 'x', 't', 1, false);
+  s += circleNode(cx, g.yY, 'y', 'ŷ', 't', 1, false);
+  s += `<text x="${cx}" y="${g.H - 8}" text-anchor="middle" font-family="var(--font)" font-size="12"
+        font-weight="700" fill="var(--text-dim)">COMPACT (LOOP)</text>`;
+  s += `</g>`;
+
+  /* ------------------------------ divider ------------------------------ */
+  s += `<line x1="${g.divX}" y1="16" x2="${g.divX}" y2="${g.H-16}" stroke="var(--line)" stroke-width="1.6"/>`;
+
+  /* ------------------------------ unrolled ----------------------------- */
+  const colX = t => g.ux + (t-1)*g.colW;       /* center x of column t (1-based) */
+
+  /* initial state h0 = 0 stub */
+  const stub0op = unrolled >= 1 ? 1 : 0.15;
+  s += `<g class="nd k-rec" opacity="${stub0op}">
+    <line x1="${colX(1) - g.cellW/2 - 44}" y1="${hMidY}" x2="${colX(1) - g.cellW/2 - 4}" y2="${hMidY}"
+          stroke="#74a95f" stroke-width="1.9" marker-end="url(#mG)"/>
+    ${mtext(colX(1) - g.cellW/2 - 26, hMidY - 11, 'h', '0', 14, '#3e6e2e')}
+    <text x="${colX(1) - g.cellW/2 - 26}" y="${hMidY + 20}" text-anchor="middle"
+          font-family="var(--font)" font-size="10.5" fill="var(--text-dim)">= 0</text></g>`;
+
+  for (let t = 1; t <= T; t++){
+    const done = t <= unrolled;
+    const op = share ? 1 : (done ? 1 : 0.15);
+    const active = t === activeCol;
+    const X = colX(t);
+
+    /* recurrent arrow from previous cell */
+    if (t > 1){
+      const aOp = (t <= unrolled || share) ? 1 : 0.15;
+      const x1 = colX(t-1) + g.cellW/2 + 3, x2 = X - g.cellW/2 - 4;
+      s += `<g class="nd k-rec" opacity="${aOp}">
+        <line x1="${x1}" y1="${hMidY}" x2="${x2}" y2="${hMidY}" stroke="#74a95f"
+              stroke-width="${active?2.6:1.9}" marker-end="url(#mG)"/>
+        ${mtext((x1+x2)/2, hMidY - 10, 'h', String(t-1), 14, '#3e6e2e')}</g>`;
+    }
+
+    s += `<g opacity="${op}">`;
+    s += vArrow(X, g.xY - g.r - 2, g.hY + g.hH + 6, 1);
+    s += vArrow(X, g.hY - 2, g.yY + g.r + 6, 1);
+    s += gLabel(X + 14, (g.hY + g.yY + g.r)/2 + 2, 1, share);
+    s += cellRect(X - g.cellW/2, g.hY, g.cellW, 1, active, share);
+    s += circleNode(X, g.xY, 'x', 'x', String(t), 1, active);
+    s += circleNode(X, g.yY, 'y', 'ŷ', String(t), 1, active);
+    s += `</g>`;
+  }
+
+  const midU = (colX(1) + colX(T)) / 2;
+  s += `<text x="${midU}" y="${g.H - 8}" text-anchor="middle" font-family="var(--font)" font-size="12"
+        font-weight="700" fill="var(--text-dim)" opacity="${unrolled>0 || share ? 1 : .35}">UNROLLED OVER TIME</text>`;
+  if (share){
+    s += `<text x="${midU}" y="24" text-anchor="middle" font-family="var(--font)" font-size="12.5"
+          font-weight="700" fill="var(--fg-col)">same f and g at every step — parameters are shared</text>`;
+  }
+
+  return `<svg viewBox="0 0 ${totalW} ${g.H}" width="${totalW}" height="${g.H}" role="img"
+          aria-label="RNN compact loop and unrolled computational graph">${s}</svg>`;
+}
+
+/* ================================ RENDER ================================ */
+
+function render(){
+  state.step = Math.max(0, Math.min(state.step, maxStep()));
+
+  document.querySelectorAll('.t-btn').forEach(b =>
+    b.classList.toggle('active', +b.dataset.t === state.T));
+
+  $('svgHost').innerHTML = drawSVG(state.step, state.T);
+
+  const slider = $('stepSlider');
+  slider.max = maxStep();
+  slider.value = state.step;
+  $('stepCount').textContent = `step ${state.step} / ${maxStep()}`;
+  $('btnPrev').disabled = state.step === 0;
+  $('btnNext').disabled = state.step === maxStep();
+
+  $('story').innerHTML = narration(state.step, state.T);
+  $('paramLine').innerHTML = paramLine(state.step, state.T);
+}
+
+/* ================================ WIRING ================================ */
+
+const tRow = $('tRow');
+T_CHOICES.forEach(t => {
+  const b = document.createElement('button');
+  b.className = 't-btn';
+  b.dataset.t = t;
+  b.textContent = t;
+  b.onclick = () => {
+    state.T = t;
+    if (state.step > 0) state.step = Math.min(state.step, maxStep());
+    render();
+  };
+  tRow.appendChild(b);
+});
+
+$('btnNext').onclick  = () => { state.step++; render(); };
+$('btnPrev').onclick  = () => { state.step--; render(); };
+$('btnReset').onclick = () => { state.step = 0; render(); };
+$('stepSlider').oninput = e => { state.step = +e.target.value; render(); };
+
+/* equation-term hover → highlight matching parts of the diagram */
+const stage = $('stage');
+document.querySelectorAll('.term[data-hl]').forEach(el => {
+  el.addEventListener('mouseenter', () => stage.setAttribute('data-hl', el.dataset.hl));
+  el.addEventListener('mouseleave', () => stage.removeAttribute('data-hl'));
+});
+
+render();
+</script>
+
+</body>
+</html>
