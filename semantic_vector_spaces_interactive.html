@@ -312,6 +312,16 @@
       </div>
     </div>
   </div>
+
+  <div class="narration">
+    <b>In practice:</b> picking two coordinates only works here because these dimensions were
+    hand-labeled. Real embedding dimensions are latent, so no single axis is worth plotting —
+    instead the 2-D map is <i>computed</i> from all dimensions with <b>PCA</b> (linear, preserves
+    distances honestly) or <b>t-SNE / UMAP</b> (nonlinear, preserve local neighborhoods; cluster
+    sizes and between-cluster distances in those maps are not meaningful). Either way the map is
+    only for the human eye — similarity is always measured in the full space, as in the panel
+    on the right.
+  </div>
 </section>
 
 <!-- ================= 3 · VECTOR ARITHMETIC ================= -->
