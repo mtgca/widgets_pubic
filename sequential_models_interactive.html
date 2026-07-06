@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Types of Sequential Models · Interactive</title>
+<!--
+  ============================================================================
+  TYPES OF SEQUENTIAL MODELS (many-to-one, one-to-many, many-to-many)
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget. Everything (HTML + CSS + JS) in this file.
+
+  DESIGN NOTES:
+  - LIGHT academic theme (maintainer preference).
+  - NO looping animations — the user steps through time manually with
+    Prev / Next buttons or a slider. Each state is a clear static diagram.
+  - Diagrams follow the classic color code: pink = inputs, green = hidden
+    states, blue = outputs (as in the lecture slides).
+
+  HOW TO MODIFY:
+  - All content lives in the TYPES array: one entry per sequence-model type,
+    each with its bullet points and a list of concrete worked examples.
+  - buildEvents() turns an example into a timeline of steps; render() draws
+    the SVG for the current step. Add a new example by appending to the
+    `examples` array of a type — the diagram adapts automatically.
+  ============================================================================
+-->
+<style>
+  :root{
+    --bg:        #f5f8fd;
+    --bg-soft:   #eef3fa;
+    --panel:     #ffffff;
+    --panel-2:   #f2f6fc;
+    --line:      #d9e2ef;
+    --text:      #1f2937;
+    --text-dim:  #64708a;
+    --accent:    #3b6fd4;
+    --in-fill:   #fbdde0;  --in-line:  #d9777f;   /* inputs  (pink)  */
+    --hid-fill:  #d9eedb;  --hid-line: #4e9a63;   /* hidden  (green) */
+    --out-fill:  #d7e3fa;  --out-line: #4f7df3;   /* outputs (blue)  */
+    --radius: 14px;
+    --shadow: 0 6px 20px rgba(40,70,120,.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(1100px 520px at 82% -10%, #e9f0fb 0%, transparent 60%),
+      radial-gradient(900px 460px at -8% 6%, #eafaf6 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.55;
+  }
+  .wrap{ max-width: 1060px; margin: 0 auto; padding: 26px 20px 60px; }
+
+  /* ------------------------------ header ------------------------------ */
+  .hero{ text-align:center; margin: 26px 0 22px; }
+  .hero h1{ font-size: 1.7rem; margin: 0 0 8px; letter-spacing:-.3px; }
+  .hero p{ color: var(--text-dim); max-width: 720px; margin: 0 auto; font-size:.95rem; }
+
+  /* ------------------------------- tabs ------------------------------- */
+  .tabs{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin: 20px 0 18px; }
+  .tab{
+    padding: 10px 16px; border-radius: 12px; border: 1.5px solid var(--line);
+    background: var(--panel); cursor: pointer; font-family: var(--font);
+    text-align:left; min-width: 190px; transition: border-color .15s, box-shadow .15s;
+  }
+  .tab:hover{ border-color: var(--accent); }
+  .tab.active{ border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,111,212,.14); background:#f4f8ff; }
+  .tab .t-name{ font-weight: 700; font-size:.92rem; color:var(--text); }
+  .tab .t-sig{ font-size:.78rem; color:var(--text-dim); margin-top:2px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  /* --------------------------- main panel ----------------------------- */
+  .panel{ background: var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 22px 22px 18px; }
+  .panel-head{ display:flex; flex-wrap:wrap; gap:14px; align-items:baseline; justify-content:space-between; }
+  .panel-head h2{ margin:0; font-size:1.15rem; }
+  .panel-head .sig{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.85rem;
+                    color:var(--accent); background:var(--panel-2); border:1px solid var(--line);
+                    padding:3px 10px; border-radius:999px; }
+  .type-desc{ color:var(--text-dim); font-size:.92rem; margin: 8px 0 14px; max-width: 860px; }
+
+  /* example chooser */
+  .ex-row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom: 14px; }
+  .ex-row .lbl{ font-size:.8rem; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.5px; }
+  .ex-btn{
+    padding: 6px 13px; border-radius: 999px; border: 1.5px solid var(--line);
+    background: var(--panel); color: var(--text); font-size:.85rem; cursor:pointer; font-family:var(--font);
+  }
+  .ex-btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .ex-btn.active{ background: var(--accent); border-color: var(--accent); color:#fff; font-weight:600; }
+
+  /* diagram */
+  .diagram-box{ background: var(--bg-soft); border:1px solid var(--line); border-radius: 12px;
+                padding: 10px 6px 4px; overflow-x:auto; }
+  .diagram-box svg{ display:block; margin: 0 auto; }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:16px; justify-content:center; margin:10px 0 2px;
+           font-size:.78rem; color:var(--text-dim); }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .chip{ width:14px; height:10px; border-radius:3px; display:inline-block; border:1.5px solid; }
+  .chip.in { background:var(--in-fill);  border-color:var(--in-line); }
+  .chip.hid{ background:var(--hid-fill); border-color:var(--hid-line); }
+  .chip.out{ background:var(--out-fill); border-color:var(--out-line); }
+
+  /* step controls */
+  .controls{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin: 16px 0 6px; }
+  .btn{
+    padding: 8px 18px; border-radius: 10px; border: 1.5px solid var(--line);
+    background: var(--panel); font-size:.9rem; font-weight:600; cursor:pointer;
+    color: var(--text); font-family: var(--font);
+  }
+  .btn:hover:not(:disabled){ border-color: var(--accent); color: var(--accent); }
+  .btn.primary{ background: var(--accent); border-color: var(--accent); color:#fff; }
+  .btn.primary:hover:not(:disabled){ background:#2f5cb5; color:#fff; }
+  .btn:disabled{ opacity:.4; cursor:default; }
+  .controls input[type="range"]{ flex:1; min-width:140px; accent-color: var(--accent); }
+  .step-count{ font-size:.82rem; color:var(--text-dim); min-width:86px; text-align:right;
+               font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  /* narration */
+  .story{
+    background: #f4f8ff; border:1px solid #cfdcf5; border-left: 4px solid var(--accent);
+    border-radius: 10px; padding: 12px 16px; font-size:.93rem; min-height: 3.2em;
+    margin-bottom: 12px;
+  }
+  .story b{ color: var(--accent); }
+  .memory{
+    font-size:.85rem; color:var(--text-dim); background: var(--panel-2);
+    border:1px dashed var(--line); border-radius: 10px; padding: 9px 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x:auto; white-space:nowrap;
+  }
+  .memory b{ color:#3e7d52; font-weight:700; }
+  .ex-note{ font-size:.8rem; color:var(--text-dim); margin-top:9px; padding: 0 4px; line-height:1.5; }
+  .ex-note b{ color:var(--text); }
+
+  /* key idea + facts */
+  .facts{ display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:16px; }
+  @media (max-width: 720px){ .facts{ grid-template-columns: 1fr; } }
+  .fact-card{ background: var(--panel-2); border:1px solid var(--line); border-radius: 12px; padding: 13px 16px; }
+  .fact-card h3{ margin:0 0 7px; font-size:.8rem; text-transform:uppercase; letter-spacing:.6px; color:var(--text-dim); }
+  .fact-card ul{ margin:0; padding-left: 18px; font-size:.88rem; }
+  .fact-card li{ margin: 3px 0; }
+  .fact-card.idea{ background:#fbf7ec; border-color:#ecd9a8; }
+  .fact-card.idea p{ margin:0; font-size:.9rem; }
+
+  /* comparison table */
+  .compare{ margin-top: 34px; }
+  .compare h2{ font-size:1.15rem; text-align:center; margin-bottom: 14px; }
+  .table-scroll{ overflow-x:auto; border:1px solid var(--line); border-radius: 12px; background:var(--panel); box-shadow:var(--shadow); }
+  table{ border-collapse: collapse; width:100%; min-width: 720px; font-size:.87rem; }
+  th, td{ padding: 10px 14px; text-align:left; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th{ background: var(--panel-2); font-size:.78rem; text-transform:uppercase; letter-spacing:.5px; color:var(--text-dim); }
+  tr:last-child td{ border-bottom:none; }
+  td .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.8rem; color:var(--accent); white-space:nowrap; }
+
+  footer{ text-align:center; color:var(--text-dim); font-size:.78rem; margin-top: 34px; }
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;left:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>Types of Sequential Models</h1>
+    <p>Sequence models are classified by the <b>shape of their input and output</b>:
+       many-to-one, one-to-many, and two flavors of many-to-many. Pick a type, choose a
+       concrete example, and step through time to see how inputs
+       (<span style="color:var(--in-line);font-weight:700">pink</span>) flow through hidden states
+       (<span style="color:var(--hid-line);font-weight:700">green</span>) to produce outputs
+       (<span style="color:var(--out-line);font-weight:700">blue</span>).</p>
+  </header>
+
+  <div class="tabs" id="tabs"></div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2 id="typeName"></h2>
+      <span class="sig" id="typeSig"></span>
+    </div>
+    <p class="type-desc" id="typeDesc"></p>
+
+    <div class="ex-row" id="exRow">
+      <span class="lbl">Example:</span>
+    </div>
+
+    <div class="diagram-box"><div id="svgHost"></div></div>
+    <div class="legend">
+      <span><span class="chip in"></span> input x<sub>t</sub></span>
+      <span><span class="chip hid"></span> hidden state h<sub>t</sub> (memory)</span>
+      <span><span class="chip out"></span> output y<sub>t</sub></span>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="btnReset">⟲ Reset</button>
+      <button class="btn" id="btnPrev">‹ Prev</button>
+      <button class="btn primary" id="btnNext">Next ›</button>
+      <input type="range" id="stepSlider" min="0" value="0">
+      <span class="step-count" id="stepCount"></span>
+    </div>
+
+    <div class="story" id="story"></div>
+    <div class="memory" id="memory"></div>
+    <div class="ex-note" id="exNote"></div>
+
+    <div class="facts">
+      <div class="fact-card">
+        <h3>From the definition</h3>
+        <ul id="factList"></ul>
+      </div>
+      <div class="fact-card idea">
+        <h3>💡 Intuition</h3>
+        <p id="ideaText"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="compare">
+    <h2>The four types at a glance</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Type</th><th>Input</th><th>Output</th><th>Aligned in time?</th><th>Typical tasks</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Many to one</b><br><span class="mono">(x₁…x_T) → y</span></td>
+            <td>A whole sequence (words, frames, audio)</td>
+            <td>One single element</td>
+            <td>— (one output for the entire sequence)</td>
+            <td>Sentiment analysis, action recognition</td>
+          </tr>
+          <tr>
+            <td><b>One to many</b><br><span class="mono">x → (y₁…y_T)</span></td>
+            <td>One element (an image, encoded once into a static embedding)</td>
+            <td>A sequence (words of a caption)</td>
+            <td>— (one input feeds every output step)</td>
+            <td>Image captioning</td>
+          </tr>
+          <tr>
+            <td><b>Many to many</b> (seq2seq)<br><span class="mono">(x₁…x_T) → (y₁…y_T′)</span></td>
+            <td>A sequence in language 1</td>
+            <td>A sequence in language 2 — <b>lengths can differ</b></td>
+            <td><b>No</b> — encoder reads everything first, then the decoder writes</td>
+            <td>Machine translation</td>
+          </tr>
+          <tr>
+            <td><b>Many to many</b> (aligned)<br><span class="mono">(x₁…x_T) → (y₁…y_T)</span></td>
+            <td>A sequence (e.g. video frames, words)</td>
+            <td>One output <b>per input element</b>, same length</td>
+            <td><b>Yes</b> — x_t and y_t correspond one-to-one</td>
+            <td>Frame-level video classification, Named Entity Recognition</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Single-file teaching widget · colors follow the lecture-slide convention (pink inputs, green hidden states, blue outputs)</footer>
+</div>
+
+<script>
+"use strict";
+
+/* ============================== CONTENT ================================ */
+
+const TYPES = [
+  {
+    id: "many2one",
+    name: "Many to one",
+    sig: "(x₁, x₂, …, x_T) → y",
+    desc: "A whole sequence goes in; a single element comes out. The model reads every input, " +
+          "accumulating what it has seen in its hidden state, and only at the end produces one output " +
+          "that summarizes the entire sequence.",
+    facts: [
+      "<b>Examples:</b> action recognition, sentiment analysis",
+      "<b>Input:</b> a sequence (x₁, x₂, …, x_T) — video frames, text, or audio",
+      "<b>Output:</b> a single element y (e.g. the sentiment of the whole sequence)"
+    ],
+    idea: "Like reading an entire movie review before deciding on a star rating — you cannot judge " +
+          "fairly after one word (“not…”), so the verdict comes only after the last word is read.",
+    examples: [
+      { label: "Sentiment 😊", inputs: ["the","movie","was","absolutely","wonderful"], output: "😊 Positive" },
+      { label: "Sentiment 😠", inputs: ["the","food","was","cold","and","terrible"], output: "😠 Negative" },
+      { label: "Action recognition 🏀", inputs: ["🧍","🏃","⛹️","🏀","🙌"], output: "Playing basketball",
+        inputName: "frame" }
+    ]
+  },
+  {
+    id: "one2many",
+    name: "One to many",
+    sig: "x → (y₁, y₂, …, y_T)",
+    desc: "A single input is encoded once into a static feature representation (embedding), and the model " +
+          "then unrolls a whole sequence from it, emitting one element per step. Each generated element is " +
+          "fed back so the next word knows what has already been said.",
+    facts: [
+      "<b>Example:</b> image captioning",
+      "<b>Input:</b> a single image x, encoded into a static embedding",
+      "<b>Output:</b> a sequence (y₁, y₂, …, y_T) of words that describe the image"
+    ],
+    idea: "Like glancing at a photo once and then describing it out loud, word by word — the picture " +
+          "never changes, but each new word depends on the words you already said.",
+    examples: [
+      { label: "Boy playing 🏀", image: "👦🏀", outputs: ["a","young","boy","plays","basketball"] },
+      { label: "Dogs in grass 🐕", image: "🐕🐕🌿", outputs: ["two","dogs","play","in","the","grass"] },
+      { label: "Girl swinging 👧", image: "👧🌳", outputs: ["a","girl","is","swinging"] }
+    ]
+  },
+  {
+    id: "seq2seq",
+    name: "Many to many (seq2seq)",
+    sig: "(x₁…x_T) → (y₁…y_T′)",
+    desc: "Two sequences that do NOT correspond in time. An encoder reads the entire source sequence and " +
+          "compresses it into a hidden state; a decoder then generates the target sequence from that summary. " +
+          "Output length and word order can differ completely from the input.",
+    facts: [
+      "<b>Example:</b> machine translation using seq2seq",
+      "<b>Input:</b> a sequence of words (x₁ … x_T) in language 1",
+      "<b>Output:</b> a sequence of words (y₁ … y_T′) in language 2",
+      "The sequences <b>do not</b> correspond temporally — order and length may change"
+    ],
+    idea: "Like a human interpreter: first listen to the full sentence, then speak the translation. " +
+          "“the red car” becomes “el auto rojo” — 3 words map to 3 words but in a different order, and " +
+          "“thank you very much” shrinks to “muchas gracias”.",
+    examples: [
+      { label: "hello world → French", inputs: ["hello","world","."], outputs: ["bonjour","le","monde","."] },
+      { label: "Word reordering → Spanish", inputs: ["the","red","car"], outputs: ["el","auto","rojo"] },
+      { label: "Different lengths → Spanish", inputs: ["thank","you","very","much"], outputs: ["muchas","gracias"] }
+    ]
+  },
+  {
+    id: "aligned",
+    name: "Many to many (aligned)",
+    sig: "(x₁…x_T) → (y₁…y_T)",
+    desc: "One output per input element, in lockstep: as each element arrives, the model immediately emits " +
+          "its label. Input and output have the same length and correspond position by position.",
+    facts: [
+      "<b>Examples:</b> frame-level video classification, Named Entity Recognition (NER)",
+      "<b>Input:</b> a sequence (x₁, x₂, …, x_T), e.g. video frames or words",
+      "<b>Output:</b> a sequence of classes (y₁, y₂, …, y_T)",
+      "Each input has a corresponding output — they are <b>aligned</b>"
+    ],
+    idea: "Like a sports commentator labeling the action at every instant — “standing… walking… running!” — " +
+          "one verdict per frame, produced as the frame arrives, not after the whole video.",
+    examples: [
+      { label: "Video frames 🎞️", inputs: ["🧍","🚶","🚶","🏃","🏃","🧍"],
+        outputs: ["Stand","Walk","Walk","Run","Run","Stand"], inputName: "frame" },
+      { label: "NER 🏷️", inputs: ["Barack","Obama","visited","Quito","yesterday"],
+        outputs: ["PER","PER","O","LOC","O"],
+        note: "Label key: <b>PER</b> = person · <b>LOC</b> = location · <b>O</b> = “Outside” — a token that is " +
+              "not part of any named entity. Since most words in ordinary text are not entities, O is by far " +
+              "the most frequent label in real corpora." }
+    ]
+  }
+];
+
+/* =========================== EVENT TIMELINES =========================== */
+/* Each example becomes a list of events; state.step = how many are applied. */
+
+function buildEvents(typeId, ex){
+  const ev = [];
+  const q = s => `“${s}”`;
+  if (typeId === "many2one"){
+    const noun = ex.inputName || "word";
+    ex.inputs.forEach((tok, i) => ev.push({
+      kind:"read", col:i,
+      desc:`<b>Step ${i+1}:</b> read ${noun} ${q(tok)}. The hidden state h<sub>${i+1}</sub> updates: ` +
+           `h<sub>${i+1}</sub> = f(h<sub>${i}</sub>, x<sub>${i+1}</sub>) — it now remembers everything so far. Still no output.`
+    }));
+    ev.push({ kind:"emit", col:ex.inputs.length-1,
+      desc:`<b>Final step:</b> the last hidden state h<sub>${ex.inputs.length}</sub> summarizes the ` +
+           `<b>whole</b> sequence, so the model can now emit its single output: <b>${ex.output}</b>.` });
+  }
+  else if (typeId === "one2many"){
+    ev.push({ kind:"encode", col:0,
+      desc:`<b>Step 0:</b> the image is encoded <b>once</b> into a static embedding — a fixed vector ` +
+           `summary of the picture. This is the only input the model will ever see.` });
+    ex.outputs.forEach((w, i) => ev.push({
+      kind:"emit", col:i,
+      desc: i === 0
+        ? `<b>Step 1:</b> conditioned on the image embedding, the decoder emits the first word: ${q(w)}.`
+        : `<b>Step ${i+1}:</b> the decoder emits ${q(w)}, conditioned on the image summary <b>and</b> ` +
+          `the previous word ${q(ex.outputs[i-1])} (fed back, dashed arrow).`
+    }));
+  }
+  else if (typeId === "seq2seq"){
+    ex.inputs.forEach((tok, i) => ev.push({
+      kind:"read", col:i,
+      desc:`<b>Encoder step ${i+1}:</b> read ${q(tok)} and update the hidden state. No output yet — ` +
+           `the decoder cannot start until the full source sentence is read.`
+    }));
+    ev.push({ kind:"handoff",
+      desc:`<b>Hand-off:</b> the encoder's final hidden state — a compressed summary of the entire ` +
+           `source sentence — is passed to the decoder as its starting point.` });
+    const dec = ex.outputs.concat(["&lt;eos&gt;"]);
+    dec.forEach((w, i) => ev.push({
+      kind:"emitDec", col:i,
+      desc: i === dec.length-1
+        ? `<b>Decoder step ${i+1}:</b> the decoder emits <b>&lt;eos&gt;</b> (end of sequence) — it decides ` +
+          `by itself when to stop, which is why output length can differ from input length.`
+        : `<b>Decoder step ${i+1}:</b> fed ${i===0 ? "<b>&lt;bos&gt;</b> (begin token)" : q(ex.outputs[i-1]) + " (its own previous output)"}, ` +
+          `the decoder emits ${q(ex.outputs[i])}.`
+    }));
+  }
+  else { // aligned
+    const noun = ex.inputName || "word";
+    ex.inputs.forEach((tok, i) => ev.push({
+      kind:"readEmit", col:i,
+      desc:`<b>Step ${i+1}:</b> read ${noun} ${q(tok)} <b>and immediately</b> emit its label ` +
+           `${q(ex.outputs[i])}. Input and output advance together — they are aligned.`
+    }));
+  }
+  return ev;
+}
+
+/* ============================ SVG RENDERING ============================ */
+
+const GEO = { colW: 96, cellW: 62, cellH: 36, outY: 46, hidY: 138, inY: 230, margin: 34, midGap: 84 };
+
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+function cellState(idx, activeIdx, doneUpTo){
+  if (idx === activeIdx) return "active";
+  if (idx <= doneUpTo)   return "done";
+  return "future";
+}
+
+/* Draw one block (rect) with its state */
+function block(x, y, kind, state){
+  const fills = { in:["var(--in-fill)","var(--in-line)"], hid:["var(--hid-fill)","var(--hid-line)"], out:["var(--out-fill)","var(--out-line)"] };
+  const [fill, line] = fills[kind];
+  const op   = state === "future" ? 0.28 : 1;
+  const sw   = state === "active" ? 3 : 1.6;
+  const glow = state === "active" ? `<rect x="${x-4}" y="${y-4}" width="${GEO.cellW+8}" height="${GEO.cellH+8}" rx="9" fill="none" stroke="${line}" stroke-opacity="0.3" stroke-width="6"/>` : "";
+  return `${glow}<rect x="${x}" y="${y}" width="${GEO.cellW}" height="${GEO.cellH}" rx="7"
+          fill="${fill}" stroke="${line}" stroke-width="${sw}" opacity="${op}"/>`;
+}
+
+function arrow(x1,y1,x2,y2,color,marker,visible,dashed){
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2"
+          ${dashed ? 'stroke-dasharray="5 4"' : ""} marker-end="url(#${marker})" opacity="${visible ? 0.9 : 0.18}"/>`;
+}
+
+function tokenText(x, y, txt, state, anchor="middle", bold=false, color="var(--text)"){
+  const op = state === "future" ? 0.3 : 1;
+  const size = /\p{Extended_Pictographic}/u.test(txt) ? 19 : 13;   // emoji tokens render bigger
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="${size}" ${bold?'font-weight="700"':""}
+          fill="${color}" opacity="${op}" font-family="var(--font)">${esc(txt)}</text>`;
+}
+
+const DEFS = `
+<defs>
+  <marker id="mIn"  viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#d9777f"/></marker>
+  <marker id="mHid" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#4e9a63"/></marker>
+  <marker id="mOut" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#4f7df3"/></marker>
+</defs>`;
+
+/*
+ Build column descriptors for the current type+example, then paint them
+ according to how many events have been applied (state.step).
+*/
+function drawDiagram(type, ex, events, step){
+  const g = GEO;
+  const active = step - 1;                 // index of the event being highlighted
+  let cols = [], midGapAfter = -1, decInputs = null;
+
+  if (type.id === "many2one"){
+    cols = ex.inputs.map((tok,i) => ({ input:tok, output: i===ex.inputs.length-1 ? ex.output : null }));
+  } else if (type.id === "one2many"){
+    cols = ex.outputs.map((w,i) => ({ input: i===0 ? ex.image : null, output:w }));
+  } else if (type.id === "seq2seq"){
+    const dec = ex.outputs.concat(["<eos>"]);
+    decInputs = ["<bos>"].concat(ex.outputs);
+    cols = ex.inputs.map(tok => ({ input:tok, output:null, enc:true }))
+      .concat(dec.map((w,i) => ({ input: decInputs[i], output:w, dec:true, decIdx:i })));
+    midGapAfter = ex.inputs.length - 1;
+  } else {
+    cols = ex.inputs.map((tok,i) => ({ input:tok, output:ex.outputs[i] }));
+  }
+
+  /* per-column progress: which event index touches this column */
+  function colEvent(i, c){
+    if (type.id === "many2one")  return c.output ? null : i;              // read events 0..T-1; emit handled separately
+    if (type.id === "one2many")  return i + 1;                            // encode is event 0; emits are 1..T
+    if (type.id === "seq2seq")   return c.enc ? i : ex.inputs.length + 1 + c.decIdx;
+    return i;                                                             // aligned
+  }
+
+  /* x position of column i */
+  const xOf = i => g.margin + i * g.colW + (midGapAfter >= 0 && i > midGapAfter ? g.midGap : 0);
+  const totalW = g.margin*2 + cols.length * g.colW + (midGapAfter >= 0 ? g.midGap : 0);
+  const H = midGapAfter >= 0 ? 322 : 300;
+  const cx = i => xOf(i) + g.colW/2;
+  const bx = i => xOf(i) + (g.colW - g.cellW)/2;
+
+  let s = "";
+
+  cols.forEach((c, i) => {
+    /* determine states of the three cells in this column */
+    let hidSt, inSt, outSt;
+    if (type.id === "many2one"){
+      const readEv = i;                          // event index that reads this column
+      hidSt = inSt = cellState(readEv, active, step-1);
+      outSt = c.output ? cellState(ex.inputs.length, active, step-1) : null;
+      if (readEv < step && active !== readEv){ hidSt = inSt = "done"; }
+      if (active === ex.inputs.length && c.output){ hidSt = "active"; }   // final hidden re-highlighted at emit
+    } else if (type.id === "one2many"){
+      const emitEv = i + 1;
+      hidSt = outSt = cellState(emitEv, active, step-1);
+      inSt = c.input ? cellState(0, active, step-1) : null;
+    } else if (type.id === "seq2seq"){
+      const evI = colEvent(i, c);
+      const st = cellState(evI, active, step-1);
+      hidSt = st; inSt = st; outSt = c.dec ? st : null;
+      if (c.dec) inSt = st;                       // decoder input token appears with its step
+    } else {
+      const st = cellState(i, active, step-1);
+      hidSt = inSt = outSt = st;
+    }
+
+    const X = bx(i), C = cx(i);
+
+    /* recurrent arrow from previous hidden */
+    if (i > 0 && !(midGapAfter >= 0 && i === midGapAfter + 1)){
+      const on = hidSt !== "future";
+      s += arrow(bx(i-1)+g.cellW, g.hidY+g.cellH/2, X-2, g.hidY+g.cellH/2, "#4e9a63", "mHid", on, false);
+    }
+
+    /* input cell + arrow + token */
+    if (c.input){
+      s += arrow(C, g.inY-2, C, g.hidY+g.cellH+4, "#d9777f", "mIn", inSt !== "future", false);
+      s += block(X, g.inY, "in", inSt);
+      s += tokenText(C, g.inY + g.cellH + 22, c.input, inSt, "middle",
+                     false, c.dec ? "var(--text-dim)" : "var(--text)");
+      s += tokenText(C, g.inY + 24, "x", inSt, "middle", false, "#b05560");
+    }
+
+    /* hidden cell */
+    s += block(X, g.hidY, "hid", hidSt);
+    s += tokenText(C, g.hidY + 24, "h", hidSt, "middle", false, "#3e7d52");
+
+    /* output cell + arrow + token */
+    if (c.output){
+      s += arrow(C, g.hidY-2, C, g.outY+g.cellH+4, "#4f7df3", "mOut", outSt !== "future", false);
+      s += block(X, g.outY, "out", outSt);
+      s += tokenText(C, g.outY + 24, "y", outSt, "middle", false, "#2f5cb5");
+      s += tokenText(C, g.outY - 10, c.output, outSt, "middle", true, "#2f5cb5");
+    }
+
+    /* decoder feedback: dashed arrow from previous output to this input */
+    if ((type.id === "seq2seq" && c.dec && c.decIdx > 0) ){
+      const on = inSt !== "future";
+      s += `<path d="M ${bx(i-1)+g.cellW-8} ${g.outY+g.cellH+2} C ${cx(i-1)+30} ${g.inY+30}, ${C-40} ${g.inY+g.cellH+6}, ${C-6} ${g.inY+g.cellH-6}"
+             fill="none" stroke="#8aa5d8" stroke-width="1.6" stroke-dasharray="5 4" opacity="${on?0.55:0.12}" marker-end="url(#mOut)"/>`;
+    }
+    if (type.id === "one2many" && i > 0){
+      const on = hidSt !== "future";
+      s += `<path d="M ${bx(i-1)+g.cellW-8} ${g.outY+g.cellH+2} C ${cx(i-1)+30} ${g.inY-16}, ${C-40} ${g.inY-30}, ${C-4} ${g.hidY+g.cellH+10}"
+             fill="none" stroke="#8aa5d8" stroke-width="1.6" stroke-dasharray="5 4" opacity="${on?0.55:0.12}" marker-end="url(#mHid)"/>`;
+    }
+  });
+
+  /* encoder → decoder hand-off */
+  if (midGapAfter >= 0){
+    const x1 = bx(midGapAfter) + g.cellW, x2 = bx(midGapAfter+1) - 4;
+    const handEv = ex.inputs.length;                       // handoff event index
+    const st = cellState(handEv, active, step-1);
+    const on = st !== "future";
+    const y = g.hidY + g.cellH/2;
+    s += `<line x1="${x1+2}" y1="${y}" x2="${x2}" y2="${y}" stroke="#4e9a63" stroke-width="${st==="active"?3.4:2.2}"
+          marker-end="url(#mHid)" opacity="${on?1:0.18}"/>`;
+    s += `<text x="${(x1+x2)/2}" y="${y-12}" text-anchor="middle" font-size="11.5" fill="#3e7d52"
+          opacity="${on?1:0.35}" font-family="var(--font)" font-weight="${st==="active"?"700":"400"}">hidden</text>`;
+    s += `<text x="${(x1+x2)/2}" y="${y+22}" text-anchor="middle" font-size="11.5" fill="#3e7d52"
+          opacity="${on?1:0.35}" font-family="var(--font)" font-weight="${st==="active"?"700":"400"}">state</text>`;
+    /* section labels */
+    s += `<text x="${g.margin + (midGapAfter+1)*g.colW/2}" y="${H-6}" text-anchor="middle" font-size="12"
+          fill="var(--text-dim)" font-family="var(--font)" font-weight="700">ENCODER</text>`;
+    const decStart = xOf(midGapAfter+1), decEnd = xOf(cols.length-1) + g.colW;
+    s += `<text x="${(decStart+decEnd)/2}" y="${H-6}" text-anchor="middle" font-size="12"
+          fill="var(--text-dim)" font-family="var(--font)" font-weight="700">DECODER</text>`;
+  }
+
+  return `<svg viewBox="0 0 ${totalW} ${H}" width="${totalW}" height="${H}" role="img"
+          aria-label="Diagram of ${esc(type.name)}">${DEFS}${s}</svg>`;
+}
+
+/* ============================== APP STATE ============================== */
+
+const state = { type: 0, ex: 0, step: 0 };
+
+const $ = id => document.getElementById(id);
+
+function currentEvents(){
+  const t = TYPES[state.type];
+  return buildEvents(t.id, t.examples[state.ex]);
+}
+
+function memoryLine(type, ex, step){
+  if (step === 0) return "h₀ = 0  (empty memory — nothing processed yet)";
+  if (type.id === "many2one"){
+    const n = Math.min(step, ex.inputs.length);
+    const seen = ex.inputs.slice(0, n).join(" · ");
+    return step > ex.inputs.length
+      ? `h_${n} remembers: <b>${esc(seen)}</b>  →  output: <b>${esc(ex.output)}</b>`
+      : `h_${n} remembers: <b>${esc(seen)}</b>  (no output yet)`;
+  }
+  if (type.id === "one2many"){
+    const said = ex.outputs.slice(0, Math.max(0, step-1)).join(" ");
+    return step === 1
+      ? `image encoded → embedding v = CNN(${esc(ex.image)})  ·  caption so far: (empty)`
+      : `caption so far: <b>${esc(said)}</b>`;
+  }
+  if (type.id === "seq2seq"){
+    const Te = ex.inputs.length;
+    if (step <= Te) return `encoder has read: <b>${esc(ex.inputs.slice(0,step).join(" "))}</b>  ·  translation: (not started)`;
+    if (step === Te+1) return `full source summarized in one hidden state → handed to decoder`;
+    const said = ex.outputs.concat(["<eos>"]).slice(0, step - Te - 1).join(" ");
+    return `translation so far: <b>${esc(said)}</b>`;
+  }
+  const n = step;
+  const pairs = ex.inputs.slice(0,n).map((x,i)=>`${x}→${ex.outputs[i]}`).join("  ");
+  return `aligned pairs so far: <b>${esc(pairs)}</b>`;
+}
+
+function render(){
+  const type = TYPES[state.type];
+  const ex = type.examples[state.ex];
+  const events = buildEvents(type.id, ex);
+  state.step = Math.max(0, Math.min(state.step, events.length));
+
+  /* tabs */
+  document.querySelectorAll(".tab").forEach((b,i)=> b.classList.toggle("active", i===state.type));
+
+  /* header texts */
+  $("typeName").textContent = type.name;
+  $("typeSig").textContent = type.sig;
+  $("typeDesc").textContent = type.desc;
+  $("factList").innerHTML = type.facts.map(f=>`<li>${f}</li>`).join("");
+  $("ideaText").innerHTML = type.idea;
+
+  /* example buttons */
+  const exRow = $("exRow");
+  exRow.querySelectorAll(".ex-btn").forEach(b=>b.remove());
+  type.examples.forEach((e,i)=>{
+    const b = document.createElement("button");
+    b.className = "ex-btn" + (i===state.ex ? " active" : "");
+    b.textContent = e.label;
+    b.onclick = () => { state.ex = i; state.step = 0; render(); };
+    exRow.appendChild(b);
+  });
+
+  /* diagram */
+  $("svgHost").innerHTML = drawDiagram(type, ex, events, state.step);
+
+  /* controls */
+  const slider = $("stepSlider");
+  slider.max = events.length;
+  slider.value = state.step;
+  $("stepCount").textContent = `step ${state.step} / ${events.length}`;
+  $("btnPrev").disabled = state.step === 0;
+  $("btnNext").disabled = state.step === events.length;
+
+  /* narration */
+  $("story").innerHTML = state.step === 0
+    ? `Press <b>Next ›</b> to process the sequence one step at a time. Faded blocks have not happened yet.`
+    : events[state.step-1].desc;
+  $("memory").innerHTML = memoryLine(type, ex, state.step);
+
+  /* optional per-example footnote (e.g. NER label key) */
+  const noteEl = $("exNote");
+  noteEl.style.display = ex.note ? "" : "none";
+  noteEl.innerHTML = ex.note || "";
+}
+
+/* ------------------------------ wiring ------------------------------- */
+const tabsHost = $("tabs");
+TYPES.forEach((t,i)=>{
+  const b = document.createElement("button");
+  b.className = "tab";
+  b.innerHTML = `<div class="t-name">${t.name}</div><div class="t-sig">${t.sig}</div>`;
+  b.onclick = () => { state.type = i; state.ex = 0; state.step = 0; render(); };
+  tabsHost.appendChild(b);
+});
+
+$("btnNext").onclick  = () => { state.step++; render(); };
+$("btnPrev").onclick  = () => { state.step--; render(); };
+$("btnReset").onclick = () => { state.step = 0; render(); };
+$("stepSlider").oninput = e => { state.step = +e.target.value; render(); };
+
+render();
+</script>
+
+</body>
+</html>
