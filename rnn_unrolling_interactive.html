@@ -322,8 +322,8 @@ function paramLine(step, T){
   const unrolled = Math.min(Math.max(step, 0), T);
   const n = step === 0 ? "— (loop not yet unrolled)" : `${unrolled} of ${T}`;
   return `Time steps unrolled: ${n} &nbsp;·&nbsp; distinct parameter sets: <b>2, always</b> ` +
-         `(<b><span class="eq"><var>θ</var><sub><var>f</var></sub></span></b> shared by all cells, ` +
-         `<b><span class="eq"><var>θ</var><sub><var>g</var></sub></span></b> shared by all outputs)`;
+         `(<b><span class="eq"><var>W</var><sub><var>f</var></sub></span></b> shared by all cells, ` +
+         `<b><span class="eq"><var>W</var><sub><var>g</var></sub></span></b> shared by all outputs)`;
 }
 
 /* ============================ SVG RENDERING ============================= */
@@ -376,7 +376,7 @@ function vArrow(x, y1, y2, op){
 
 function gLabel(x, y, op, share){
   const ring = share ? `<circle cx="${x}" cy="${y-5}" r="11" fill="#fdeeda" stroke="var(--fg-col)" stroke-width="1.3"/>` : '';
-  return `<g class="nd k-g" opacity="${op}">${ring}${mtext(x, y, 'g', null, 15, share ? 'var(--fg-col)' : '#41506a')}</g>`;
+  return `<g class="nd k-g" opacity="${op}">${ring}${mtext(x, y, ' ', null, 15, share ? 'var(--fg-col)' : '#41506a')}</g>`;
 }
 
 function drawSVG(step, T){
@@ -431,7 +431,7 @@ function drawSVG(step, T){
           stroke="#74a95f" stroke-width="1.9" marker-end="url(#mG)"/>
     ${mtext(colX(1) - g.cellW/2 - 26, hMidY - 11, 'h', '0', 14, '#3e6e2e')}
     <text x="${colX(1) - g.cellW/2 - 26}" y="${hMidY + 20}" text-anchor="middle"
-          font-family="var(--font)" font-size="10.5" fill="var(--text-dim)">= 0</text></g>`;
+          font-family="var(--font)" font-size="10.5" fill="var(--text-dim)"> </text></g>`;
 
   for (let t = 1; t <= T; t++){
     const done = t <= unrolled;
