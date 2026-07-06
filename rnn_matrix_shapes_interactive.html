@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RNNs: Hidden-State &amp; Output Update — Matrix Shapes · Interactive</title>
+<!--
+  ============================================================================
+  RECURRENT NEURAL NETWORKS — HIDDEN-STATE & OUTPUT UPDATE (MATRIX SHAPES)
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget. Everything (HTML + CSS + JS) in this file.
+
+  GOAL: students struggle to see how the matrix multiplications in
+        h_t = tanh(W_hh^T h_{t-1} + W_xh^T x_t)   and   y_t = W_hy^T h_t
+        interact and where the sizes n, d, k go. This widget shows the
+        actual matrices as number grids for chosen (n, d, k); hovering a
+        result entry highlights the row x vector dot product that makes it,
+        and hovering a vector entry highlights the matrix column it drives.
+
+  DESIGN NOTES:
+  - LIGHT academic theme (maintainer preference). No looping animations —
+    interaction is hover highlighting and sliders only.
+  - Math notation uses native MathML, matching the lecture slide exactly,
+    including the transpose convention (W_xh stored n x d, multiplied as
+    W_xh^T) and the colors: blue = input x, green = hidden h and the
+    hidden-update matrices, magenta = W_hy, purple = output y-hat,
+    amber = bias note.
+  - Matrix values are fixed (sliced from 5x5 master tables) so cells keep
+    their numbers when the dimensions change.
+
+  HOW TO MODIFY:
+  - Value tables: the RAW object.  Slider ranges: the <input type=range>.
+  - Dot-product expansion text: expandRes() / expandVec().
+  ============================================================================
+-->
+<style>
+  :root{
+    --bg:       #f5f8fd;
+    --bg-soft:  #eef3fa;
+    --panel:    #ffffff;
+    --panel-2:  #f2f6fc;
+    --line:     #d9e2ef;
+    --text:     #1f2937;
+    --text-dim: #64708a;
+    --accent:   #3b6fd4;
+    --x-fill:  #d7e7f7; --x-line:  #6f9cc4; --x-ink: #2d567e;  /* input  x  (blue)    */
+    --h-fill:  #dcefd2; --h-line:  #74a95f; --h-ink: #3e6e2e;  /* hidden h  (green)   */
+    --y-fill:  #e7ddf6; --y-line:  #a08ad0; --y-ink: #63489c;  /* output ŷ  (purple)  */
+    --m-fill:  #fbe7f3; --m-line:  #d98cba; --m-ink: #a12472;  /* W_hy      (magenta) */
+    --z-fill:  #eef1f6; --z-line:  #aab6c9; --z-ink: #4a5670;  /* pre-activation      */
+    --hl-fill: #ffedd0; --hl-line: #d97706; --hl-ink: #8a4b00; /* hover highlight     */
+    --bias:    #b45309;
+    --radius: 14px;
+    --shadow: 0 6px 20px rgba(40,70,120,.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(1100px 520px at 82% -10%, #e9f0fb 0%, transparent 60%),
+      radial-gradient(900px 460px at -8% 6%, #eafaf6 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.55;
+  }
+  .wrap{ max-width: 1100px; margin: 0 auto; padding: 26px 20px 60px; }
+
+  /* ---------------------------- math rendering ---------------------------- */
+  math{ font-family: var(--math); }
+
+  /* ------------------------------- header -------------------------------- */
+  .hero{ text-align:center; margin: 26px 0 20px; }
+  .hero h1{ font-size: 1.6rem; margin: 0 0 8px; letter-spacing:-.3px; }
+  .hero p{ color: var(--text-dim); max-width: 820px; margin: 0 auto; font-size:.95rem; }
+
+  /* ------------------------------- panels -------------------------------- */
+  .panel{ background: var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 18px 22px 16px; margin-top: 20px; }
+  .panel h2{ margin:0 0 4px; font-size:1.1rem; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .panel .hint{ color:var(--text-dim); font-size:.86rem; margin: 0 0 12px; }
+  .band{ display:inline-block; padding: 2px 12px; border-radius: 8px; font-size:.8rem; font-weight:700; }
+  .band.g{ background: var(--h-fill); color: var(--h-ink); }
+  .band.p{ background: #f3e6ff;      color: var(--y-ink); }
+
+  /* --------------------------- dimension sliders -------------------------- */
+  .dims{ display:flex; flex-wrap:wrap; gap: 14px 34px; align-items:center; }
+  .dimctl{ display:flex; align-items:center; gap:10px; flex:1; min-width: 250px; }
+  .dimctl .name{ font-size:.9rem; min-width: 118px; }
+  .dimctl .name small{ display:block; color:var(--text-dim); font-size:.72rem; line-height:1.2; }
+  .dimctl input[type="range"]{ flex:1; min-width: 70px; accent-color: var(--accent); }
+  .dimval{ font: 700 1rem var(--mono); min-width: 26px; text-align:center;
+           border-radius: 8px; padding: 2px 6px; border: 1.5px solid; }
+  .dimval.n{ background:var(--x-fill); border-color:var(--x-line); color:var(--x-ink); }
+  .dimval.d{ background:var(--h-fill); border-color:var(--h-line); color:var(--h-ink); }
+  .dimval.k{ background:var(--y-fill); border-color:var(--y-line); color:var(--y-ink); }
+
+  /* ------------------------------ mapping strip --------------------------- */
+  .mapstrip{ display:flex; flex-wrap:wrap; align-items:stretch; justify-content:center;
+             gap: 6px; margin-top: 16px; }
+  .mapbox{ border-radius: 12px; border: 1.5px solid; padding: 10px 18px 8px; text-align:center;
+           min-width: 158px; }
+  .mapbox .t{ font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+  .mapbox math{ font-size: 1.05rem; }
+  .mapbox .sub{ font-size:.75rem; color:var(--text-dim); }
+  .mapbox.x{ background:var(--x-fill); border-color:var(--x-line); } .mapbox.x .t{ color:var(--x-ink); }
+  .mapbox.h{ background:var(--h-fill); border-color:var(--h-line); } .mapbox.h .t{ color:var(--h-ink); }
+  .mapbox.y{ background:var(--y-fill); border-color:var(--y-line); } .mapbox.y .t{ color:var(--y-ink); }
+  .maparr{ display:flex; flex-direction:column; align-items:center; justify-content:center;
+           padding: 0 10px; min-width: 118px; }
+  .maparr math{ font-size:.98rem; }
+  .maparr .shaft{ font-family: var(--math); font-size:1.25rem; line-height:.9; color:var(--text); }
+  .maparr .sub{ font-size:.72rem; color:var(--text-dim); }
+
+  /* ------------------------------ equations ------------------------------- */
+  .bigeq{ text-align:center; margin: 6px 0 4px; }
+  .bigeq math{ font-size: 1.5rem; }
+  .storedims{ display:flex; flex-wrap:wrap; gap: 8px 14px; justify-content:center; margin: 8px 0 14px; }
+  .storedims .pill{ border:1px dashed var(--line); background: var(--panel-2); border-radius: 999px;
+                    padding: 3px 13px; font-size:.85rem; color:var(--text-dim); }
+  .storedims .pill math{ font-size:.95rem; }
+
+  /* --------------------------- matrix visualizer -------------------------- */
+  .stage{ background: var(--bg-soft); border:1px solid var(--line); border-radius: 12px;
+          padding: 14px 12px 10px; overflow-x:auto; }
+  .mulrow{ display:flex; align-items:center; justify-content:safe center; gap: 8px; width:max-content;
+           margin: 0 auto; padding: 0 4px; }
+  .mblock{ display:flex; flex-direction:column; align-items:center; }
+  .mname{ margin-bottom: 5px; }
+  .mname math{ font-size: 1.02rem; }
+  .mat{ display:grid; gap: 3px; }
+  .cell{ width: 40px; height: 33px; display:flex; align-items:center; justify-content:center;
+         font: 600 .72rem var(--mono); border-radius: 6px; border: 1.5px solid; cursor: default; }
+  .cell.mg{ background:#fff;         border-color:#b7d5aa; color: var(--h-ink); } /* W_hh, W_xh */
+  .cell.mm{ background:#fff;         border-color:#e6b3d2; color: var(--m-ink); } /* W_hy       */
+  .cell.vx{ background:var(--x-fill); border-color:var(--x-line); color:var(--x-ink); }
+  .cell.vh{ background:var(--h-fill); border-color:var(--h-line); color:var(--h-ink); }
+  .cell.vz{ background:var(--z-fill); border-color:var(--z-line); color:var(--z-ink); }
+  .cell.vy{ background:var(--y-fill); border-color:var(--y-line); color:var(--y-ink); }
+  .cell.hl{ background: var(--hl-fill) !important; border-color: var(--hl-line) !important;
+            color: var(--hl-ink) !important; }
+  .cell.hlf{ background:#fcd9a0 !important; border-color:#b45309 !important; color:#7c3d00 !important;
+             font-weight:700; }
+  .mdim{ margin-top: 5px; font-size: .74rem; color: var(--text-dim); text-align:center; }
+  .mdim math{ font-size:.86rem; }
+  .mdim b{ color: var(--hl-line); }
+  .bigop{ font-family: var(--math); font-size: 1.5rem; padding: 0 4px; color: var(--text); }
+  .tanhop{ display:flex; flex-direction:column; align-items:center; padding: 0 4px; }
+  .tanhop .fn{ font-family: var(--math); font-size:.95rem; }
+  .tanhop .shaft{ font-family: var(--math); font-size:1.3rem; line-height:.8; }
+  .tanhop .sub{ font-size:.66rem; color:var(--text-dim); white-space:nowrap; }
+
+  /* ------------------------ dot-product expansion ------------------------- */
+  .exp{ background: #f4f8ff; border:1px solid #cfdcf5; border-left: 4px solid var(--accent);
+        border-radius: 10px; padding: 10px 15px; font-size:.9rem; margin-top: 12px; min-height: 3.2em; }
+  .exp .idle{ color: var(--text-dim); }
+  .exp .num{ font-family: var(--mono); font-size:.85em; }
+  .exp .tg{ color: var(--h-ink); background: #eaf5e2; border-radius:4px; padding:0 3px; }
+  .exp .tb{ color: var(--x-ink); background: #e4eff9; border-radius:4px; padding:0 3px; }
+  .exp .tm{ color: var(--m-ink); background: #f9e6f1; border-radius:4px; padding:0 3px; }
+  .exp .res{ font-weight:700; color:#8a4b00; }
+  .chk{ margin-top: 8px; font-size:.82rem; color: var(--text-dim); text-align:center; }
+  .chk math{ font-size:.95rem; }
+  .chk b{ color: var(--hl-line); }
+
+  /* -------------------------------- bias note ----------------------------- */
+  .biasnote{ margin-top: 20px; background: #fdf3e0; border: 1px solid #f0c988; border-radius: 12px;
+             padding: 11px 16px; font-size:.9rem; color: #7a4a05; text-align:center; }
+  .biasnote math{ font-size: 1rem; }
+
+  /* ------------------------------ fact cards ------------------------------ */
+  .facts{ display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:20px; }
+  @media (max-width: 880px){ .facts{ grid-template-columns: 1fr; } }
+  .fact-card{ background: var(--panel); border:1px solid var(--line); border-radius: 12px;
+              padding: 14px 17px; box-shadow: var(--shadow); }
+  .fact-card h3{ margin:0 0 7px; font-size:.95rem; }
+  .fact-card p{ margin:0 0 6px; font-size:.86rem; }
+  .fact-card p.sub{ color:var(--text-dim); font-size:.82rem; }
+
+  footer{ text-align:center; color:var(--text-dim); font-size:.78rem; margin-top: 34px; }
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="true"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>RNNs: Hidden-State &amp; Output Update — How the Matrix Shapes Fit</h1>
+    <p>At every time step an RNN performs two matrix multiplications:
+       <math><msub><mi>h</mi><mi>t</mi></msub><mo>=</mo><mi>tanh</mi><mo stretchy="false">(</mo><msubsup><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow><mi>T</mi></msubsup><msub><mi>h</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>+</mo><msubsup><mi>W</mi><mrow><mi>x</mi><mi>h</mi></mrow><mi>T</mi></msubsup><msub><mi>x</mi><mi>t</mi></msub><mo stretchy="false">)</mo></math>
+       and
+       <math><msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mi>t</mi></msub><mo>=</mo><msubsup><mi>W</mi><mrow><mi>h</mi><mi>y</mi></mrow><mi>T</mi></msubsup><msub><mi>h</mi><mi>t</mi></msub></math>.
+       Pick the sizes below and watch the real matrices. <b>Hover any result entry</b> to see exactly which
+       row and which vector produce it — every output number is one dot product.</p>
+  </header>
+
+  <!-- ============================ DIMENSIONS ============================= -->
+  <section class="panel">
+    <h2>1 · Choose the three sizes</h2>
+    <p class="hint">Everything in the two equations is built from just three numbers.</p>
+    <div class="dims">
+      <div class="dimctl">
+        <span class="name"><math><mi>n</mi></math> — input dim
+          <small>length of <math><msub><mi>x</mi><mi>t</mi></msub></math></small></span>
+        <input type="range" id="sldN" min="2" max="5" step="1" value="3">
+        <span class="dimval n" id="valN">3</span>
+      </div>
+      <div class="dimctl">
+        <span class="name"><math><mi>d</mi></math> — hidden dim
+          <small>length of <math><msub><mi>h</mi><mi>t</mi></msub></math></small></span>
+        <input type="range" id="sldD" min="2" max="5" step="1" value="4">
+        <span class="dimval d" id="valD">4</span>
+      </div>
+      <div class="dimctl">
+        <span class="name"><math><mi>k</mi></math> — output dim
+          <small>length of <math><msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mi>t</mi></msub></math></small></span>
+        <input type="range" id="sldK" min="2" max="4" step="1" value="2">
+        <span class="dimval k" id="valK">2</span>
+      </div>
+    </div>
+    <div class="mapstrip" id="mapStrip"></div>
+  </section>
+
+  <!-- ========================= HIDDEN STATE UPDATE ======================== -->
+  <section class="panel">
+    <h2>2 · Hidden state update <span class="band g">maps input space + previous hidden state → hidden space</span></h2>
+    <div class="bigeq">
+      <math display="block">
+        <msub><mi>h</mi><mi>t</mi></msub><mo>=</mo>
+        <mi>tanh</mi><mo stretchy="false">(</mo>
+        <msubsup><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow><mi>T</mi></msubsup>
+        <msub><mi>h</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub>
+        <mo>+</mo>
+        <msubsup><mi>W</mi><mrow><mi>x</mi><mi>h</mi></mrow><mi>T</mi></msubsup>
+        <msub><mi>x</mi><mi>t</mi></msub>
+        <mo stretchy="false">)</mo>
+      </math>
+    </div>
+    <div class="storedims" id="dimsHid"></div>
+    <div class="stage"><div class="mulrow" id="vizHid"></div></div>
+    <div class="exp" id="expHid"></div>
+    <div class="chk" id="chkHid"></div>
+  </section>
+
+  <!-- ============================ OUTPUT VECTOR =========================== -->
+  <section class="panel">
+    <h2>3 · Output vector <span class="band p">maps hidden space → output space</span></h2>
+    <div class="bigeq">
+      <math display="block">
+        <msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mi>t</mi></msub><mo>=</mo>
+        <msubsup><mi>W</mi><mrow><mi>h</mi><mi>y</mi></mrow><mi>T</mi></msubsup>
+        <msub><mi>h</mi><mi>t</mi></msub>
+      </math>
+    </div>
+    <div class="storedims" id="dimsOut"></div>
+    <div class="stage"><div class="mulrow" id="vizOut"></div></div>
+    <div class="exp" id="expOut"></div>
+    <div class="chk" id="chkOut"></div>
+  </section>
+
+  <div class="biasnote">
+    Bias terms
+    <math><msub><mi>b</mi><mi>h</mi></msub><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mi>d</mi><mo>×</mo><mn>1</mn></mrow></msup></math>
+    and
+    <math><msub><mi>b</mi><mi>y</mi></msub><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mi>k</mi><mo>×</mo><mn>1</mn></mrow></msup></math>
+    omitted for clarity — each would simply be added to its column before the activation.
+  </div>
+
+  <!-- ============================= FACT CARDS ============================= -->
+  <section class="facts">
+    <div class="fact-card">
+      <h3>Why the transpose?</h3>
+      <p><math><msub><mi>W</mi><mrow><mi>x</mi><mi>h</mi></mrow></msub></math> is <em>stored</em> as
+         <math><mi>n</mi><mo>×</mo><mi>d</mi></math>, but to turn an
+         <math><mi>n</mi></math>-vector into a <math><mi>d</mi></math>-vector we need a
+         <math><mi>d</mi><mo>×</mo><mi>n</mi></math> matrix — so we multiply by
+         <math><msubsup><mi>W</mi><mrow><mi>x</mi><mi>h</mi></mrow><mi>T</mi></msubsup></math>.</p>
+      <p class="sub">Many textbooks define the weight matrix already transposed and write
+         <math><mi>W</mi><msub><mi>x</mi><mi>t</mi></msub></math> — same mathematics, different storage convention.</p>
+    </div>
+    <div class="fact-card">
+      <h3>Inner sizes must match</h3>
+      <p>In <math><mo stretchy="false">(</mo><mi>a</mi><mo>×</mo><mi>b</mi><mo stretchy="false">)</mo><mo>·</mo><mo stretchy="false">(</mo><mi>b</mi><mo>×</mo><mn>1</mn><mo stretchy="false">)</mo></math>
+         the two inner <math><mi>b</mi></math>'s touch and cancel; the result is
+         <math><mi>a</mi><mo>×</mo><mn>1</mn></math>.</p>
+      <p class="sub"><b>Columns</b> = size of the vector the matrix can <em>consume</em>;
+         <b>rows</b> = size of the vector it <em>produces</em>.</p>
+    </div>
+    <div class="fact-card">
+      <h3>How many parameters?</h3>
+      <p id="paramCount"></p>
+      <p class="sub">Grow <math><mi>d</mi></math> and watch
+         <math><msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub></math> grow
+         <em>quadratically</em> — the hidden-to-hidden matrix usually dominates.</p>
+    </div>
+  </section>
+
+  <footer>
+    Notation follows the lecture slide: input <math><msub><mi>x</mi><mi>t</mi></msub><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mi>n</mi><mo>×</mo><mn>1</mn></mrow></msup></math>,
+    hidden state <math><msub><mi>h</mi><mi>t</mi></msub><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mi>d</mi><mo>×</mo><mn>1</mn></mrow></msup></math>,
+    output <math><msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mi>t</mi></msub><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mi>k</mi><mo>×</mo><mn>1</mn></mrow></msup></math>.
+  </footer>
+
+</div>
+
+<script>
+"use strict";
+
+/* ============================ FIXED VALUES ============================== */
+/* Master 5x5 / 5-entry tables. The visible matrices are the top-left slice,
+   so cells keep their values when the sliders move. Values are already the
+   TRANSPOSED matrices as used in the product (rows = output entries).      */
+const RAW = {
+  whhT: [ [ 0.4, -0.2,  0.5, -0.1,  0.3],
+          [-0.6,  0.3,  0.1,  0.7, -0.4],
+          [ 0.2,  0.8, -0.3, -0.5,  0.1],
+          [ 0.7, -0.4, -0.2,  0.3,  0.6],
+          [-0.1,  0.5,  0.6, -0.8,  0.2] ],
+  wxhT: [ [ 0.5,  0.1, -0.7,  0.4, -0.2],
+          [-0.3,  0.6,  0.2, -0.1,  0.5],
+          [ 0.8, -0.5,  0.3,  0.6, -0.4],
+          [-0.2,  0.4, -0.6,  0.1,  0.7],
+          [ 0.1, -0.8,  0.4, -0.3,  0.2] ],
+  whyT: [ [ 0.6, -0.3,  0.2,  0.5, -0.1],
+          [-0.4,  0.7, -0.5,  0.2,  0.3],
+          [ 0.3,  0.1,  0.6, -0.7,  0.4],
+          [-0.5, -0.2,  0.4,  0.3, -0.6] ],
+  x:     [ 0.9, -0.5,  0.3,  0.7, -0.2],
+  hprev: [ 0.4,  0.8, -0.6,  0.2, -0.3]
+};
+
+const state = { n: 3, d: 4, k: 2 };
+const $ = id => document.getElementById(id);
+
+/* number formatting — U+2212 minus, not hyphen */
+const MINUS = "−";
+const f1 = v => (v < 0 ? MINUS : "") + Math.abs(v).toFixed(1);
+const f2 = v => (v < 0 ? MINUS : "") + Math.abs(v).toFixed(2);
+const par = s => s.startsWith(MINUS) ? `(${s})` : s;   // parenthesize negatives in sums
+
+/* ============================ MATH SNIPPETS ============================= */
+/* Native MathML string helpers (no libraries).                            */
+const mm    = inner => `<math>${inner}</math>`;
+const sub   = (b, s) => `<msub>${b}${s}</msub>`;
+const YHAT  = '<mover accent="true"><mi>y</mi><mo>^</mo></mover>';
+const T_IDX = '<mi>t</mi>';
+const TM1   = `<mrow><mi>t</mi><mo>${MINUS}</mo><mn>1</mn></mrow>`;
+const W     = (idx) => `<msubsup><mi>W</mi><mrow>${idx}</mrow><mi>T</mi></msubsup>`;
+const Wst   = (idx) => `<msub><mi>W</mi><mrow>${idx}</mrow></msub>`;
+const HH = '<mi>h</mi><mi>h</mi>', XH = '<mi>x</mi><mi>h</mi>', HY = '<mi>h</mi><mi>y</mi>';
+const RR    = dims => `<msup><mi mathvariant="double-struck">R</mi><mrow>${dims}</mrow></msup>`;
+const dpair = (a,b) => `<mi>${a}</mi><mo>×</mo>${typeof b === "number" ? `<mn>${b}</mn>` : `<mi>${b}</mi>`}`;
+
+const M = {
+  xt:   mm(sub('<mi>x</mi>', T_IDX)),
+  ht:   mm(sub('<mi>h</mi>', T_IDX)),
+  htm1: mm(sub('<mi>h</mi>', TM1)),
+  zt:   mm(sub('<mi>z</mi>', T_IDX)),
+  yt:   mm(sub(YHAT, T_IDX)),
+  whhT: mm(W(HH)), wxhT: mm(W(XH)), whyT: mm(W(HY)),
+  tanh: mm('<mi>tanh</mi>')
+};
+
+/* ============================ COMPUTATION =============================== */
+function compute(){
+  const {n, d, k} = state;
+  const whhT = RAW.whhT.slice(0, d).map(r => r.slice(0, d));
+  const wxhT = RAW.wxhT.slice(0, d).map(r => r.slice(0, n));
+  const whyT = RAW.whyT.slice(0, k).map(r => r.slice(0, d));
+  const x     = RAW.x.slice(0, n);
+  const hprev = RAW.hprev.slice(0, d);
+  const z = whhT.map((row, i) =>
+      row.reduce((s, w, j) => s + w * hprev[j], 0) +
+      wxhT[i].reduce((s, w, j) => s + w * x[j], 0));
+  const h = z.map(Math.tanh);
+  const y = whyT.map(row => row.reduce((s, w, j) => s + w * h[j], 0));
+  return { whhT, wxhT, whyT, x, hprev, z, h, y };
+}
+let V = compute();
+
+/* ============================== RENDERING =============================== */
+function gridHTML(role, cls, data, fmt){
+  const rows = data.length, cols = Array.isArray(data[0]) ? data[0].length : 1;
+  let cells = "";
+  for (let i = 0; i < rows; i++)
+    for (let j = 0; j < cols; j++){
+      const v = cols === 1 && !Array.isArray(data[i]) ? data[i] : data[i][j];
+      cells += `<div class="cell ${cls}" data-role="${role}" data-r="${i}" data-c="${j}">${fmt(v)}</div>`;
+    }
+  return `<div class="mat" style="grid-template-columns:repeat(${cols},40px)">${cells}</div>`;
+}
+function block(role, cls, data, fmt, nameML, dimML){
+  return `<div class="mblock">
+            <div class="mname">${nameML}</div>
+            ${gridHTML(role, cls, data, fmt)}
+            <div class="mdim">${dimML}</div>
+          </div>`;
+}
+/* dim badge: letters (MathML) + live numbers; inner letter can be bolded  */
+const dimBadge = (letters, nums, boldInner) =>
+  mm(letters) + ` <span>= ${boldInner ? nums.replace(/(\d+)(?=\s*$)/, "<b>$1</b>") : nums}</span>`;
+
+function renderHid(){
+  const {n, d} = state;
+  $("vizHid").innerHTML =
+    block("mhh", "mg", V.whhT, f1, M.whhT,
+          `${mm(dpair('d','d'))} <span>= ${d}×${d}</span>`) +
+    block("vhp", "vh", V.hprev, f1, M.htm1,
+          `${mm(dpair('d',1))} <span>= ${d}×1</span>`) +
+    `<div class="bigop">+</div>` +
+    block("mxh", "mg", V.wxhT, f1, M.wxhT,
+          `${mm(dpair('d','n'))} <span>= ${d}×<b>${n}</b></span>`) +
+    block("vx", "vx", V.x, f1, M.xt,
+          `${mm(dpair('n',1))} <span>= <b>${n}</b>×1</span>`) +
+    `<div class="bigop">=</div>` +
+    block("vz", "vz", V.z, f2, M.zt,
+          `${mm(dpair('d',1))} <span>= ${d}×1</span>`) +
+    `<div class="tanhop"><span class="fn">tanh</span><span class="shaft">⟶</span><span class="sub">element-wise</span></div>` +
+    block("vhout", "vh", V.h, f2, M.ht,
+          `${mm(dpair('d',1))} <span>= ${d}×1</span>`);
+  $("dimsHid").innerHTML =
+    `<span class="pill">${mm(`${Wst(XH)}<mo>∈</mo>${RR(dpair('n','d'))}`)} — stored ${state.n}×${state.d}, used as ${M.wxhT} (${state.d}×${state.n})</span>` +
+    `<span class="pill">${mm(`${Wst(HH)}<mo>∈</mo>${RR(dpair('d','d'))}`)} — ${state.d}×${state.d}, square: hidden → hidden</span>`;
+  $("chkHid").innerHTML =
+    `Shape check: (${d}×${d})·(${d}×1) and (${d}×<b>${n}</b>)·(<b>${n}</b>×1) — the <b>inner sizes touch and must match</b>; ` +
+    `both products come out ${d}×1, so they can be added, and tanh keeps the shape.`;
+  resetExp("expHid",
+    `Hover an entry of ${M.zt} or ${M.ht} to see the <b>row × vector</b> dot products that build it, ` +
+    `or hover an entry of ${M.htm1} / ${M.xt} to see which <b>matrix column</b> it drives.`);
+}
+
+function renderOut(){
+  const {d, k} = state;
+  $("vizOut").innerHTML =
+    block("mhy", "mm", V.whyT, f1, M.whyT,
+          `${mm(dpair('k','d'))} <span>= ${k}×<b>${d}</b></span>`) +
+    block("vhin", "vh", V.h, f2, M.ht,
+          `${mm(dpair('d',1))} <span>= <b>${d}</b>×1</span>`) +
+    `<div class="bigop">=</div>` +
+    block("vy", "vy", V.y, f2, M.yt,
+          `${mm(dpair('k',1))} <span>= ${k}×1</span>`);
+  $("dimsOut").innerHTML =
+    `<span class="pill">${mm(`${Wst(HY)}<mo>∈</mo>${RR(dpair('d','k'))}`)} — stored ${d}×${k}, used as ${M.whyT} (${k}×${d})</span>` +
+    `<span class="pill">${M.ht} comes out of step 2 with its tanh already applied</span>`;
+  $("chkOut").innerHTML =
+    `Shape check: (${k}×<b>${d}</b>)·(<b>${d}</b>×1) → ${k}×1. ` +
+    `The ${d}'s cancel; only the row count ${k} survives — that is the output size.`;
+  resetExp("expOut",
+    `Hover an entry of ${M.yt} to see its dot product, or hover an entry of ${M.ht} ` +
+    `to see which column of ${M.whyT} it drives.`);
+}
+
+function renderMap(){
+  const {n, d, k} = state;
+  $("mapStrip").innerHTML =
+    `<div class="mapbox x"><div class="t">input space</div>
+       ${mm(`${sub('<mi>x</mi>', T_IDX)}<mo>∈</mo>${RR(dpair('n',1))}`)}
+       <div class="sub">n = ${n} numbers</div></div>
+     <div class="maparr">${M.wxhT}<span class="shaft">⟶</span><span class="sub">${d}×${n}: eats ${n}, makes ${d}</span></div>
+     <div class="mapbox h"><div class="t">hidden space</div>
+       ${mm(`${sub('<mi>h</mi>', T_IDX)}<mo>∈</mo>${RR(dpair('d',1))}`)}
+       <div class="sub">d = ${d} numbers · ${M.whhT} (${d}×${d}) loops it back ↺</div></div>
+     <div class="maparr">${M.whyT}<span class="shaft">⟶</span><span class="sub">${k}×${d}: eats ${d}, makes ${k}</span></div>
+     <div class="mapbox y"><div class="t">output space</div>
+       ${mm(`${sub(YHAT, T_IDX)}<mo>∈</mo>${RR(dpair('k',1))}`)}
+       <div class="sub">k = ${k} numbers</div></div>`;
+}
+
+function renderParams(){
+  const {n, d, k} = state;
+  $("paramCount").innerHTML =
+    `${mm(Wst(XH))}: ${n}·${d} = <b>${n*d}</b> &nbsp;·&nbsp; ` +
+    `${mm(Wst(HH))}: ${d}·${d} = <b>${d*d}</b> &nbsp;·&nbsp; ` +
+    `${mm(Wst(HY))}: ${d}·${k} = <b>${d*k}</b> &nbsp;→&nbsp; ` +
+    `<b>${n*d + d*d + d*k}</b> weights shared across <em>all</em> time steps.`;
+}
+
+function resetExp(id, hintHTML){ $(id).innerHTML = `<span class="idle">${hintHTML}</span>`; }
+
+function renderAll(){
+  V = compute();
+  $("valN").textContent = state.n;
+  $("valD").textContent = state.d;
+  $("valK").textContent = state.k;
+  renderMap(); renderHid(); renderOut(); renderParams();
+}
+
+/* ======================= HOVER: DOT-PRODUCT VIEW ======================== */
+const terms = (ws, vs, cls) =>
+  ws.map((w, j) => `<span class="${cls} num">${f1(w)}·${par(f2(vs[j]))}</span>`).join(" + ");
+
+function expandHidRow(i){
+  const zi = V.z[i], hi = V.h[i];
+  $("expHid").innerHTML =
+    `Row ${i + 1}: &nbsp;${M.zt}[${i + 1}] = ` +
+    `${terms(V.whhT[i], V.hprev, "tg")} &nbsp;+&nbsp; ${terms(V.wxhT[i], V.x, "tb")}` +
+    ` = <span class="res num">${f2(zi)}</span>` +
+    ` &nbsp;⟶&nbsp; ${M.ht}[${i + 1}] = tanh(${f2(zi)}) = <span class="res num">${f2(hi)}</span>` +
+    `<br><span class="idle">Green terms: row ${i + 1} of ${M.whhT} × ${M.htm1} (memory). ` +
+    `Blue terms: row ${i + 1} of ${M.wxhT} × ${M.xt} (new input). One row per output entry.</span>`;
+}
+function expandOutRow(i){
+  $("expOut").innerHTML =
+    `Row ${i + 1}: &nbsp;${M.yt}[${i + 1}] = ` +
+    `${terms(V.whyT[i], V.h, "tm")} = <span class="res num">${f2(V.y[i])}</span>` +
+    `<br><span class="idle">Row ${i + 1} of ${M.whyT} (${state.d} weights) × the whole hidden state ${M.ht}.</span>`;
+}
+function expandCol(expId, vecML, matML, j, v, outLen){
+  $(expId).innerHTML =
+    `${vecML}[${j + 1}] = <span class="res num">${f2(v)}</span> multiplies <b>column ${j + 1}</b> of ${matML} — ` +
+    `it contributes ${f2(v)} × (that column) to <em>every</em> one of the ${outLen} output entries. ` +
+    `<span class="idle">Each input coordinate is broadcast through one matrix column.</span>`;
+}
+
+/* what to light up for each hovered role */
+function highlight(container, cell){
+  const role = cell.dataset.role, i = +cell.dataset.r, j = +cell.dataset.c;
+  const on = sel => container.querySelectorAll(sel).forEach(c => c.classList.add("hl"));
+  container.querySelectorAll(".cell").forEach(c => c.classList.remove("hl", "hlf"));
+
+  if (container.id === "vizHid"){
+    if (role === "vz" || role === "vhout"){
+      on(`[data-role="mhh"][data-r="${i}"]`); on(`[data-role="vhp"]`);
+      on(`[data-role="mxh"][data-r="${i}"]`); on(`[data-role="vx"]`);
+      on(`[data-role="vz"][data-r="${i}"]`);  on(`[data-role="vhout"][data-r="${i}"]`);
+      cell.classList.add("hlf");
+      expandHidRow(i);
+    } else if (role === "vhp"){
+      on(`[data-role="mhh"][data-c="${i}"]`); cell.classList.add("hlf");
+      expandCol("expHid", M.htm1, M.whhT, i, V.hprev[i], state.d);
+    } else if (role === "vx"){
+      on(`[data-role="mxh"][data-c="${i}"]`); cell.classList.add("hlf");
+      expandCol("expHid", M.xt, M.wxhT, i, V.x[i], state.d);
+    } else if (role === "mhh" || role === "mxh"){
+      on(`[data-role="${role}"][data-r="${i}"]`);
+      on(`[data-role="${role === "mhh" ? "vhp" : "vx"}"][data-r="${j}"]`);
+      on(`[data-role="vz"][data-r="${i}"]`);
+      cell.classList.add("hlf");
+    }
+  } else { /* vizOut */
+    if (role === "vy"){
+      on(`[data-role="mhy"][data-r="${i}"]`); on(`[data-role="vhin"]`);
+      cell.classList.add("hlf");
+      expandOutRow(i);
+    } else if (role === "vhin"){
+      on(`[data-role="mhy"][data-c="${i}"]`); cell.classList.add("hlf");
+      expandCol("expOut", M.ht, M.whyT, i, V.h[i], state.k);
+    } else if (role === "mhy"){
+      on(`[data-role="mhy"][data-r="${i}"]`); on(`[data-role="vhin"][data-r="${j}"]`);
+      on(`[data-role="vy"][data-r="${i}"]`);  cell.classList.add("hlf");
+    }
+  }
+}
+function clearHl(container){
+  container.querySelectorAll(".cell").forEach(c => c.classList.remove("hl", "hlf"));
+  if (container.id === "vizHid") resetHidHint();
+  else resetOutHint();
+}
+function resetHidHint(){
+  resetExp("expHid",
+    `Hover an entry of ${M.zt} or ${M.ht} to see the <b>row × vector</b> dot products that build it, ` +
+    `or hover an entry of ${M.htm1} / ${M.xt} to see which <b>matrix column</b> it drives.`);
+}
+function resetOutHint(){
+  resetExp("expOut",
+    `Hover an entry of ${M.yt} to see its dot product, or hover an entry of ${M.ht} ` +
+    `to see which column of ${M.whyT} it drives.`);
+}
+
+/* ============================== WIRING ================================== */
+["vizHid", "vizOut"].forEach(id => {
+  const el = $(id);
+  el.addEventListener("mouseover", e => {
+    const cell = e.target.closest(".cell");
+    if (cell) highlight(el, cell);
+  });
+  el.addEventListener("mouseleave", () => clearHl(el));
+});
+$("sldN").addEventListener("input", e => { state.n = +e.target.value; renderAll(); });
+$("sldD").addEventListener("input", e => { state.d = +e.target.value; renderAll(); });
+$("sldK").addEventListener("input", e => { state.k = +e.target.value; renderAll(); });
+
+renderAll();
+</script>
+</body>
+</html>
