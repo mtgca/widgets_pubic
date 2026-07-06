@@ -122,6 +122,12 @@
     font: 600 0.84rem/1.3 inherit; color: #2b3a55; padding: 5px 8px;
     border: 1px solid #c9d6ee; border-radius: 7px; background: #fff; cursor: pointer;
   }
+  select:disabled{
+    opacity: 0.45; background: #eef1f7; color: #7a86a0; border-color: #d5dae6;
+    cursor: not-allowed;
+  }
+  .axis-picks.off{ opacity: 0.55; }
+  .axis-picks.off label{ text-decoration: line-through; }
   .geo-cols{ display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
   .plot-box{ flex: 1 1 440px; min-width: 320px; }
   .plot-box svg{ width: 100%; height: auto; display: block; }
@@ -282,6 +288,7 @@
   <div class="controls">
     <button class="chip on" id="presetAnimals">Animal cluster</button>
     <button class="chip" id="presetRoyal">Gender × royalty</button>
+    <button class="chip" id="presetPCA">Computed map (PCA)</button>
     <div class="axis-picks">
       <label for="xSel">x:</label> <select id="xSel"></select>
       <label for="ySel">y:</label> <select id="ySel"></select>
@@ -291,7 +298,7 @@
   <div class="geo-cols">
     <div class="plot-box">
       <svg id="mainPlot" viewBox="0 0 480 430" role="img" aria-label="2D projection of word embeddings"></svg>
-      <div class="plot-note">A 2-D shadow of the full 7-D space — two coordinates shown, five hidden.</div>
+      <div class="plot-note" id="plotNote"></div>
     </div>
 
     <div class="nb-box">
@@ -315,12 +322,15 @@
 
   <div class="narration">
     <b>In practice:</b> picking two coordinates only works here because these dimensions were
-    hand-labeled. Real embedding dimensions are latent, so no single axis is worth plotting —
-    instead the 2-D map is <i>computed</i> from all dimensions with <b>PCA</b> (linear, preserves
-    distances honestly) or <b>t-SNE / UMAP</b> (nonlinear, preserve local neighborhoods; cluster
-    sizes and between-cluster distances in those maps are not meaningful). Either way the map is
-    only for the human eye — similarity is always measured in the full space, as in the panel
-    on the right.
+    hand-labeled — real embedding dimensions are latent, so no single axis is worth plotting.
+    Instead, the 2-D map is <i>computed</i> from all dimensions at once: the
+    <b>Computed map (PCA)</b> preset above does exactly that (linear, deterministic, distances
+    kept honest). On large real datasets you will more often meet <b>t-SNE</b> and <b>UMAP</b>,
+    nonlinear methods that are better at preserving local neighborhoods — but read their maps
+    with care: they are stochastic and hyperparameter-sensitive, and cluster sizes and
+    between-cluster distances in them are <b>not meaningful</b>. Either way the picture is only
+    for the human eye — similarity is always measured in the full space, as in the panel on
+    the right.
   </div>
 </section>
 
@@ -460,7 +470,41 @@ const mnumP = v => v < 0 ? mrow(mo('(') + mo(MINUS) + mn(Math.abs(v).toFixed(1))
 let selWord = 'cat';
 let sortDim = null;            // dimension index the table is sorted by
 let axX = 0, axY = 1;          // main plot axes: living being × feline
+let pcaMode = false;           // main plot shows PCA instead of raw axes
 let A = 'king', B = 'man', C = 'woman';
+
+/* ---------- PCA: top-2 principal components (power iteration) ---------- */
+const PCA = (() => {
+  const X = WORDS.map(w => VEC[w]);
+  const n = X.length, d = DIMS.length;
+  const mean = Array(d).fill(0);
+  X.forEach(r => r.forEach((v, j) => mean[j] += v / n));
+  const Xc = X.map(r => r.map((v, j) => v - mean[j]));
+  const Cov = Array.from({ length: d }, () => Array(d).fill(0));
+  for (const r of Xc)
+    for (let i = 0; i < d; i++)
+      for (let j = 0; j < d; j++) Cov[i][j] += r[i] * r[j] / (n - 1);
+  const power = M => {
+    let v = Array.from({ length: d }, (_, i) => Math.sin(i + 1));
+    for (let it = 0; it < 500; it++) {
+      const u = M.map(row => row.reduce((s, m, j) => s + m * v[j], 0));
+      const nm = Math.hypot(...u);
+      v = u.map(x => x / nm);
+    }
+    const lam = v.reduce((s, vi, i) => s + vi * M[i].reduce((t, m, j) => t + m * v[j], 0), 0);
+    return [v, lam];
+  };
+  const [v1, l1] = power(Cov);
+  const defl = Cov.map((row, i) => row.map((m, j) => m - l1 * v1[i] * v1[j]));
+  const [v2, l2] = power(defl);
+  const tot = Cov.reduce((s, row, i) => s + row[i], 0);
+  const proj = {};
+  WORDS.forEach((w, k) => proj[w] = [
+    Xc[k].reduce((s, v, j) => s + v * v1[j], 0),
+    Xc[k].reduce((s, v, j) => s + v * v2[j], 0),
+  ]);
+  return { proj, pct1: Math.round(l1 / tot * 100), pct2: Math.round(l2 / tot * 100) };
+})();
 
 /* ============ 1 · embedding table ============ */
 function renderTable() {
@@ -529,7 +573,7 @@ function drawPlot(svg, cfg) {
   svg.appendChild(defs);
 
   // gridlines + ticks
-  for (const t of [-1, -0.5, 0, 0.5, 1]) {
+  for (const t of [-2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2]) {
     if (t < lo || t > hi) continue;
     const major = t === 0;
     svg.appendChild(el('line', { x1: sx(t), y1: m.t, x2: sx(t), y2: H - m.b,
@@ -547,12 +591,12 @@ function drawPlot(svg, cfg) {
   const xt = el('text', { x: (m.l + W - m.r) / 2, y: H - 8, 'text-anchor': 'middle',
     'font-size': 12.5, 'font-style': 'italic', fill: '#52514e',
     'font-family': 'STIX Two Math, Cambria Math, Times New Roman, Georgia, serif' });
-  xt.textContent = DIMS[cfg.dimX]; svg.appendChild(xt);
+  xt.textContent = cfg.xLabel || DIMS[cfg.dimX]; svg.appendChild(xt);
   const yt = el('text', { x: 14, y: (m.t + H - m.b) / 2, 'text-anchor': 'middle',
     'font-size': 12.5, 'font-style': 'italic', fill: '#52514e',
     transform: `rotate(-90 14 ${(m.t + H - m.b) / 2})`,
     'font-family': 'STIX Two Math, Cambria Math, Times New Roman, Georgia, serif' });
-  yt.textContent = DIMS[cfg.dimY]; svg.appendChild(yt);
+  yt.textContent = cfg.yLabel || DIMS[cfg.dimY]; svg.appendChild(yt);
 
   // arrows
   for (const a of cfg.arrows || []) {
@@ -607,6 +651,7 @@ function drawPlot(svg, cfg) {
     for (const c of CAND) {
       Object.assign(lab, c);
       const r = labelRect(lab);
+      if (r.x1 < 2 || r.x2 > W - 2 || r.y1 < 2 || r.y2 > H - 2) continue;
       if (!obstacles.some(o => collide(r, o))) break;
     }
     obstacles.push(labelRect(lab));
@@ -647,11 +692,23 @@ function bindTips(svg, starVecGetter) {
 
 /* ============ 2 · main plot + neighbors ============ */
 function renderMainPlot() {
-  drawPlot($('mainPlot'), {
-    dimX: axX, dimY: axY,
-    points: WORDS.map(w => ({ word: w, x: VEC[w][axX], y: VEC[w][axY],
-      color: COLOR[w], ring: w === selWord })),
-  });
+  if (pcaMode) {
+    drawPlot($('mainPlot'), {
+      xLabel: `PC1 — ${PCA.pct1}% of variance`,
+      yLabel: `PC2 — ${PCA.pct2}% of variance`,
+      points: WORDS.map(w => ({ word: w, x: PCA.proj[w][0], y: PCA.proj[w][1],
+        color: COLOR[w], ring: w === selWord })),
+    });
+    $('plotNote').innerHTML = 'Axes = directions of largest variance, computed from all 7 dimensions. ' +
+      'Nobody labeled them — yet PC2 essentially rediscovers the <i>gender</i> axis.';
+  } else {
+    drawPlot($('mainPlot'), {
+      dimX: axX, dimY: axY,
+      points: WORDS.map(w => ({ word: w, x: VEC[w][axX], y: VEC[w][axY],
+        color: COLOR[w], ring: w === selWord })),
+    });
+    $('plotNote').innerHTML = 'A 2-D shadow of the full 7-D space — two coordinates shown, five hidden.';
+  }
 }
 $('mainPlot').addEventListener('click', e => {
   const c = e.target.closest('circle[data-word]');
@@ -687,16 +744,20 @@ function fillAxisSelects() {
   $('xSel').value = axX; $('ySel').value = axY;
 }
 function setAxes(x, y, chip) {
-  axX = x; axY = y;
+  axX = x; axY = y; pcaMode = chip === 'pca';
   $('xSel').value = x; $('ySel').value = y;
+  $('xSel').disabled = pcaMode; $('ySel').disabled = pcaMode;
+  document.querySelector('.axis-picks').classList.toggle('off', pcaMode);
   $('presetAnimals').classList.toggle('on', chip === 'animals');
   $('presetRoyal').classList.toggle('on', chip === 'royal');
+  $('presetPCA').classList.toggle('on', pcaMode);
   renderMainPlot();
 }
 $('xSel').addEventListener('change', () => setAxes(+$('xSel').value, +$('ySel').value, null));
 $('ySel').addEventListener('change', () => setAxes(+$('xSel').value, +$('ySel').value, null));
 $('presetAnimals').addEventListener('click', () => setAxes(0, 1, 'animals'));
 $('presetRoyal').addEventListener('click', () => setAxes(3, 4, 'royal'));
+$('presetPCA').addEventListener('click', () => setAxes(axX, axY, 'pca'));
 
 /* ============ 3 · vector arithmetic ============ */
 const resultVec = () => VEC[A].map((v, j) => v - VEC[B][j] + VEC[C][j]);
