@@ -167,6 +167,8 @@
   }
   .cell.hot{ background: var(--orange-bg); color: #8a4a00; font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--orange-line); }
   .cell.res{ background: var(--blue-bg); color: #24457f; font-weight: 600; }
+  #embGrid .cell{ min-width: 37px; font-size: 0.68rem; }
+  #eVec .cell{ min-width: 46px; font-size: 0.72rem; }
   .row-tags{ display: grid; gap: 3px; margin-right: 5px; }
   .row-tag{
     height: 24px; display: flex; align-items: center; justify-content: flex-end;
@@ -178,13 +180,13 @@
   .vec-label{ text-align: center; font-size: 0.78rem; color: var(--muted); line-height: 1.35; }
 
   /* linear-layer table */
-  table.lin{ border-collapse: collapse; font-size: 0.78rem; }
+  table.lin{ border-collapse: collapse; font-size: 0.7rem; }
   table.lin th{
-    background: #e8eef8; color: #2b3a55; padding: 3px 10px; border: 1px solid #d5deed;
-    font-weight: 700; font-size: 0.74rem;
+    background: #e8eef8; color: #2b3a55; padding: 3px 5px; border: 1px solid #d5deed;
+    font-weight: 700; font-size: 0.68rem;
   }
   table.lin td{
-    padding: 2px 10px; border: 1px solid #d5deed; text-align: right; background: #fff;
+    padding: 2px 5px; border: 1px solid #d5deed; text-align: right; background: #fff;
     font-variant-numeric: tabular-nums;
   }
   table.lin td.wname{ text-align: right; color: #7a86a0; font-size: 0.72rem; background: #fafbfe; }
@@ -337,8 +339,8 @@
 <section class="panel">
   <h2><span class="step-num">2</span>The model: embedding lookup → linear layer → next-word probabilities</h2>
   <p class="lede">Each vocabulary word owns one row of an <b>embedding table</b>
-    <math><mi>E</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>11</mn><mo>×</mo><mn>2</mn></mrow></msup></math>
-    (we use <math><mi>d</mi><mo>=</mo><mn>2</mn></math> dimensions so we can draw the space).
+    <math><mi>E</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>11</mn><mo>×</mo><mn>8</mn></mrow></msup></math>
+    — <math><mi>d</mi><mo>=</mo><mn>8</mn></math> learned numbers per word.
     A <b>linear layer</b> turns that row into one score per vocabulary word, and softmax turns scores into probabilities.
     All numbers below are <b>live</b> — they show the model as it is right now, and they change when you train it in step 3.
     <span class="click-hint">Click an input word</span> to follow it through.</p>
@@ -347,7 +349,7 @@
     <div class="eq"><math><mi>e</mi><mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mi>x</mi><mo stretchy="false">]</mo></math>
       <div class="eq-note">lookup: take row <math><mi>x</mi></math> of the table</div></div>
     <div class="eq"><math><mi>z</mi><mo>=</mo><mi>W</mi><mi>e</mi><mo>+</mo><mi>b</mi></math>
-      <div class="eq-note">linear layer: <math><mi>W</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>11</mn><mo>×</mo><mn>2</mn></mrow></msup></math>, one logit per word</div></div>
+      <div class="eq-note">linear layer: <math><mi>W</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>11</mn><mo>×</mo><mn>8</mn></mrow></msup></math>, one logit per word</div></div>
     <div class="eq"><math><mi>p</mi><mo>=</mo><mi>softmax</mi><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo></math>
       <div class="eq-note">scores → probability distribution</div></div>
     <div class="eq"><math><mi>L</mi><mo>=</mo><mo>−</mo><mi>log</mi><mo>⁡</mo><msub><mi>p</mi><mi>y</mi></msub></math>
@@ -357,11 +359,11 @@
   <div class="chip-row" id="chips2"></div>
 
   <div class="pipeline">
-    <div class="stage" style="min-width:190px;">
+    <div class="stage" style="flex:2 1 420px; max-width:480px; overflow-x:auto;">
       <h3>Embedding table <math><mi>E</mi></math></h3>
       <div class="mat-with-labels">
         <div class="row-tags" id="embTags"></div>
-        <div class="matrix"><div class="mgrid" id="embGrid" style="grid-template-columns:repeat(2,auto);"></div></div>
+        <div class="matrix"><div class="mgrid" id="embGrid" style="grid-template-columns:repeat(8,auto);"></div></div>
       </div>
       <div class="stage-caption" id="embCap"></div>
     </div>
@@ -374,16 +376,16 @@
         <div class="matrix"><div class="mgrid" id="eVec" style="grid-template-columns:auto;"></div></div>
         <div class="vec-label" id="eVecLabel"></div>
       </div>
-      <div class="stage-caption">This is the word’s current <b>embedding</b> — 2 learned numbers.</div>
+      <div class="stage-caption">This is the word’s current <b>embedding</b> — 8 learned numbers.</div>
     </div>
 
     <div class="flow-arrow"><span class="glyph">→</span><math><mi>W</mi><mi>e</mi><mo>+</mo><mi>b</mi></math></div>
 
-    <div class="stage" style="min-width:230px;">
+    <div class="stage" style="flex:2 1 470px; max-width:560px; overflow-x:auto;">
       <h3>Linear layer → logits <math><mi>z</mi></math></h3>
       <table class="lin" id="linTable"></table>
       <div class="stage-caption">Row <math><mi>k</mi></math> of <math><mi>W</mi></math> scores word <math><mi>k</mi></math>:
-        <math><msub><mi>z</mi><mi>k</mi></msub><mo>=</mo><msub><mi>W</mi><mrow><mi>k</mi><mn>1</mn></mrow></msub><msub><mi>e</mi><mn>1</mn></msub><mo>+</mo><msub><mi>W</mi><mrow><mi>k</mi><mn>2</mn></mrow></msub><msub><mi>e</mi><mn>2</mn></msub><mo>+</mo><msub><mi>b</mi><mi>k</mi></msub></math></div>
+        <math><msub><mi>z</mi><mi>k</mi></msub><mo>=</mo><msub><mi>W</mi><mrow><mi>k</mi><mn>1</mn></mrow></msub><msub><mi>e</mi><mn>1</mn></msub><mo>+</mo><mo>⋯</mo><mo>+</mo><msub><mi>W</mi><mrow><mi>k</mi><mn>8</mn></mrow></msub><msub><mi>e</mi><mn>8</mn></msub><mo>+</mo><msub><mi>b</mi><mi>k</mi></msub></math></div>
     </div>
 
     <div class="flow-arrow"><span class="glyph">→</span>softmax</div>
@@ -401,7 +403,8 @@
   <h2><span class="step-num">3</span>Train it — and watch the embedding space organize itself</h2>
   <p class="lede">One <b>epoch</b> = one pass over all 34 pairs: the model predicts, the loss measures its surprise,
     and gradients nudge <math><mi>W</mi></math>, <math><mi>b</mi></math> <b>and the embedding rows</b> to make the
-    true next words more likely. The map below shows all 11 embedding vectors, with their trails.
+    true next words more likely. The 8-D embedding vectors can’t be drawn directly, so the map below projects them
+    onto their two directions of largest variance (<b>PCA</b>), with trails.
     Click the buttons and watch words that behave alike drift together.</p>
 
   <div class="controls">
@@ -417,8 +420,8 @@
 
   <div class="charts">
     <div class="chart-box">
-      <h3>The embedding space (the 2 columns of <math><mi>E</mi></math>, drawn as coordinates)</h3>
-      <div class="sub">Each dot is one row of the table. Gray trails show where each word has been. Hover a dot for its values; the <span style="color:var(--orange-deep);font-weight:650;">orange</span> dot is the word selected above.</div>
+      <h3>The embedding space (rows of <math><mi>E</mi></math>, projected from 8-D to 2-D with PCA)</h3>
+      <div class="sub">Each dot is one row of the table. Gray trails show where each word has been (in the current projection); the PCA axes are recomputed as the space changes, so the whole map may rotate between steps. Hover a dot for its 8 values; the <span style="color:var(--orange-deep);font-weight:650;">orange</span> dot is the word selected above.</div>
       <svg id="scatter" viewBox="0 0 520 430" role="img" aria-label="Scatter plot of the 11 word embedding vectors"></svg>
     </div>
     <div class="chart-box">
@@ -435,7 +438,7 @@
     — the row of the current input word. All other rows are untouched by that pair.
     Two words that are followed by the <b>same kinds of words</b> keep receiving the <b>same kinds of nudges</b>,
     so their rows converge to nearby points. Meaning is never given to the model — it precipitates out of prediction errors.
-    <br><span style="font-size:0.82rem;color:var(--muted);">Here the space is genuinely 2-D, so this map <i>is</i> the embedding space. Real models use hundreds of dimensions; to draw a map like this you would first project them down (PCA, t-SNE, UMAP…).</span>
+    <br><span style="font-size:0.82rem;color:var(--muted);">The map above is a <b>PCA projection</b>: the 8-D vectors are flattened onto the 2-D plane that preserves the most variance. This is exactly what you do for real models too (with PCA, t-SNE, UMAP…), since their embeddings have hundreds of dimensions.</span>
   </div>
 </section>
 
@@ -444,7 +447,8 @@
   <h2><span class="step-num">4</span>Inspect what it learned</h2>
   <p class="lede">Train the model above (≈ 100–300 epochs), then probe it.
     <span class="click-hint">Click a word</span> to compare the model’s next-word probabilities against the
-    actual frequencies in the 14 sentences, and to see which words ended up closest in the embedding space.</p>
+    actual frequencies in the 14 sentences, and to see which words ended up closest in the embedding space
+    (distances are measured in the full 8-D space, not on the 2-D map).</p>
 
   <div class="chip-row" id="chips4"></div>
 
@@ -467,20 +471,22 @@
           <b>Words used in similar contexts get similar vectors.</b> The model never sees definitions —
           only which words follow which. Distributional similarity becomes geometric closeness.</div>
         <div class="insight good"><span class="tag">Look for it</span>
-          After training, the pronouns <b>i / you / we</b> land near each other (all are followed by like, love, eat, hate…).
-          Even more striking: <b>love</b> and <b>hate</b> end up almost on top of each other — opposite meanings, but
+          After training, the pronouns <b>i / you / we</b> become each other’s nearest neighbors (all are followed by like, love, eat, hate…).
+          Even more striking: <b>love</b> and <b>hate</b> also end up as mutual nearest neighbors — opposite meanings, but
           <i>identical contexts</i> (both followed by pizza or pasta). Embeddings capture how words are <b>used</b>, not what they mean to us.
-          And <b>like</b> drifts away from love/hate because it alone is also followed by “to”.</div>
+          <b>like</b> sits farther from love/hate than they sit from each other, because it alone is also followed by “to”.</div>
         <div class="insight warn"><span class="tag">Gotcha</span>
           <b>“pasta” never moves.</b> In these 14 sentences, <i>pasta</i> only ever appears as the <b>last</b> word,
           so it is never an input — its embedding row never receives a gradient and stays at its random start.
-          A word’s vector is only as good as the contexts it is <i>used</i> in. (Check its trail on the map!)</div>
+          A word’s vector is only as good as the contexts it is <i>used</i> in.
+          (Check the map: every other word grows a trail; pasta’s trail collapses to a single dot — it can shift on screen
+          only when the PCA axes themselves rotate.)</div>
       </div>
     </div>
   </div>
 </section>
 
-<footer class="foot">Vocabulary of 11 words · 34 (input → next-word) training pairs · embedding dimension d = 2 · full-batch Adam, learning rate 0.1</footer>
+<footer class="foot">Vocabulary of 11 words · 34 (input → next-word) training pairs · embedding dimension d = 8 · full-batch Adam, learning rate 0.1 · map: 2-D PCA projection</footer>
 
 </div>
 
@@ -505,7 +511,7 @@ const TEXTS = [
 ];
 const vocab = [...new Set(TEXTS.join(" ").split(" "))].sort();
 const V = vocab.length;            // 11
-const D = 2;
+const D = 8;
 const stoi = {}; vocab.forEach((w,i)=>stoi[w]=i);
 
 const pairs = [];
@@ -523,6 +529,7 @@ pairs.forEach(([a,b])=>{ nextCounts[a][b]++; inputCount[a]++; });
 
 /* ================= model ================= */
 const MAX_EPOCH = 500, LR = 0.1, B1 = 0.9, B2 = 0.999, EPS = 1e-8;
+let prevPCs = null;                // PCA sign stabilization between redraws
 let rng, E, W, b, adam, epoch, lossHist, embHist;
 let sel = stoi["i"];               // globally selected word
 
@@ -532,13 +539,14 @@ const zeros2 = ()=>Array.from({length:V},()=>new Array(D).fill(0));
 
 function resetModel(){
   rng = mulberry32(42);
-  E = Array.from({length:V},()=>[gauss(),gauss()]);
+  E = Array.from({length:V},()=>Array.from({length:D},()=>gauss()));
   const k = 1/Math.sqrt(D);
-  W = Array.from({length:V},()=>[(rng()*2-1)*k,(rng()*2-1)*k]);
+  W = Array.from({length:V},()=>Array.from({length:D},()=>(rng()*2-1)*k));
   b = Array.from({length:V},()=>(rng()*2-1)*k);
   adam = {t:0, mE:zeros2(), vE:zeros2(), mW:zeros2(), vW:zeros2(),
           mb:new Array(V).fill(0), vb:new Array(V).fill(0)};
   epoch = 0; lossHist = []; embHist = [E.map(r=>r.slice())];
+  prevPCs = null;
 }
 
 function softmaxArr(z){
@@ -549,7 +557,11 @@ function softmaxArr(z){
 }
 function forwardWord(x){
   const e = E[x];
-  const z = b.map((bk,k)=>bk + W[k][0]*e[0] + W[k][1]*e[1]);
+  const z = b.map((bk,k)=>{
+    let s = bk;
+    for(let j=0;j<D;j++) s += W[k][j]*e[j];
+    return s;
+  });
   return {e, z, p:softmaxArr(z)};
 }
 function currentLoss(){
@@ -568,8 +580,10 @@ function trainEpochs(n){
       for(let k=0;k<V;k++){
         const d = (p[k] - (k===y?1:0)) / N;      // dL/dz_k, batch-averaged
         gb[k] += d;
-        gW[k][0] += d*e[0];  gW[k][1] += d*e[1];
-        gE[x][0] += d*W[k][0];  gE[x][1] += d*W[k][1];
+        for(let j=0;j<D;j++){
+          gW[k][j] += d*e[j];
+          gE[x][j] += d*W[k][j];
+        }
       }
     }
     adam.t++;
@@ -689,19 +703,19 @@ function renderSection2(){
     `Row of <b>${vocab[sel]}</b> (index ${sel}) is selected — the lookup just copies it.`;
 
   const ev = document.querySelectorAll("#eVec .cell");
-  ev[0].textContent = e[0].toFixed(2);
-  ev[1].textContent = e[1].toFixed(2);
+  for(let j=0;j<D;j++) ev[j].textContent = e[j].toFixed(2);
   document.getElementById("eVecLabel").innerHTML =
     `<math><mi>e</mi><mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mn>${sel}</mn><mo stretchy="false">]</mo></math>`;
 
-  let lin = `<tr><th></th><th><math><msub><mi>W</mi><mrow><mi>k</mi><mn>1</mn></mrow></msub></math></th>` +
-            `<th><math><msub><mi>W</mi><mrow><mi>k</mi><mn>2</mn></mrow></msub></math></th>` +
-            `<th><math><msub><mi>b</mi><mi>k</mi></msub></math></th>` +
-            `<th><math><msub><mi>z</mi><mi>k</mi></msub></math></th></tr>`;
+  let lin = `<tr><th></th>`;
+  for(let j=0;j<D;j++)
+    lin += `<th><math><msub><mi>W</mi><mrow><mi>k</mi><mn>${j+1}</mn></mrow></msub></math></th>`;
+  lin += `<th><math><msub><mi>b</mi><mi>k</mi></msub></math></th>` +
+         `<th><math><msub><mi>z</mi><mi>k</mi></msub></math></th></tr>`;
   for(let k=0;k<V;k++){
-    lin += `<tr class="${k===zmax?'zmax':''}"><td class="wname">${vocab[k]}</td>` +
-           `<td>${W[k][0].toFixed(2)}</td><td>${W[k][1].toFixed(2)}</td>` +
-           `<td>${b[k].toFixed(2)}</td><td class="zcol">${z[k].toFixed(2)}</td></tr>`;
+    lin += `<tr class="${k===zmax?'zmax':''}"><td class="wname">${vocab[k]}</td>`;
+    for(let j=0;j<D;j++) lin += `<td>${W[k][j].toFixed(2)}</td>`;
+    lin += `<td>${b[k].toFixed(2)}</td><td class="zcol">${z[k].toFixed(2)}</td></tr>`;
   }
   document.getElementById("linTable").innerHTML = lin;
 
@@ -721,19 +735,52 @@ function renderSection2(){
     : `<b>${vocab[sel]}</b> never appears as an input in the dataset (it always ends the sentence), so no pair ever trains this prediction.`;
 }
 
-/* ================= scatter ================= */
+/* ================= scatter (PCA projection of the 8-D space) ================= */
 const SW = 520, SH = 430, SP = {l:46, r:14, t:14, b:34};
 function tickStep(range, target){
   const cands = [0.1,0.2,0.25,0.5,1,2,5,10];
   for(const c of cands) if(range/c <= target) return c;
   return 10;
 }
+const vdot = (a,c)=>a.reduce((s,x,j)=>s+x*c[j],0);
+function pca2(data){
+  const n = data.length;
+  const mean = new Array(D).fill(0);
+  data.forEach(r=>r.forEach((v,j)=>mean[j]+=v/n));
+  const X = data.map(r=>r.map((v,j)=>v-mean[j]));
+  const C = Array.from({length:D},()=>new Array(D).fill(0));
+  for(const r of X) for(let a=0;a<D;a++) for(let c=0;c<D;c++) C[a][c] += r[a]*r[c]/n;
+  const matv = v=>C.map(row=>vdot(row,v));
+  const norm = v=>{const m=Math.hypot(...v);return m>1e-12?v.map(x=>x/m):v;};
+  const topEig = orthTo=>{
+    let v = norm(Array.from({length:D},(_,j)=>Math.sin(j+1)));   // deterministic start
+    for(let it=0;it<200;it++){
+      let w = matv(v);
+      if(orthTo){ const d=vdot(w,orthTo); w=w.map((x,j)=>x-d*orthTo[j]); }
+      v = norm(w);
+    }
+    return v;
+  };
+  let p1 = topEig(null), p2 = topEig(p1);
+  // keep the map's orientation stable across redraws (eigenvector sign is arbitrary)
+  if(prevPCs){
+    if(vdot(p1,prevPCs[0])<0) p1=p1.map(x=>-x);
+    if(vdot(p2,prevPCs[1])<0) p2=p2.map(x=>-x);
+  }
+  prevPCs = [p1,p2];
+  const proj = r=>[vdot(r.map((v,j)=>v-mean[j]),p1), vdot(r.map((v,j)=>v-mean[j]),p2)];
+  return proj;
+}
 function renderScatter(){
   const svg = document.getElementById("scatter");
   const pw = SW-SP.l-SP.r, ph = SH-SP.t-SP.b;
 
+  const proj = pca2(E);
+  const trails = embHist.map(snap=>snap.map(proj));   // every snapshot in the current projection
+  const P2 = trails[trails.length-1];
+
   let xmin=Infinity,xmax=-Infinity,ymin=Infinity,ymax=-Infinity;
-  for(const snap of embHist) for(const [x,y] of snap){
+  for(const snap of trails) for(const [x,y] of snap){
     if(x<xmin)xmin=x; if(x>xmax)xmax=x; if(y<ymin)ymin=y; if(y>ymax)ymax=y;
   }
   const padX = Math.max(0.35,(xmax-xmin)*0.14), padY = Math.max(0.35,(ymax-ymin)*0.14);
@@ -755,21 +802,19 @@ function renderScatter(){
     g += `<line x1="${SP.l}" y1="${Y(v).toFixed(1)}" x2="${SP.l+pw}" y2="${Y(v).toFixed(1)}" stroke="#e1e0d9" stroke-width="1"/>` +
          `<text x="${SP.l-6}" y="${Y(v).toFixed(1)}" font-size="10" fill="#898781" text-anchor="end" dominant-baseline="middle">${(+v.toFixed(2))}</text>`;
   }
-  g += `<text x="${SP.l+pw/2}" y="${SH-4}" font-size="10.5" fill="#898781" text-anchor="middle" font-style="italic" font-family="STIX Two Math, Cambria Math, Times New Roman, serif">e</text>` +
-       `<text x="${SP.l+pw/2+5}" y="${SH-2}" font-size="8" fill="#898781" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, serif">1</text>` +
-       `<text x="12" y="${SP.t+ph/2}" font-size="10.5" fill="#898781" text-anchor="middle" font-style="italic" font-family="STIX Two Math, Cambria Math, Times New Roman, serif">e</text>` +
-       `<text x="17" y="${SP.t+ph/2+2}" font-size="8" fill="#898781" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, serif">2</text>`;
+  g += `<text x="${SP.l+pw/2}" y="${SH-4}" font-size="10" fill="#898781" text-anchor="middle">PC 1</text>` +
+       `<text x="14" y="${SP.t+ph/2}" font-size="10" fill="#898781" text-anchor="middle" transform="rotate(-90 14 ${SP.t+ph/2})">PC 2</text>`;
 
   // trails
-  if(embHist.length > 1){
+  if(trails.length > 1){
     for(let i=0;i<V;i++){
-      const pts = embHist.map(snap=>`${X(snap[i][0]).toFixed(1)},${Y(snap[i][1]).toFixed(1)}`).join(" ");
+      const pts = trails.map(snap=>`${X(snap[i][0]).toFixed(1)},${Y(snap[i][1]).toFixed(1)}`).join(" ");
       g += `<polyline points="${pts}" fill="none" stroke="#d9d8d0" stroke-width="1"/>`;
     }
   }
 
   // label placement with a simple collision nudge
-  const labels = vocab.map((w,i)=>({i, w, lx:X(E[i][0])+8, ly:Y(E[i][1])-8}));
+  const labels = vocab.map((w,i)=>({i, w, lx:X(P2[i][0])+8, ly:Y(P2[i][1])-8}));
   for(let pass=0; pass<3; pass++){
     for(let a=0;a<labels.length;a++) for(let bI=a+1;bI<labels.length;bI++){
       const A=labels[a], B=labels[bI];
@@ -780,7 +825,7 @@ function renderScatter(){
   }
 
   for(const L of labels){
-    const i=L.i, cx=X(E[i][0]), cy=Y(E[i][1]), isSel=i===sel;
+    const i=L.i, cx=X(P2[i][0]), cy=Y(P2[i][1]), isSel=i===sel;
     g += `<circle class="sc-dot" data-i="${i}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${isSel?6.5:5}"` +
          ` fill="${isSel?'#eb6834':'#2a78d6'}" stroke="#fcfcfb" stroke-width="1.5" style="cursor:default"/>`;
     g += `<text x="${L.lx.toFixed(1)}" y="${L.ly.toFixed(1)}" font-size="12" ` +
@@ -792,7 +837,7 @@ function renderScatter(){
   svg.querySelectorAll(".sc-dot").forEach(dot=>{
     const i = +dot.dataset.i;
     dot.addEventListener("pointermove", ev=>showTip(
-      `<b>${vocab[i]}</b><br>e = (${E[i][0].toFixed(2)}, ${E[i][1].toFixed(2)})<br>row ${i} of the table`, ev));
+      `<b>${vocab[i]}</b> — row ${i} of the table<br>e = [${E[i].map(v=>v.toFixed(1)).join(", ")}]<br>on map: PC (${P2[i][0].toFixed(2)}, ${P2[i][1].toFixed(2)})`, ev));
     dot.addEventListener("pointerleave", hideTip);
     dot.addEventListener("click", ()=>{ sel = i; renderAll(); });
   });
@@ -876,7 +921,7 @@ function renderInspect(){
        <math><mi>p</mi><mo stretchy="false">(</mo><mtext>next</mtext><mo>∣</mo><mtext>${w}</mtext><mo stretchy="false">)</mo></math>.`
     : `“${w}” never appears as an input (it always ends its sentence), so there are no gray bars — and nothing ever trained this row. The blue bars are leftovers of random initialization.`;
 
-  const dists = vocab.map((_,k)=>({k, d:Math.hypot(E[sel][0]-E[k][0], E[sel][1]-E[k][1])}))
+  const dists = vocab.map((_,k)=>({k, d:Math.hypot(...E[sel].map((v,j)=>v-E[k][j]))}))
                      .filter(o=>o.k!==sel).sort((a,c)=>a.d-c.d);
   document.getElementById("nbList").innerHTML = dists.slice(0,3)
     .map((o,rank)=>`<div class="nb-item"><span>${rank+1}.</span><b>${vocab[o.k]}</b>
