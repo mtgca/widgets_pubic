@@ -387,8 +387,8 @@ function vArrow(x, y1, y2, op){
 }
 
 function gLabel(x, y, op, share){
-  const ring = share ? `<circle cx="${x}" cy="${y-5}" r="11" fill="#fdeeda" stroke="var(--fg-col)" stroke-width="1.3"/>` : '';
-  return `<g class="nd k-g" opacity="${op}">${ring}${mtext(x, y, ' ', null, 15, share ? 'var(--fg-col)' : '#41506a')}</g>`;
+  const ring = share ? `<circle cx="${x}" cy="${y+10}" r="11" fill="#fdeeda" stroke="var(--fg-col)" stroke-width="1.3"/>` : '';
+  return `<g class="nd k-g" opacity="${op}">${ring}${mtext(x, y+10, 'g', null, 15, share ? 'var(--fg-col)' : '#41506a')}</g>`;
 }
 
 function drawSVG(step, T){
