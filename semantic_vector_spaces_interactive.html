@@ -371,6 +371,10 @@
 
     <div class="para-box">
       <h3>The parallelogram view</h3>
+      <div class="controls" style="margin-bottom:8px">
+        <button class="chip on" id="paraRawChip">Best raw axes</button>
+        <button class="chip" id="paraPCAChip">Computed map (PCA)</button>
+      </div>
       <div class="sub" id="paraSub"></div>
       <svg id="paraPlot" viewBox="0 0 480 400" role="img" aria-label="Parallelogram of the word analogy"></svg>
     </div>
@@ -498,12 +502,13 @@ const PCA = (() => {
   const defl = Cov.map((row, i) => row.map((m, j) => m - l1 * v1[i] * v1[j]));
   const [v2, l2] = power(defl);
   const tot = Cov.reduce((s, row, i) => s + row[i], 0);
+  const project = vec => [
+    vec.reduce((s, v, j) => s + (v - mean[j]) * v1[j], 0),
+    vec.reduce((s, v, j) => s + (v - mean[j]) * v2[j], 0),
+  ];
   const proj = {};
-  WORDS.forEach((w, k) => proj[w] = [
-    Xc[k].reduce((s, v, j) => s + v * v1[j], 0),
-    Xc[k].reduce((s, v, j) => s + v * v2[j], 0),
-  ]);
-  return { proj, pct1: Math.round(l1 / tot * 100), pct2: Math.round(l2 / tot * 100) };
+  WORDS.forEach(w => proj[w] = project(VEC[w]));
+  return { proj, project, pct1: Math.round(l1 / tot * 100), pct2: Math.round(l2 / tot * 100) };
 })();
 
 /* ============ 1 · embedding table ============ */
@@ -822,6 +827,26 @@ function renderRanking() {
 function renderParallelogram(best) {
   const res = resultVec();
   const shown = [...new Set([A, B, C, best].filter(Boolean))];
+
+  if (paraPCA) {
+    const P = w => PCA.proj[w], pr = PCA.project(res);
+    $('paraSub').innerHTML =
+      `Projected with <b>PCA</b> — the same computed map as in section 2. PCA is linear, so ` +
+      `vector arithmetic survives the projection: the dashed arrows are still <b>the same ` +
+      `displacement</b> (<i>${B}</i> → <i>${C}</i>, applied to <i>${A}</i>).`;
+    drawPlot($('paraPlot'), {
+      xLabel: `PC1 — ${PCA.pct1}% of variance`,
+      yLabel: `PC2 — ${PCA.pct2}% of variance`,
+      points: shown.map(w => ({ word: w, x: P(w)[0], y: P(w)[1], color: COLOR[w] }))
+        .concat([{ word: `${A} ${MINUS} ${B} + ${C}`, x: pr[0], y: pr[1], starLabel: 'result' }]),
+      arrows: [
+        { x1: P(B)[0], y1: P(B)[1], x2: P(C)[0], y2: P(C)[1] },
+        { x1: P(A)[0], y1: P(A)[1], x2: pr[0], y2: pr[1] },
+      ],
+    });
+    return;
+  }
+
   // choose the 2 dims with the largest spread among the shown points + result
   const pts7 = shown.map(w => VEC[w]).concat([res]);
   const spread = DIMS.map((_, j) => {
@@ -847,10 +872,22 @@ function renderParallelogram(best) {
 }
 bindTips($('paraPlot'), resultVec);
 
+let paraPCA = false;
+let lastBest = null;
+function setParaMode(pca) {
+  paraPCA = pca;
+  $('paraRawChip').classList.toggle('on', !pca);
+  $('paraPCAChip').classList.toggle('on', pca);
+  renderParallelogram(lastBest);
+}
+$('paraRawChip').addEventListener('click', () => setParaMode(false));
+$('paraPCAChip').addEventListener('click', () => setParaMode(true));
+
 function renderArithmetic() {
   renderCalcTable();
   expansionDefault();
   const best = renderRanking();
+  lastBest = best;
   renderParallelogram(best);
   $('bestWord').innerHTML = best
     ? `<span style="color:${COLOR[best]}">${math(wordVecM(best))}</span>`
