@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>From Vocabulary to Embedding — Embedding Layer vs Linear Layer</title>
+<style>
+  :root{
+    --math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;
+    --ink: #1f2937;
+    --muted: #5a6478;
+    --panel: #ffffff;
+    --page: #f4f6f9;
+    --line: #e3e9f2;
+    --blue: #4f7df3;
+    --blue-dark: #2d5fcc;
+    --orange: #e07b18;
+    --orange-bg: #ffe8cc;
+    --orange-line: #f0b878;
+    --green: #1a7a4a;
+    --green-bg: #e6f9f1;
+    --red: #b5245a;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  math { font-family: var(--math); }
+
+  body{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--page);
+    color: var(--ink);
+    line-height: 1.55;
+    padding: 28px 16px 60px;
+  }
+  .wrap{ max-width: 1060px; margin: 0 auto; }
+
+  header.hero{ text-align: center; margin-bottom: 26px; }
+  header.hero h1{
+    font-size: 1.72rem; font-weight: 800; letter-spacing: -0.4px;
+    color: #16213e; margin-bottom: 6px;
+  }
+  header.hero p{
+    color: var(--muted); font-size: 0.98rem; max-width: 720px; margin: 0 auto;
+  }
+
+  section.panel{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 24px 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  section.panel > h2{
+    font-size: 1.12rem; font-weight: 750; color: #16213e;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+  }
+  .step-num{
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--blue); color: #fff; font-size: 0.85rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lede{ color: var(--muted); font-size: 0.92rem; margin-bottom: 18px; max-width: 860px; }
+  .lede b{ color: var(--ink); }
+
+  /* ---------- pipeline ---------- */
+  .pipeline{
+    display: flex; align-items: stretch; justify-content: center;
+    gap: 6px; flex-wrap: wrap;
+  }
+  .stage{
+    flex: 1 1 240px; max-width: 330px; min-width: 235px;
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 14px 12px; background: #fafbfe;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .stage h3{
+    font-size: 0.8rem; font-weight: 800; letter-spacing: 0.6px;
+    text-transform: uppercase; color: var(--blue-dark); text-align: center;
+  }
+  .stage .stage-caption{
+    font-size: 0.78rem; color: var(--muted); text-align: center;
+    border-top: 1px dashed var(--line); padding-top: 8px; margin-top: auto;
+  }
+  .stage .stage-caption b{ color: var(--ink); }
+  .flow-arrow{
+    flex: 0 0 auto; align-self: center; text-align: center;
+    color: var(--muted); font-size: 0.72rem; font-weight: 600;
+    padding: 0 4px; max-width: 92px;
+  }
+  .flow-arrow .glyph{ font-size: 1.5rem; color: var(--blue); line-height: 1; display: block; }
+
+  /* vocab table */
+  table.vocab{ border-collapse: collapse; font-size: 0.88rem; }
+  table.vocab th{
+    background: #e8eef8; color: #2b3a55; font-size: 0.76rem;
+    padding: 5px 14px; border: 1px solid #d5deed; font-weight: 700;
+  }
+  table.vocab td{
+    padding: 4px 14px; border: 1px solid #d5deed; text-align: center;
+    background: #fff; cursor: pointer; user-select: none;
+  }
+  table.vocab tr.sel td{ background: var(--orange-bg); font-weight: 700; }
+  table.vocab tr:hover td{ background: #f0f4fd; }
+  table.vocab tr.sel:hover td{ background: var(--orange-bg); }
+  .click-hint{ font-size: 0.76rem; color: var(--orange); font-weight: 600; }
+
+  /* matrices & vectors */
+  .matrix{ position: relative; padding: 6px 9px; }
+  .matrix::before, .matrix::after{
+    content: ""; position: absolute; top: 0; bottom: 0; width: 7px;
+    border: 2px solid #55627a;
+  }
+  .matrix::before{ left: 0; border-right: none; border-radius: 3px 0 0 3px; }
+  .matrix::after{ right: 0; border-left: none; border-radius: 0 3px 3px 0; }
+  .mgrid{ display: grid; gap: 3px; }
+  .cell{
+    min-width: 44px; height: 27px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-variant-numeric: tabular-nums;
+    background: #eef1f7; color: #3a4560;
+  }
+  .cell.hot{ background: var(--orange-bg); color: #8a4a00; font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--orange-line); }
+  .cell.dim{ opacity: 0.42; }
+  .cell.res{ background: #e2ebfd; color: #24457f; font-weight: 600; }
+  .cell.res:hover{ box-shadow: inset 0 0 0 1.5px var(--blue); cursor: default; }
+  .onehot .cell{ min-width: 34px; }
+  .vec-label{
+    text-align: center; font-size: 0.8rem; color: var(--muted); line-height: 1.35;
+  }
+  .row-tags{ display: grid; gap: 3px; margin-right: 5px; }
+  .row-tag{
+    height: 27px; display: flex; align-items: center; justify-content: flex-end;
+    font-size: 0.72rem; color: #7a86a0; padding-right: 3px; font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .row-tag.sel{ color: var(--orange); font-weight: 700; }
+  .mat-with-labels{ display: flex; align-items: center; }
+  .stack{ display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .op{ font-size: 1.25rem; color: #55627a; padding: 0 7px; font-family: var(--math); align-self: center; }
+
+  /* ---------- two ways ---------- */
+  .two-col{ display: flex; gap: 18px; flex-wrap: wrap; }
+  .way{
+    flex: 1 1 430px; border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 16px 14px; background: #fafbfe;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .way h3{
+    font-size: 0.95rem; font-weight: 750; color: #16213e;
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  }
+  .way h3 .pill{
+    font-size: 0.68rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;
+    padding: 2px 9px; border-radius: 999px; position: relative; top: -1px;
+  }
+  .pill.slow{ background: #fdecec; color: #b33838; }
+  .pill.fast{ background: var(--green-bg); color: var(--green); }
+  .way .mats{ display: flex; justify-content: center; align-items: center; flex-wrap: wrap; row-gap: 10px; }
+  .opcount{
+    font-size: 0.83rem; border-radius: 8px; padding: 8px 12px; line-height: 1.45;
+  }
+  .opcount.slow{ background: #fdf1f1; border: 1px solid #f2cdcd; color: #8c3a3a; }
+  .opcount.fast{ background: var(--green-bg); border: 1px solid #bfe8d2; color: #14603b; }
+  .expansion{
+    background: #fff; border: 1px dashed #c9d4e6; border-radius: 8px;
+    padding: 9px 12px; font-size: 0.9rem; min-height: 46px;
+    display: flex; align-items: center; overflow-x: auto;
+  }
+  .expansion .placeholder{ color: #9aa5bb; font-size: 0.82rem; font-style: italic; }
+  math .zero-term{ opacity: 0.33; }
+  math .live-term{ background: var(--orange-bg); border-radius: 3px; padding: 0 2px; }
+
+  .key-insight{
+    margin-top: 18px; background: #eef4ff; border: 1px solid #c9daf8;
+    border-left: 4px solid var(--blue); border-radius: 8px;
+    padding: 12px 16px; font-size: 0.9rem; color: #24365e;
+  }
+  .key-insight b{ color: #16213e; }
+
+  /* ---------- scale ---------- */
+  .sliders{ display: flex; gap: 26px; flex-wrap: wrap; margin-bottom: 16px; }
+  .slider-group{ flex: 1 1 300px; }
+  .slider-group label{
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 0.88rem; font-weight: 600; color: #2b3a55; margin-bottom: 4px;
+  }
+  .slider-group label .val{ color: var(--blue-dark); font-variant-numeric: tabular-nums; }
+  input[type=range]{ width: 100%; accent-color: var(--blue); }
+  .scale-cards{ display: flex; gap: 14px; flex-wrap: wrap; }
+  .scale-card{
+    flex: 1 1 230px; border-radius: 10px; padding: 12px 14px;
+    border: 1px solid var(--line); background: #fafbfe;
+  }
+  .scale-card h4{ font-size: 0.78rem; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 5px; }
+  .scale-card .big{ font-size: 1.32rem; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .scale-card .sub{ font-size: 0.78rem; color: var(--muted); margin-top: 3px; }
+  .scale-card.slow{ border-color: #f2cdcd; background: #fdf6f6; }
+  .scale-card.slow h4, .scale-card.slow .big{ color: #b33838; }
+  .scale-card.fast{ border-color: #bfe8d2; background: #f4fcf8; }
+  .scale-card.fast h4, .scale-card.fast .big{ color: var(--green); }
+  .scale-card.same h4, .scale-card.same .big{ color: var(--blue-dark); }
+  .scale-note{ margin-top: 12px; font-size: 0.88rem; color: #2b3a55; }
+  .scale-note b{ color: var(--red); }
+
+  /* ---------- comparison ---------- */
+  table.compare{ border-collapse: collapse; width: 100%; font-size: 0.87rem; }
+  table.compare th, table.compare td{
+    border: 1px solid #d5deed; padding: 8px 12px; text-align: left; vertical-align: top;
+  }
+  table.compare th{ background: #e8eef8; color: #2b3a55; font-size: 0.8rem; }
+  table.compare td:first-child{ font-weight: 650; color: #2b3a55; background: #f6f8fc; white-space: nowrap; }
+  table.compare .win{ color: var(--green); font-weight: 650; }
+  table.compare code, .notes code{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82em; background: #eef1f7; border-radius: 4px; padding: 1px 5px;
+  }
+  .table-scroll{ overflow-x: auto; }
+
+  .notes{ display: flex; gap: 14px; flex-wrap: wrap; margin-top: 16px; }
+  .note{
+    flex: 1 1 300px; border-radius: 10px; padding: 12px 15px; font-size: 0.86rem;
+  }
+  .note h4{ font-size: 0.85rem; margin-bottom: 5px; }
+  .note.warn{ background: #fdf6ec; border: 1px solid #f0d9b0; color: #6e4e12; }
+  .note.warn h4{ color: #9a5b00; }
+  .note.info{ background: #eef4ff; border: 1px solid #c9daf8; color: #24365e; }
+  .note.info h4{ color: var(--blue-dark); }
+
+  footer{
+    text-align: center; color: #9aa5bb; font-size: 0.78rem; margin-top: 10px;
+  }
+
+  @media (max-width: 760px){
+    .flow-arrow{ width: 100%; max-width: none; padding: 2px 0; }
+    .flow-arrow .glyph{ transform: rotate(90deg); display: inline-block; }
+    .flow-arrow .lbl{ display: inline-block; margin-left: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="true"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <h1>RNN: Processing Text Sequences — From Vocabulary to Embedding</h1>
+  <p>How a token becomes the dense vector
+    <math><msub><mi>x</mi><mi>t</mi></msub></math> an RNN consumes — and why we implement this
+    step as an <b>embedding layer</b> (a lookup) instead of a general <b>linear layer</b>.</p>
+</header>
+
+<!-- ================= 1 · PIPELINE ================= -->
+<section class="panel" id="sec-pipeline">
+  <h2><span class="step-num">1</span>The pipeline: token → index → one-hot → dense vector</h2>
+  <p class="lede"><span class="click-hint">Click any token in the vocabulary</span> and follow it through the
+    three stages. Here <math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>=</mo><mn>6</mn></math>
+    and <math><mi>d</mi><mo>=</mo><mn>4</mn></math>, so everything fits on screen — real vocabularies have
+    tens of thousands of tokens.</p>
+
+  <div class="pipeline">
+
+    <div class="stage">
+      <h3>Stage 1 · Vocabulary construction</h3>
+      <table class="vocab" id="vocabTable">
+        <thead><tr><th>Token</th><th>Index (<math><mi>i</mi></math>)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="stage-caption">Vocabulary size
+        <math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo></math> is <b>fixed</b>.
+        Each unique token gets a unique integer index.</div>
+    </div>
+
+    <div class="flow-arrow"><span class="glyph">→</span><span class="lbl">Tokenize &amp; index</span></div>
+
+    <div class="stage">
+      <h3>Stage 2 · One-hot encoding</h3>
+      <div class="vec-label" id="selTokenLabel"></div>
+      <div class="mat-with-labels">
+        <div class="row-tags" id="onehotTags"></div>
+        <div class="matrix onehot"><div class="mgrid" id="onehotVec" style="grid-template-columns: 1fr;"></div></div>
+      </div>
+      <div class="vec-label">
+        <math><msub><mi>v</mi><mtext>one-hot</mtext></msub></math> &nbsp;·&nbsp; shape
+        <math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>×</mo><mn>1</mn></math>
+      </div>
+      <div class="stage-caption"><b>Sparse, binary, high-dimensional.</b>
+        Only entry <math><mi>i</mi></math> is 1, all others are 0. No semantic meaning.</div>
+    </div>
+
+    <div class="flow-arrow"><span class="glyph">→</span><span class="lbl">Look&nbsp;up row&nbsp;<math><mi>i</mi></math></span></div>
+
+    <div class="stage">
+      <h3>Stage 3 · Dense embedding</h3>
+      <div class="vec-label">Embedding matrix <math><mi>E</mi></math> &nbsp;·&nbsp;
+        <math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>×</mo><mi>d</mi></math></div>
+      <div class="mat-with-labels">
+        <div class="row-tags" id="embTags"></div>
+        <div class="matrix"><div class="mgrid" id="embMatrix" style="grid-template-columns: repeat(4, 1fr);"></div></div>
+        <span class="op">→</span>
+        <div class="stack">
+          <div class="matrix onehot"><div class="mgrid" id="denseVec1" style="grid-template-columns: 1fr;"></div></div>
+          <div class="vec-label"><math><msub><mi>x</mi><mi>t</mi></msub></math> ·
+            <math><mi>d</mi><mo>×</mo><mn>1</mn></math></div>
+        </div>
+      </div>
+      <div class="stage-caption"><b>Dense, continuous, low-dimensional</b>
+        (<math><mi>d</mi><mo>≪</mo><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo></math>).
+        Values are learned parameters capturing semantic relationships.</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ================= 2 · TWO WAYS ================= -->
+<section class="panel" id="sec-twoways">
+  <h2><span class="step-num">2</span>Two ways to compute the exact same
+    <math><msub><mi>x</mi><mi>t</mi></msub></math></h2>
+  <p class="lede">An <b>embedding layer is not a different kind of math</b> — it is a linear layer
+    (weights <math><mi>E</mi></math>, no bias, no activation) applied to a one-hot input.
+    Because the input has a single 1 and zeros everywhere else, the full matrix multiplication
+    collapses to <b>reading one row</b>. Compare both computations for the selected token
+    <span id="selTokenLabel2"></span>:</p>
+
+  <div class="two-col">
+
+    <!-- Linear layer view -->
+    <div class="way">
+      <h3><span class="pill slow">Linear layer</span>
+        <math>
+          <msub><mi>x</mi><mi>t</mi></msub><mo>=</mo>
+          <msup><mi>E</mi><mi>T</mi></msup><mo>·</mo>
+          <msub><mi>v</mi><mtext>one-hot</mtext></msub>
+        </math>
+      </h3>
+      <div class="mats">
+        <div class="stack">
+          <div class="matrix"><div class="mgrid" id="etMatrix" style="grid-template-columns: repeat(6, 1fr);"></div></div>
+          <div class="vec-label"><math><msup><mi>E</mi><mi>T</mi></msup></math> ·
+            <math><mi>d</mi><mo>×</mo><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo></math></div>
+        </div>
+        <span class="op">·</span>
+        <div class="stack">
+          <div class="matrix onehot"><div class="mgrid" id="onehotVec2" style="grid-template-columns: 1fr;"></div></div>
+          <div class="vec-label"><math><msub><mi>v</mi><mtext>one-hot</mtext></msub></math></div>
+        </div>
+        <span class="op">=</span>
+        <div class="stack">
+          <div class="matrix onehot"><div class="mgrid" id="denseVec2" style="grid-template-columns: 1fr;"></div></div>
+          <div class="vec-label"><math><msub><mi>x</mi><mi>t</mi></msub></math></div>
+        </div>
+      </div>
+      <div class="expansion" id="expansion">
+        <span class="placeholder">Hover an entry of <b>x</b> (blue column) to expand its dot product…</span>
+      </div>
+      <div class="opcount slow" id="opcountSlow"></div>
+    </div>
+
+    <!-- Lookup view -->
+    <div class="way">
+      <h3><span class="pill fast">Embedding lookup</span>
+        <math>
+          <msub><mi>x</mi><mi>t</mi></msub><mo>=</mo>
+          <mi>E</mi><mo stretchy="false">[</mo><mi>i</mi><mo stretchy="false">]</mo>
+        </math>
+      </h3>
+      <div class="mats">
+        <div class="mat-with-labels">
+          <div class="row-tags" id="embTags2"></div>
+          <div class="matrix"><div class="mgrid" id="embMatrix2" style="grid-template-columns: repeat(4, 1fr);"></div></div>
+        </div>
+        <span class="op">→</span>
+        <div class="stack">
+          <div class="matrix onehot"><div class="mgrid" id="denseVec3" style="grid-template-columns: 1fr;"></div></div>
+          <div class="vec-label"><math><msub><mi>x</mi><mi>t</mi></msub></math></div>
+        </div>
+      </div>
+      <div class="expansion" id="lookupNote"></div>
+      <div class="opcount fast" id="opcountFast"></div>
+    </div>
+
+  </div>
+
+  <div class="key-insight">
+    <b>Key insight:</b> both paths use the <b>same learned parameters</b>
+    (the <math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>×</mo><mi>d</mi></math>
+    matrix <math><mi>E</mi></math>), produce the <b>same output</b>, and receive the
+    <b>same gradients</b> during training — only row <math><mi>i</mi></math> of
+    <math><mi>E</mi></math> gets a nonzero gradient for this token, because every other row was
+    multiplied by 0. The embedding layer is simply the <b>efficient implementation</b>: it skips
+    building the one-hot vector and skips every multiplication by zero.
+  </div>
+</section>
+
+<!-- ================= 3 · SCALE ================= -->
+<section class="panel" id="sec-scale">
+  <h2><span class="step-num">3</span>Why it matters: try a realistic vocabulary</h2>
+  <p class="lede">With 6 tokens the waste is invisible. Drag the sliders to a real setting
+    (e.g. <math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>=</mo><mn>50000</mn></math>,
+    <math><mi>d</mi><mo>=</mo><mn>256</mn></math>) and compare the work done <b>per token, at every
+    time step</b> of the sequence.</p>
+
+  <div class="sliders">
+    <div class="slider-group">
+      <label>Vocabulary size
+        <math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo></math>
+        <span class="val" id="vVal"></span></label>
+      <input type="range" id="vSlider" min="1000" max="100000" step="1000" value="50000">
+    </div>
+    <div class="slider-group">
+      <label>Embedding dimension <math><mi>d</mi></math>
+        <span class="val" id="dVal"></span></label>
+      <input type="range" id="dSlider" min="16" max="1024" step="16" value="256">
+    </div>
+  </div>
+
+  <div class="scale-cards">
+    <div class="scale-card slow">
+      <h4>Linear layer on one-hot</h4>
+      <div class="big" id="slowOps"></div>
+      <div class="sub">multiplications per token — <span id="wastedOps"></span> of them are ×0</div>
+    </div>
+    <div class="scale-card fast">
+      <h4>Embedding lookup</h4>
+      <div class="big" id="fastOps"></div>
+      <div class="sub">multiplications — just copy <span id="dCopy"></span> numbers from row
+        <math><mi>i</mi></math></div>
+    </div>
+    <div class="scale-card fast">
+      <h4>Input representation</h4>
+      <div class="big">1 integer</div>
+      <div class="sub">instead of a <span id="onehotSize"></span>-dimensional one-hot vector per token</div>
+    </div>
+    <div class="scale-card same">
+      <h4>Learned parameters (both)</h4>
+      <div class="big" id="paramCount"></div>
+      <div class="sub"><math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>×</mo><mi>d</mi></math>
+        — identical either way: same model, different implementation</div>
+    </div>
+  </div>
+
+  <p class="scale-note" id="scaleSummary"></p>
+</section>
+
+<!-- ================= 4 · SIDE BY SIDE ================= -->
+<section class="panel" id="sec-compare">
+  <h2><span class="step-num">4</span>Embedding layer vs linear layer — side by side</h2>
+  <p class="lede">Summary of the comparison. Remember: the embedding layer <b>is</b> the linear
+    layer, restricted to one-hot inputs and implemented as indexing.</p>
+
+  <div class="table-scroll">
+  <table class="compare">
+    <thead>
+      <tr>
+        <th></th>
+        <th>Linear layer &nbsp;<code>nn.Linear(V, d, bias=False)</code></th>
+        <th>Embedding layer &nbsp;<code>nn.Embedding(V, d)</code></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Input it expects</td>
+        <td>A <math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo></math>-dimensional
+          vector — you must build the one-hot explicitly</td>
+        <td class="win">Just the integer index <math><mi>i</mi></math></td>
+      </tr>
+      <tr>
+        <td>Operation</td>
+        <td>Full matrix–vector product
+          <math><msup><mi>E</mi><mi>T</mi></msup><mo>·</mo><msub><mi>v</mi><mtext>one-hot</mtext></msub></math></td>
+        <td class="win">Row read <math><mi>E</mi><mo stretchy="false">[</mo><mi>i</mi><mo stretchy="false">]</mo></math>
+          — no arithmetic at all</td>
+      </tr>
+      <tr>
+        <td>Cost per token</td>
+        <td><math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>·</mo><mi>d</mi></math>
+          multiply-adds, almost all against zeros</td>
+        <td class="win">Copy <math><mi>d</mi></math> numbers</td>
+      </tr>
+      <tr>
+        <td>Parameters</td>
+        <td><math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>·</mo><mi>d</mi></math></td>
+        <td><math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>·</mo><mi>d</mi></math>
+          — the same matrix <math><mi>E</mi></math></td>
+      </tr>
+      <tr>
+        <td>Gradient per token</td>
+        <td>Computed for the whole matrix, but nonzero only in row
+          <math><mi>i</mi></math></td>
+        <td class="win">Sparse update — touch row <math><mi>i</mi></math> only</td>
+      </tr>
+      <tr>
+        <td>Output</td>
+        <td colspan="2" style="text-align:center;">Identical:
+          <math><msub><mi>x</mi><mi>t</mi></msub><mo>=</mo>
+            <msup><mi>E</mi><mi>T</mi></msup><mo>·</mo><msub><mi>v</mi><mtext>one-hot</mtext></msub>
+            <mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mi>i</mi><mo stretchy="false">]</mo></math>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="notes">
+    <div class="note warn">
+      <h4>⚠ Why not feed the index <math><mi>i</mi></math> straight into a linear layer?</h4>
+      A raw index is a <b>categorical label</b>, not a quantity. Feeding it as a number would tell
+      the network that <i>dog</i> (1) is "between" <i>cat</i> (0) and <i>fish</i> (2), and that
+      <i>zebra</i> (5) is "five times" <i>dog</i> — pure artifacts of alphabetical ordering.
+      One-hot encoding (and therefore the embedding lookup) removes this fake ordinal structure:
+      every token starts equally distant from every other.
+    </div>
+    <div class="note info">
+      <h4>Why no bias term?</h4>
+      A bias <math><mi>b</mi></math> would add the <b>same</b> vector to every token's embedding:
+      <math><msub><mi>x</mi><mi>t</mi></msub><mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mi>i</mi><mo stretchy="false">]</mo><mo>+</mo><mi>b</mi></math>.
+      Since each row of <math><mi>E</mi></math> is free to learn any values, the rows can absorb
+      any constant shift — the bias adds parameters without adding expressive power. That is why
+      <code>nn.Embedding</code> has none.
+    </div>
+  </div>
+</section>
+
+<footer>
+  Single-file interactive widget · native MathML · companion to the "RNN: Processing Text Sequences" lecture slide
+</footer>
+
+</div>
+
+<script>
+'use strict';
+
+/* ---------- data ---------- */
+const VOCAB = ['cat', 'dog', 'fish', 'bird', 'sun', 'zebra'];
+const D = 4;
+const E = [
+  [ 0.62, -0.21,  0.35,  0.08],   // cat
+  [ 0.25, -0.61,  0.44,  0.12],   // dog  (matches the slide)
+  [-0.44,  0.53,  0.17, -0.29],   // fish
+  [ 0.05,  0.72, -0.38,  0.51],   // bird
+  [-0.63, -0.07,  0.29,  0.85],   // sun
+  [ 0.31,  0.14, -0.56, -0.42],   // zebra
+];
+const V = VOCAB.length;
+let sel = 1; // start on "dog", like the slide
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const MINUS = '−';
+const fmt = x => (x < 0 ? MINUS : '') + Math.abs(x).toFixed(2);
+const grp = n => n.toLocaleString('en-US');
+
+/* MathML snippet builders (strings) */
+const mi = s => `<mi>${s}</mi>`;
+const mn = v => `<mn>${v}</mn>`;
+const mo = s => `<mo>${s}</mo>`;
+const mrow = (inner, cls) => `<mrow${cls ? ` class="${cls}"` : ''}>${inner}</mrow>`;
+const math = inner => `<math>${inner}</math>`;
+/* a signed number as MathML: negatives get a real minus sign */
+const mnum = v => v < 0 ? mrow(mo(MINUS) + mn(Math.abs(v).toFixed(2))) : mn(v.toFixed(2));
+
+/* ---------- static-per-selection rendering ---------- */
+function renderVocab() {
+  const tb = $('vocabTable').querySelector('tbody');
+  tb.innerHTML = VOCAB.map((tok, i) =>
+    `<tr data-i="${i}" class="${i === sel ? 'sel' : ''}"><td>${tok}</td><td>${i}</td></tr>`
+  ).join('');
+}
+
+function onehotCells(hotId) {
+  return VOCAB.map((_, v) =>
+    `<div class="cell ${v === hotId ? 'hot' : 'dim'}">${v === hotId ? 1 : 0}</div>`
+  ).join('');
+}
+
+function indexTags(container, idxOnly) {
+  container.innerHTML = VOCAB.map((tok, v) =>
+    `<div class="row-tag ${v === sel ? 'sel' : ''}">${idxOnly ? v : `${tok} · ${v}`}</div>`
+  ).join('');
+}
+
+function embCells() {
+  return E.map((row, v) =>
+    row.map(x => `<div class="cell ${v === sel ? 'hot' : 'dim'}">${fmt(x)}</div>`).join('')
+  ).join('');
+}
+
+function denseCells(hoverable) {
+  return E[sel].map((x, j) =>
+    `<div class="cell res" ${hoverable ? `data-j="${j}"` : ''}>${fmt(x)}</div>`
+  ).join('');
+}
+
+function etCells() {
+  // E^T : rows j = 0..D-1, cols v = 0..V-1 ; column `sel` highlighted
+  let out = '';
+  for (let j = 0; j < D; j++)
+    for (let v = 0; v < V; v++)
+      out += `<div class="cell ${v === sel ? 'hot' : 'dim'}">${fmt(E[v][j])}</div>`;
+  return out;
+}
+
+function renderExpansionDefault() {
+  $('expansion').innerHTML =
+    '<span class="placeholder">Hover an entry of the blue result column to expand its dot product…</span>';
+}
+
+function renderExpansion(j) {
+  // x_t[j] = sum_v E[v][j] * onehot[v]  — zero terms grayed, surviving term highlighted
+  const terms = [];
+  for (let v = 0; v < V; v++) {
+    const prod = mrow(
+      mo('(') + mnum(E[v][j]) + mo(')') + mo('·') + mn(v === sel ? 1 : 0),
+      v === sel ? 'live-term' : 'zero-term'
+    );
+    terms.push(prod);
+    if (v < V - 1) terms.push(mo('+'));
+  }
+  const lhs = `<msub><mi>x</mi><mi>t</mi></msub>` +
+    `<mo stretchy="false">[</mo>${mn(j)}<mo stretchy="false">]</mo>`;
+  $('expansion').innerHTML = math(lhs + mo('=') + terms.join('') + mo('=') + mnum(E[sel][j]));
+}
+
+function renderAll() {
+  renderVocab();
+
+  const selLabel = `Selected token: <b>"${VOCAB[sel]}"</b> &nbsp;(index <math><mi>i</mi><mo>=</mo><mn>${sel}</mn></math>)`;
+  $('selTokenLabel').innerHTML = selLabel;
+  $('selTokenLabel2').innerHTML = `<b>"${VOCAB[sel]}"</b> (<math><mi>i</mi><mo>=</mo><mn>${sel}</mn></math>)`;
+
+  $('onehotVec').innerHTML = onehotCells(sel);
+  $('onehotVec2').innerHTML = onehotCells(sel);
+  indexTags($('onehotTags'), false);
+  indexTags($('embTags'), true);   // Stage 3 is narrow: indices only
+  indexTags($('embTags2'), false);
+
+  $('embMatrix').innerHTML = embCells();
+  $('embMatrix2').innerHTML = embCells();
+  $('etMatrix').innerHTML = etCells();
+
+  $('denseVec1').innerHTML = denseCells(false);
+  $('denseVec2').innerHTML = denseCells(true);
+  $('denseVec3').innerHTML = denseCells(false);
+
+  const mults = V * D, adds = (V - 1) * D, wasted = (V - 1) * D;
+  $('opcountSlow').innerHTML =
+    `<b>${mults} multiplications + ${adds} additions</b> per token — and ${wasted} of the ` +
+    `${mults} products are against a 0. Only the ${D} highlighted (orange) column entries survive.`;
+  $('opcountFast').innerHTML =
+    `<b>0 multiplications, 0 additions</b> — read row <i>i</i> = ${sel} and copy its ${D} numbers. ` +
+    `Same result, none of the wasted work.`;
+  $('lookupNote').innerHTML =
+    `<span class="placeholder">No dot products to expand here — the answer is literally ` +
+    `row ${sel} of the table, read off directly.</span>`;
+
+  renderExpansionDefault();
+}
+
+/* ---------- interactions ---------- */
+$('vocabTable').addEventListener('click', e => {
+  const tr = e.target.closest('tr[data-i]');
+  if (!tr) return;
+  sel = +tr.dataset.i;
+  renderAll();
+});
+
+$('denseVec2').addEventListener('mouseover', e => {
+  const c = e.target.closest('.cell[data-j]');
+  if (c) renderExpansion(+c.dataset.j);
+});
+$('denseVec2').addEventListener('mouseleave', renderExpansionDefault);
+
+/* ---------- scale section ---------- */
+function renderScale() {
+  const v = +$('vSlider').value, d = +$('dSlider').value;
+  $('vVal').textContent = grp(v);
+  $('dVal').textContent = grp(d);
+  $('slowOps').textContent = grp(v * d);
+  $('wastedOps').textContent = grp((v - 1) * d);
+  $('fastOps').textContent = '0';
+  $('dCopy').textContent = grp(d);
+  $('onehotSize').textContent = grp(v);
+  $('paramCount').textContent = grp(v * d);
+  $('scaleSummary').innerHTML =
+    `The lookup does <b>${grp(v)}× less work</b> than the explicit matrix multiplication — ` +
+    `and an RNN pays this cost at <i>every time step</i> of <i>every sequence</i>, ` +
+    `so the savings multiply across the whole batch and epoch.`;
+}
+$('vSlider').addEventListener('input', renderScale);
+$('dSlider').addEventListener('input', renderScale);
+
+renderAll();
+renderScale();
+</script>
+
+</body>
+</html>
