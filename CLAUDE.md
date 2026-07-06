@@ -38,19 +38,20 @@ widgets_pubic/
 
 ## Math Notation
 
-Widgets that show equations must render them with **LaTeX-like quality using only native HTML/CSS** — no MathJax, KaTeX, or any CDN library (widgets must stay self-contained). Reference implementation: `rnn_unrolling_interactive.html`.
+Widgets that show equations must render them with **native MathML** — real typeset math, supported by all modern browsers (Chrome 109+, Firefox, Safari) with zero JavaScript. No MathJax, KaTeX, or any CDN library (widgets must stay self-contained), and **no Unicode approximations** (`hₜ`, `x₁`, `ŷ` as plain text) or bare `<sub>`/`<sup>`/`<var>` hacks in HTML content. Reference implementation: `rnn_unrolling_interactive.html`.
 
 **In HTML text:**
 
-- Define a math font stack once and reuse it: `--math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;`
-- Identifiers (variables, function names) go in `<var>` styled as italic math-serif: `var{ font-family: var(--math); font-style: italic; }`. Wrap whole equations in a `.eq` span using the same font stack, upright, so operators/parentheses render in serif but not italic.
-- Subscripts/superscripts use real `<sub>`/`<sup>` tags (letter indices italic via nested `<var>`, digit indices upright). Example: `<var>h</var><sub><var>t</var>−1</sub>` → *h*ₜ₋₁.
-- Use proper Unicode glyphs, never ASCII lookalikes: minus `−` (U+2212, not hyphen), `ŷ`, `θ`, `·`, `…`, `→`. Prefer a real precomposed glyph (e.g. `ŷ`) over combining accents.
+- Build expressions from MathML elements: `<math><msub><mi>h</mi><mi>t</mi></msub></math>` for *hₜ*; compound indices use `<mrow>`: `<msub><mi>h</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub>` for *h*ₜ₋₁; accents use `<mover accent="true"><mi>y</mi><mo>^</mo></mover>` for ŷ. Identifiers are `<mi>` (italic automatically), numbers `<mn>`, operators `<mo>`.
+- Put a whole equation in **one** `<math>` element (not fragments glued with text `=` signs) so the browser spaces operators correctly. Use `<mo stretchy="false">(</mo>` for function-application parentheses.
+- Pin the font so MathML matches SVG labels: `math{ font-family: var(--math); }` with `--math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;`
+- In JS-generated narration, build `<math>` strings with small helpers (see the MATH SNIPPETS section of `rnn_unrolling_interactive.html`).
+- Inside `<mo>`/text, still use proper Unicode operator glyphs: minus `−` (U+2212, not hyphen), `·`, `…`, `→`.
 
 **Inside inline SVG — critical pitfall:**
 
-- **Never use `<var>`, `<sub>`, `<sup>`, `<b>`, `<i>`, `<span>` or other HTML tags inside `<svg>` text.** They are HTML5 *foreign-content breakout tags*: the parser silently exits the SVG at that point and the rest of the diagram is dumped as plain HTML text.
-- Instead, render math in SVG with `<text>`/`<tspan>`: set `font-family` to the math stack and `font-style="italic"` on the identifier, and build subscripts with `<tspan dy="…" font-size="…">` (italic for letter indices, upright for digits).
+- **MathML and HTML tags (`<var>`, `<sub>`, `<b>`, `<span>`, …) cannot go inside `<svg>` text.** They are foreign-content breakout tags: the parser silently exits the SVG at that point and the rest of the diagram is dumped as plain HTML text.
+- Instead, render math in SVG with `<text>`/`<tspan>`: set `font-family` to the math stack and `font-style="italic"` on the identifier, and build subscripts with `<tspan dy="…" font-size="…">` (italic for letter indices, upright for digits). This is the **only** place where MathML-free math rendering is acceptable.
 
 ## Courses Covered
 

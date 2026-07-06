@@ -14,9 +14,10 @@
   - LIGHT academic theme (maintainer preference).
   - NO looping animations — the user steps through the unrolling manually.
     Each state is a clear static diagram.
-  - Math notation is rendered natively (no CDN): identifiers in an italic
-    math serif font (<var> + .eq classes), real Unicode glyphs (ŷ, −),
-    proper <sub> subscripts. SVG math uses the same font stack.
+  - Math notation uses native MathML (<math>, <msub>, <mover>, ...) — proper
+    typeset math with no external libraries; supported by all modern browsers.
+    Exception: SVG <text> cannot contain MathML, so diagram labels use italic
+    math-font <tspan> subscripts instead (see mtext()).
   - Colors follow the lecture slide: blue = input x, green = hidden state h,
     purple = output ŷ.
 
@@ -59,10 +60,10 @@
   .wrap{ max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
 
   /* ---------------------------- math rendering ---------------------------- */
-  var{ font-family: var(--math); font-style: italic; font-weight: 400; }
-  .eq{ font-family: var(--math); font-style: normal; }
-  .eq sub, var sub{ font-size: .72em; }
-  sub var{ font-size: 1em; }
+  /* Native MathML — the browser typesets it; we only pin the font family so
+     it matches the SVG diagram labels. */
+  math{ font-family: var(--math); }
+  .story math{ font-size: 1.06em; }
 
   /* ------------------------------- header -------------------------------- */
   .hero{ text-align:center; margin: 26px 0 20px; }
@@ -172,7 +173,7 @@
   <header class="hero">
     <h1>Recurrent Neural Networks: Unrolling the Computational Graph</h1>
     <p>An RNN is one cell with a <b>feedback loop</b>: its hidden state
-       <span class="eq"><var>h</var><sub><var>t</var></sub></span> is fed back as input to the next time step,
+       <math><msub><mi>h</mi><mi>t</mi></msub></math> is fed back as input to the next time step,
        acting as a memory of everything seen so far. <b>Unrolling</b> that loop over time turns it into a chain —
        one copy of the <em>same</em> cell per time step. Step through the unrolling below.</p>
   </header>
@@ -181,16 +182,16 @@
     <div class="panel-head">
       <h2>Compact loop&nbsp;→&nbsp;unrolled chain</h2>
       <div class="t-row" id="tRow">
-        <span class="lbl">Sequence length <span class="eq"><var>T</var></span>:</span>
+        <span class="lbl">Sequence length <math><mi>T</mi></math>:</span>
       </div>
     </div>
 
     <div class="stage" id="stage"><div id="svgHost"></div></div>
     <div class="legend">
-      <span><span class="chip x"></span> input <span class="eq"><var>x</var><sub><var>t</var></sub></span></span>
-      <span><span class="chip h"></span> hidden state <span class="eq"><var>h</var><sub><var>t</var></sub></span> (memory)</span>
-      <span><span class="chip y"></span> output <span class="eq"><var>ŷ</var><sub><var>t</var></sub></span></span>
-      <span><span style="color:var(--fg-col);font-weight:700;font-family:var(--math);font-style:italic;">f, g</span>&nbsp;shared functions</span>
+      <span><span class="chip x"></span> input <math><msub><mi>x</mi><mi>t</mi></msub></math></span>
+      <span><span class="chip h"></span> hidden state <math><msub><mi>h</mi><mi>t</mi></msub></math> (memory)</span>
+      <span><span class="chip y"></span> output <math><msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mi>t</mi></msub></math></span>
+      <span><math style="color:var(--fg-col);"><mi>f</mi><mo>,</mo><mi>g</mi></math>&nbsp;shared functions</span>
     </div>
 
     <div class="controls">
@@ -207,24 +208,24 @@
 
   <section class="eq-panel">
     <h2>The two equations of an RNN</h2>
-    <p class="hint">Hover any highlighted term (or <span class="eq"><var>f</var></span>, <span class="eq"><var>g</var></span>) to see where it lives in the diagram above.</p>
+    <p class="hint">Hover any highlighted term (or <math><mi>f</mi></math>, <math><mi>g</mi></math>) to see where it lives in the diagram above.</p>
     <div class="eq-rows">
-      <span class="eq-line eq">
-        <span class="term c-h" data-hl="h"><span class="tx"><var>h</var><sub><var>t</var></sub></span><span class="lbl">current state</span></span>
+      <span class="eq-line">
+        <span class="term c-h" data-hl="h"><span class="tx"><math><msub><mi>h</mi><mi>t</mi></msub></math></span><span class="lbl">current state</span></span>
         <span class="op">=</span>
-        <span class="term c-fg" data-hl="f"><span class="tx"><var>f</var></span><span class="lbl">same every step</span></span>
+        <span class="term c-fg" data-hl="f"><span class="tx"><math><mi>f</mi></math></span><span class="lbl">same every step</span></span>
         <span class="op">(</span>
-        <span class="term c-x" data-hl="x"><span class="tx"><var>x</var><sub><var>t</var></sub></span><span class="lbl">current input</span></span>
+        <span class="term c-x" data-hl="x"><span class="tx"><math><msub><mi>x</mi><mi>t</mi></msub></math></span><span class="lbl">current input</span></span>
         <span class="op">,</span>
-        <span class="term c-h" data-hl="rec"><span class="tx"><var>h</var><sub><var>t</var>−1</sub></span><span class="lbl">past · memory</span></span>
+        <span class="term c-h" data-hl="rec"><span class="tx"><math><msub><mi>h</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub></math></span><span class="lbl">past · memory</span></span>
         <span class="op">)</span>
       </span>
-      <span class="eq-line eq">
-        <span class="term c-y" data-hl="y"><span class="tx"><var>ŷ</var><sub><var>t</var></sub></span><span class="lbl">output</span></span>
+      <span class="eq-line">
+        <span class="term c-y" data-hl="y"><span class="tx"><math><msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mi>t</mi></msub></math></span><span class="lbl">output</span></span>
         <span class="op">=</span>
-        <span class="term c-fg" data-hl="g"><span class="tx"><var>g</var></span><span class="lbl">same every step</span></span>
+        <span class="term c-fg" data-hl="g"><span class="tx"><math><mi>g</mi></math></span><span class="lbl">same every step</span></span>
         <span class="op">(</span>
-        <span class="term c-h" data-hl="h"><span class="tx"><var>h</var><sub><var>t</var></sub></span><span class="lbl">current state</span></span>
+        <span class="term c-h" data-hl="h"><span class="tx"><math><msub><mi>h</mi><mi>t</mi></msub></math></span><span class="lbl">current state</span></span>
         <span class="op">)</span>
       </span>
     </div>
@@ -234,27 +235,27 @@
     <div class="fact-card">
       <h3>🧠 Recurrence and memory</h3>
       <p>The network has a feedback loop: the hidden state
-         <span class="eq"><var>h</var><sub><var>t</var></sub></span> is an internal memory of past inputs.</p>
-      <p class="sub"><span class="eq"><var>h</var><sub><var>t</var></sub></span> summarizes the sequence history up to step
-         <span class="eq"><var>t</var></span> — the whole past, compressed into one vector.</p>
+         <math><msub><mi>h</mi><mi>t</mi></msub></math> is an internal memory of past inputs.</p>
+      <p class="sub"><math><msub><mi>h</mi><mi>t</mi></msub></math> summarizes the sequence history up to step
+         <math><mi>t</mi></math> — the whole past, compressed into one vector.</p>
     </div>
     <div class="fact-card">
       <h3>⛓️ Sequential dependence</h3>
-      <p>Unlike a feed-forward network, the state at time <span class="eq"><var>t</var></span> depends on both the current
-         input <span class="eq"><var>x</var><sub><var>t</var></sub></span> and the previous context
-         <span class="eq"><var>h</var><sub><var>t</var>−1</sub></span>.</p>
+      <p>Unlike a feed-forward network, the state at time <math><mi>t</mi></math> depends on both the current
+         input <math><msub><mi>x</mi><mi>t</mi></msub></math> and the previous context
+         <math><msub><mi>h</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub></math>.</p>
       <p class="sub">Order matters: feeding the same inputs in a different order produces different states.</p>
     </div>
     <div class="fact-card">
       <h3>♻️ Parameter sharing</h3>
-      <p>The same functions <span class="eq"><var>f</var></span> and <span class="eq"><var>g</var></span>
+      <p>The same functions <math><mi>f</mi></math> and <math><mi>g</mi></math>
          (and their underlying parameters) are reused at <b>every</b> time step.</p>
       <p class="sub">This lets the model process sequences of arbitrary length with a fixed number of parameters —
          unrolling adds time steps, never new weights.</p>
     </div>
   </section>
 
-  <footer>Single-file teaching widget · math rendered natively (no external libraries) ·
+  <footer>Single-file teaching widget · math typeset with native MathML (no external libraries) ·
           colors follow the lecture-slide convention (blue inputs, green hidden states, purple outputs)</footer>
 </div>
 
@@ -271,50 +272,61 @@ const maxStep = () => state.T + 1;
 const $ = id => document.getElementById(id);
 
 /* ============================ MATH SNIPPETS ============================= */
-/* Native math rendering: <var> = italic math-serif identifier, <sub> = index,
-   real Unicode ŷ and − (minus). Used in narration strings. */
+/* Native MathML (no libraries). Helpers build <math> strings for the
+   narration. SVG <text> can't contain MathML, so diagram labels keep the
+   italic math-font <tspan> approach (see mtext). */
+
+const mm   = inner => `<math>${inner}</math>`;
+const idx  = t => typeof t === "number" ? `<mn>${t}</mn>` : `<mi>${t}</mi>`;
+const YHAT = '<mover accent="true"><mi>y</mi><mo>^</mo></mover>';
+const HTM1 = '<msub><mi>h</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub>';
+const ih = t => `<msub><mi>h</mi>${idx(t)}</msub>`;
+const ix = t => `<msub><mi>x</mi>${idx(t)}</msub>`;
+const iy = t => `<msub>${YHAT}${idx(t)}</msub>`;
+const paren = inner => `<mo stretchy="false">(</mo>${inner}<mo stretchy="false">)</mo>`;
 
 const M = {
-  ht:   '<var>h</var><sub><var>t</var></sub>',
-  xt:   '<var>x</var><sub><var>t</var></sub>',
-  htm1: '<var>h</var><sub><var>t</var>−1</sub>',
-  yt:   '<var>ŷ</var><sub><var>t</var></sub>',
-  f:    '<var>f</var>',
-  g:    '<var>g</var>'
+  ht:   mm(ih('t')),
+  xt:   mm(ix('t')),
+  htm1: mm(HTM1),
+  yt:   mm(iy('t')),
+  f:    mm('<mi>f</mi>'),
+  g:    mm('<mi>g</mi>')
 };
-const hi = t => `<var>h</var><sub>${t}</sub>`;
-const xi = t => `<var>x</var><sub>${t}</sub>`;
-const yi = t => `<var>ŷ</var><sub>${t}</sub>`;
-const stateEq  = t => `<span class="eq">${hi(t)} = ${M.f}(${xi(t)}, ${hi(t-1)})</span>`;
-const outEq    = t => `<span class="eq">${yi(t)} = ${M.g}(${hi(t)})</span>`;
+const hi = t => mm(ih(t));
+const xi = t => mm(ix(t));
+const yi = t => mm(iy(t));
+/* full update / output equations as single <math> expressions */
+const stateEqT = mm(`${ih('t')}<mo>=</mo><mi>f</mi>${paren(`${ix('t')}<mo>,</mo>${HTM1}`)}`);
+const outEqT   = mm(`${iy('t')}<mo>=</mo><mi>g</mi>${paren(ih('t'))}`);
+const stateEq  = t => mm(`${ih(t)}<mo>=</mo><mi>f</mi>${paren(`${ix(t)}<mo>,</mo>${ih(t-1)}`)}`);
+const outEq    = t => mm(`${iy(t)}<mo>=</mo><mi>g</mi>${paren(ih(t))}`);
 
 /* ============================= NARRATION ================================ */
 
 function narration(step, T){
   if (step === 0){
     return `<b>Compact view:</b> the whole RNN is <b>one</b> recurrent cell. At every time step it reads the ` +
-           `input <span class="eq">${M.xt}</span>, updates its hidden state ` +
-           `<span class="eq">${M.ht} = ${M.f}(${M.xt}, ${M.htm1})</span>, emits ` +
-           `<span class="eq">${M.yt} = ${M.g}(${M.ht})</span> — and feeds <span class="eq">${M.ht}</span> ` +
+           `input ${M.xt}, updates its hidden state ${stateEqT}, emits ${outEqT} — and feeds ${M.ht} ` +
            `back into itself (the loop). Press <b>Next ›</b> to unroll this loop over time.`;
   }
   if (step === 1){
-    return `<b>Step t = 1:</b> the memory starts empty, <span class="eq">${hi(0)} = 0</span>. The cell combines the ` +
+    return `<b>Step t = 1:</b> the memory starts empty, ${mm(`${ih(0)}<mo>=</mo><mn>0</mn>`)}. The cell combines the ` +
            `first input with it: ${stateEq(1)}, then emits ${outEq(1)}. ` +
-           `So far <span class="eq">${hi(1)}</span> only knows about <span class="eq">${xi(1)}</span>.`;
+           `So far ${hi(1)} only knows about ${xi(1)}.`;
   }
   if (step <= T){
     const t = step;
-    return `<b>Step t = ${t}:</b> the previous state <span class="eq">${hi(t-1)}</span> travels along the ` +
+    return `<b>Step t = ${t}:</b> the previous state ${hi(t-1)} travels along the ` +
            `horizontal arrow and meets the new input: ${stateEq(t)}, then ${outEq(t)}. ` +
-           `Because <span class="eq">${hi(t-1)}</span> already summarized steps 1…${t-1}, ` +
-           `<span class="eq">${hi(t)}</span> now summarizes the whole history up to <span class="eq">${xi(t)}</span> — ` +
+           `Because ${hi(t-1)} already summarized steps 1…${t-1}, ` +
+           `${hi(t)} now summarizes the whole history up to ${xi(t)} — ` +
            `that is the <b>memory</b>.`;
   }
   return `<b>Parameter sharing:</b> every green cell applies the <b>same</b> function ` +
-         `<span class="eq" style="color:var(--fg-col)">${M.f}</span> and every output uses the <b>same</b> ` +
-         `<span class="eq" style="color:var(--fg-col)">${M.g}</span> — the unrolled chain is ${T} copies of one cell, ` +
-         `not ${T} different cells. Change <span class="eq"><var>T</var></span> above: the chain grows, ` +
+         `<span style="color:var(--fg-col)">${M.f}</span> and every output uses the <b>same</b> ` +
+         `<span style="color:var(--fg-col)">${M.g}</span> — the unrolled chain is ${T} copies of one cell, ` +
+         `not ${T} different cells. Change ${mm('<mi>T</mi>')} above: the chain grows, ` +
          `but the parameter count never does. That is how an RNN handles sequences of arbitrary length.`;
 }
 
@@ -322,8 +334,8 @@ function paramLine(step, T){
   const unrolled = Math.min(Math.max(step, 0), T);
   const n = step === 0 ? "— (loop not yet unrolled)" : `${unrolled} of ${T}`;
   return `Time steps unrolled: ${n} &nbsp;·&nbsp; distinct parameter sets: <b>2, always</b> ` +
-         `(<b><span class="eq"><var>W</var><sub><var>f</var></sub></span></b> shared by all cells, ` +
-         `<b><span class="eq"><var>W</var><sub><var>g</var></sub></span></b> shared by all outputs)`;
+         `(<b>${mm('<msub><mi>W</mi><mi>f</mi></msub>')}</b> shared by all cells, ` +
+         `<b>${mm('<msub><mi>W</mi><mi>g</mi></msub>')}</b> shared by all outputs)`;
 }
 
 /* ============================ SVG RENDERING ============================= */
