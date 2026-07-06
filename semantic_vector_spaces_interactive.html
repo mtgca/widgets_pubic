@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Semantic Vector Spaces — The Geometry of Meaning</title>
+<style>
+  :root{
+    --math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;
+    --ink: #1f2937;
+    --muted: #5a6478;
+    --panel: #ffffff;
+    --page: #f4f6f9;
+    --line: #e3e9f2;
+    --blue: #2a78d6;
+    --blue-dark: #2d5fcc;
+    --red: #e34948;
+    --grid: #e6e4dd;
+    --axis: #b9b7ae;
+    /* one fixed color per word — color follows the entity, everywhere */
+    --c-cat: #e34948;
+    --c-kitten: #008300;
+    --c-dog: #2a78d6;
+    --c-houses: #eda100;
+    --c-man: #1baf7a;
+    --c-woman: #e87ba4;
+    --c-king: #eb6834;
+    --c-queen: #4a3aa7;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  math { font-family: var(--math); }
+
+  body{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--page);
+    color: var(--ink);
+    line-height: 1.55;
+    padding: 28px 16px 60px;
+  }
+  .wrap{ max-width: 1080px; margin: 0 auto; }
+
+  header.hero{ text-align: center; margin-bottom: 26px; }
+  header.hero h1{
+    font-size: 1.72rem; font-weight: 800; letter-spacing: -0.4px;
+    color: #16213e; margin-bottom: 6px;
+  }
+  header.hero p{
+    color: var(--muted); font-size: 0.98rem; max-width: 760px; margin: 0 auto;
+  }
+
+  section.panel{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 24px 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  section.panel > h2{
+    font-size: 1.12rem; font-weight: 750; color: #16213e;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+  }
+  .step-num{
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--blue); color: #fff; font-size: 0.85rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lede{ color: var(--muted); font-size: 0.92rem; margin-bottom: 16px; max-width: 900px; }
+  .lede b{ color: var(--ink); }
+  .click-hint{ font-size: 0.9em; color: #b56a00; font-weight: 600; }
+
+  /* ---------- 1 · embedding table ---------- */
+  .table-scroll{ overflow-x: auto; }
+  table.emb{ border-collapse: collapse; font-size: 0.86rem; margin: 0 auto; }
+  table.emb th, table.emb td{ border: 1px solid #dde3ee; padding: 6px 10px; text-align: center; }
+  table.emb thead th{
+    background: #eef2f9; color: #2b3a55; font-size: 0.76rem; font-weight: 700;
+    cursor: pointer; user-select: none; white-space: nowrap; vertical-align: bottom;
+  }
+  table.emb thead th:hover{ background: #e0e8f6; }
+  table.emb thead th.word-col{ cursor: default; }
+  table.emb thead th.word-col:hover{ background: #eef2f9; }
+  table.emb thead th.sorted{ background: #dce7fa; color: var(--blue-dark); }
+  table.emb thead th .arrow{ font-size: 0.7em; opacity: 0.85; }
+  table.emb td{ font-variant-numeric: tabular-nums; min-width: 62px; }
+  table.emb td.word{
+    text-align: left; font-weight: 650; cursor: pointer; white-space: nowrap;
+    background: #fafbfe; min-width: 0; font-style: italic; font-family: var(--math);
+  }
+  table.emb tr:hover td.word{ background: #f0f4fd; }
+  table.emb tr.sel td.word{ background: #fff3e2; }
+  table.emb tr.sel td{ box-shadow: inset 0 2px 0 -1px #f0b878, inset 0 -2px 0 -1px #f0b878; }
+  table.emb td.dimhot{ outline: 2px solid var(--blue); outline-offset: -2px; }
+  .dot{
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    margin-right: 7px; vertical-align: 1px;
+  }
+  .narration{
+    margin-top: 14px; background: #eef4ff; border: 1px solid #c9daf8;
+    border-left: 4px solid var(--blue); border-radius: 8px;
+    padding: 10px 14px; font-size: 0.89rem; color: #24365e;
+  }
+  .narration b{ color: #16213e; }
+  .legend-scale{
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 12px; font-size: 0.78rem; color: var(--muted);
+  }
+  .legend-scale .swatch{ width: 34px; height: 12px; border-radius: 3px; border: 1px solid #dde3ee; }
+
+  /* ---------- 2 · geometry ---------- */
+  .controls{
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;
+  }
+  .chip{
+    font: 600 0.8rem/1 inherit; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid #c9d6ee; background: #f3f7fe; color: #2b4a80; cursor: pointer;
+  }
+  .chip:hover{ background: #e4edfc; }
+  .chip.on{ background: var(--blue); border-color: var(--blue); color: #fff; }
+  .axis-picks{ display: flex; align-items: center; gap: 6px; font-size: 0.84rem; color: var(--muted); margin-left: auto; }
+  select{
+    font: 600 0.84rem/1.3 inherit; color: #2b3a55; padding: 5px 8px;
+    border: 1px solid #c9d6ee; border-radius: 7px; background: #fff; cursor: pointer;
+  }
+  .geo-cols{ display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .plot-box{ flex: 1 1 440px; min-width: 320px; }
+  .plot-box svg{ width: 100%; height: auto; display: block; }
+  .plot-note{ font-size: 0.8rem; color: var(--muted); margin-top: 6px; text-align: center; }
+  .nb-box{ flex: 1 1 320px; min-width: 290px; }
+  .nb-box h3{ font-size: 0.95rem; font-weight: 750; color: #16213e; margin-bottom: 3px; }
+  .nb-box .sub{ font-size: 0.8rem; color: var(--muted); margin-bottom: 10px; }
+  .nb-row{ display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .nb-word{ flex: 0 0 76px; font-size: 0.86rem; font-weight: 600; text-align: right;
+    font-style: italic; font-family: var(--math); }
+  .nb-track{ flex: 1 1 auto; height: 16px; background: #f2f4f9; border-radius: 4px; position: relative; overflow: hidden; }
+  .nb-zero{ position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #b9c2d4; }
+  .nb-bar{ position: absolute; top: 2px; bottom: 2px; border-radius: 3px; }
+  .nb-val{ flex: 0 0 46px; font-size: 0.82rem; font-variant-numeric: tabular-nums; color: #2b3a55; }
+  .formula-line{
+    margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line);
+    font-size: 0.86rem; color: var(--muted);
+  }
+  .formula-line math{ font-size: 1.05rem; color: var(--ink); }
+
+  /* ---------- 3 · arithmetic ---------- */
+  .analogy-picker{
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    flex-wrap: wrap; font-size: 1.05rem; margin-bottom: 16px;
+  }
+  .analogy-picker .op{ font-family: var(--math); font-size: 1.2rem; color: #55627a; }
+  .analogy-picker .approx-word{ font-weight: 700; }
+  .analogy-picker .approx-word math{ font-size: 1.15rem; }
+  table.calc{ border-collapse: collapse; font-size: 0.85rem; margin: 0 auto; }
+  table.calc th, table.calc td{ border: 1px solid #dde3ee; padding: 6px 10px; text-align: center; }
+  table.calc thead th{ background: #eef2f9; color: #2b3a55; font-size: 0.75rem; white-space: nowrap; }
+  table.calc td{ font-variant-numeric: tabular-nums; min-width: 62px; }
+  table.calc td.rowlab{
+    text-align: right; font-weight: 650; background: #fafbfe; white-space: nowrap;
+    font-family: var(--math); font-style: italic; min-width: 0;
+  }
+  table.calc tr.result td{ font-weight: 700; border-top: 2px solid #8ea4c8; }
+  table.calc tr.result td:not(.rowlab){ cursor: default; }
+  table.calc tr.result td:not(.rowlab):hover{ outline: 2px solid var(--blue); outline-offset: -2px; }
+  .expansion{
+    background: #fff; border: 1px dashed #c9d4e6; border-radius: 8px;
+    padding: 9px 12px; font-size: 0.92rem; min-height: 44px; margin: 12px auto 0;
+    display: flex; align-items: center; justify-content: center; overflow-x: auto; max-width: 720px;
+  }
+  .expansion .placeholder{ color: #9aa5bb; font-size: 0.82rem; font-style: italic; }
+  .arith-cols{ display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; margin-top: 18px; }
+  .rank-box{ flex: 1 1 330px; min-width: 300px; }
+  .rank-box h3, .para-box h3{ font-size: 0.95rem; font-weight: 750; color: #16213e; margin-bottom: 3px; }
+  .rank-box .sub, .para-box .sub{ font-size: 0.8rem; color: var(--muted); margin-bottom: 10px; }
+  .nb-row.input-word{ opacity: 0.45; }
+  .nb-row .flag{
+    font-size: 0.66rem; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase;
+    padding: 1px 7px; border-radius: 999px; background: #eef1f7; color: #7a86a0; margin-left: 4px;
+  }
+  .nb-row .flag.win{ background: #e6f9f1; color: #1a7a4a; }
+  .para-box{ flex: 1 1 400px; min-width: 320px; }
+  .para-box svg{ width: 100%; height: auto; display: block; }
+  .key-insight{
+    margin-top: 18px; background: #eef4ff; border: 1px solid #c9daf8;
+    border-left: 4px solid var(--blue); border-radius: 8px;
+    padding: 12px 16px; font-size: 0.9rem; color: #24365e;
+  }
+  .key-insight b{ color: #16213e; }
+
+  /* ---------- 4 · reality check ---------- */
+  .notes{ display: flex; gap: 14px; flex-wrap: wrap; }
+  .note{ flex: 1 1 300px; border-radius: 10px; padding: 12px 15px; font-size: 0.86rem; }
+  .note h4{ font-size: 0.85rem; margin-bottom: 5px; }
+  .note.warn{ background: #fdf6ec; border: 1px solid #f0d9b0; color: #6e4e12; }
+  .note.warn h4{ color: #9a5b00; }
+  .note.info{ background: #eef4ff; border: 1px solid #c9daf8; color: #24365e; }
+  .note.info h4{ color: var(--blue-dark); }
+
+  /* ---------- shared plot bits ---------- */
+  .tooltip{
+    position: fixed; z-index: 50; pointer-events: none; display: none;
+    background: #ffffff; border: 1px solid #c9d4e6; border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(20,35,70,0.16);
+    padding: 8px 11px; font-size: 0.78rem; color: #2b3a55; line-height: 1.5;
+    max-width: 240px;
+  }
+  .tooltip .tt-word{ font-weight: 750; font-size: 0.86rem; margin-bottom: 2px;
+    font-style: italic; font-family: var(--math); }
+  .tooltip .tt-dim{ color: var(--muted); }
+  .tooltip .tt-val{ font-variant-numeric: tabular-nums; }
+
+  footer{ text-align: center; color: #9aa5bb; font-size: 0.78rem; margin-top: 10px; }
+
+  @media (max-width: 720px){
+    .axis-picks{ margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <h1>Semantic Vector Spaces — The Geometry of Meaning</h1>
+  <p>Each word is mapped to a <b>dense vector</b>: meaning spread across several numeric
+    dimensions. Explore how that single idea gives you clusters (similar words sit together),
+    a ruler (cosine similarity), and even algebra
+    (<math><mover><mtext>king</mtext><mo>→</mo></mover><mo>−</mo><mover><mtext>man</mtext><mo>→</mo></mover><mo>+</mo><mover><mtext>woman</mtext><mo>→</mo></mover><mo>≈</mo><mover><mtext>queen</mtext><mo>→</mo></mover></math>).</p>
+</header>
+
+<!-- ================= 1 · WORDS AS VECTORS ================= -->
+<section class="panel" id="sec-table">
+  <h2><span class="step-num">1</span>Distributed representations: a word is a list of numbers</h2>
+  <p class="lede">Eight words, each embedded in <math><msup><mi mathvariant="normal">ℝ</mi><mn>7</mn></msup></math>.
+    No single cell "is" the meaning — meaning is <b>distributed</b> across all seven coordinates.
+    <span class="click-hint">Click a column header</span> to rank the words along that dimension,
+    and <span class="click-hint">click a word</span> to select it for the panels below.</p>
+
+  <div class="table-scroll">
+    <table class="emb" id="embTable">
+      <thead><tr id="embHead"></tr></thead>
+      <tbody id="embBody"></tbody>
+    </table>
+  </div>
+
+  <div class="legend-scale">
+    <span>−1</span>
+    <span class="swatch" style="background:rgba(227,73,72,0.5)"></span>
+    <span class="swatch" style="background:rgba(227,73,72,0.22)"></span>
+    <span class="swatch" style="background:#f6f6f4"></span>
+    <span class="swatch" style="background:rgba(42,120,214,0.22)"></span>
+    <span class="swatch" style="background:rgba(42,120,214,0.5)"></span>
+    <span>+1</span>
+    <span style="margin-left:10px">cell tint = value (red negative · blue positive)</span>
+  </div>
+
+  <div class="narration" id="dimNarration">
+    <b>Try it:</b> click <b>royalty</b> in the header — the table re-sorts and only two words rise
+    to the top. Each dimension is one <i>direction of meaning</i> that several words can share.
+  </div>
+</section>
+
+<!-- ================= 2 · GEOMETRY ================= -->
+<section class="panel" id="sec-geometry">
+  <h2><span class="step-num">2</span>Geometric proximity: similar words sit close together</h2>
+  <p class="lede">We cannot draw 7 dimensions, so we <b>project</b> onto two of them — a
+    hand-made dimensionality reduction of the word embeddings from 7D to 2D.
+    Pick the axes and watch clusters form and dissolve: words are close <b>on the dimensions they
+    share</b>, not universally.</p>
+
+  <div class="controls">
+    <button class="chip on" id="presetAnimals">Animal cluster</button>
+    <button class="chip" id="presetRoyal">Gender × royalty</button>
+    <div class="axis-picks">
+      <label for="xSel">x:</label> <select id="xSel"></select>
+      <label for="ySel">y:</label> <select id="ySel"></select>
+    </div>
+  </div>
+
+  <div class="geo-cols">
+    <div class="plot-box">
+      <svg id="mainPlot" viewBox="0 0 480 430" role="img" aria-label="2D projection of word embeddings"></svg>
+      <div class="plot-note">A 2-D shadow of the full 7-D space — two coordinates shown, five hidden.</div>
+    </div>
+
+    <div class="nb-box">
+      <h3 id="nbTitle"></h3>
+      <div class="sub">Cosine similarity computed in the <b>full 7-D space</b> — not just the two plotted axes.</div>
+      <div id="nbList"></div>
+      <div class="formula-line">
+        Similarity = the angle between vectors:&nbsp;
+        <math>
+          <mi>sim</mi><mo stretchy="false">(</mo><mover><mi>u</mi><mo>→</mo></mover><mo>,</mo><mover><mi>v</mi><mo>→</mo></mover><mo stretchy="false">)</mo>
+          <mo>=</mo><mi>cos</mi><mo>⁡</mo><mi>θ</mi><mo>=</mo>
+          <mfrac>
+            <mrow><mover><mi>u</mi><mo>→</mo></mover><mo>·</mo><mover><mi>v</mi><mo>→</mo></mover></mrow>
+            <mrow><mo stretchy="false">∥</mo><mover><mi>u</mi><mo>→</mo></mover><mo stretchy="false">∥</mo><mspace width="0.25em"></mspace><mo stretchy="false">∥</mo><mover><mi>v</mi><mo>→</mo></mover><mo stretchy="false">∥</mo></mrow>
+          </mfrac>
+        </math>
+        &nbsp;— +1 same direction, 0 unrelated, −1 opposite.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 3 · VECTOR ARITHMETIC ================= -->
+<section class="panel" id="sec-arithmetic">
+  <h2><span class="step-num">3</span>Vector arithmetic: the space preserves relationships</h2>
+  <p class="lede">Because meaning lives in the coordinates, you can <b>compute with it</b>.
+    Subtracting <math><mover><mtext>man</mtext><mo>→</mo></mover></math> from
+    <math><mover><mtext>king</mtext><mo>→</mo></mover></math> removes "maleness" but keeps
+    "royalty"; adding <math><mover><mtext>woman</mtext><mo>→</mo></mover></math> puts
+    "femaleness" back in. Change the three words and see where the result lands.</p>
+
+  <div class="analogy-picker">
+    <select id="selA"></select>
+    <span class="op">−</span>
+    <select id="selB"></select>
+    <span class="op">+</span>
+    <select id="selC"></select>
+    <span class="op">≈</span>
+    <span class="approx-word" id="bestWord"></span>
+  </div>
+
+  <div class="table-scroll">
+    <table class="calc">
+      <thead><tr id="calcHead"></tr></thead>
+      <tbody id="calcBody"></tbody>
+    </table>
+  </div>
+  <div class="expansion" id="calcExpansion"></div>
+
+  <div class="arith-cols">
+    <div class="rank-box">
+      <h3>Which real word is nearest to the result?</h3>
+      <div class="sub">Cosine similarity between the computed vector and every word
+        (the three input words are grayed out — we look for the nearest <i>other</i> word).</div>
+      <div id="rankList"></div>
+    </div>
+
+    <div class="para-box">
+      <h3>The parallelogram view</h3>
+      <div class="sub" id="paraSub"></div>
+      <svg id="paraPlot" viewBox="0 0 480 400" role="img" aria-label="Parallelogram of the word analogy"></svg>
+    </div>
+  </div>
+
+  <div class="key-insight" id="analogyInsight"></div>
+</section>
+
+<!-- ================= 4 · REALITY CHECK ================= -->
+<section class="panel" id="sec-reality">
+  <h2><span class="step-num">4</span>Reality check: what real embeddings look like</h2>
+  <div class="notes">
+    <div class="note warn">
+      <h4>⚠ The labels are a pedagogical fiction</h4>
+      Names like <b>"royalty"</b> or <b>"feline"</b> were written by hand for this demo.
+      In practice the dimensions are <b>latent and uninterpretable</b>: they are learned
+      automatically from corpus statistics, and no engineer decides what dimension&nbsp;3 means.
+      What survives in real embeddings is exactly what you explored here — the <b>geometry</b>:
+      neighborhoods, directions, and analogies.
+    </div>
+    <div class="note info">
+      <h4>Scale</h4>
+      Real embeddings use hundreds of dimensions (e.g. 300 for word2vec/GloVe, 768+ inside
+      transformers) over vocabularies of tens of thousands of tokens — far too many numbers to
+      inspect by eye, which is why we reason about them geometrically. <b>How these vectors are
+      learned</b> is a topic of its own — the intuition to keep from here is:
+      <i>meaning ≈ position in a vector space</i>.
+    </div>
+  </div>
+</section>
+
+<footer>
+  Single-file interactive widget · native MathML · no external dependencies
+</footer>
+
+</div>
+
+<div class="tooltip" id="tt"></div>
+
+<script>
+'use strict';
+
+/* ---------- data: a hand-crafted toy embedding ---------- */
+const DIMS = ['living being', 'feline', 'human', 'gender', 'royalty', 'verb', 'plural'];
+const WORDS = ['cat', 'kitten', 'dog', 'houses', 'man', 'woman', 'king', 'queen'];
+const VEC = {
+  cat:    [ 0.6,  0.9,  0.1,  0.4, -0.7, -0.3, -0.2],
+  kitten: [ 0.5,  0.8, -0.1,  0.2, -0.6, -0.5, -0.1],
+  dog:    [ 0.7, -0.1,  0.4,  0.3, -0.4, -0.1, -0.3],
+  houses: [-0.8, -0.4, -0.5,  0.1, -0.9,  0.3,  0.8],
+  man:    [ 0.6, -0.2,  0.8,  0.9, -0.1, -0.9, -0.7],
+  woman:  [ 0.7,  0.3,  0.9, -0.7,  0.1, -0.5, -0.4],
+  king:   [ 0.5, -0.4,  0.7,  0.8,  0.9, -0.7, -0.6],
+  queen:  [ 0.8, -0.1,  0.8, -0.9,  0.8, -0.5, -0.9],
+};
+const COLOR = {
+  cat: '#e34948', kitten: '#008300', dog: '#2a78d6', houses: '#eda100',
+  man: '#1baf7a', woman: '#e87ba4', king: '#eb6834', queen: '#4a3aa7',
+};
+const DIM_INSIGHT = [
+  'it separates living things (animals and people, all positive) from objects like <i>houses</i>.',
+  'only <i>cat</i> and <i>kitten</i> score high — a very specific trait gets its own direction.',
+  'the people (<i>man</i>, <i>woman</i>, <i>king</i>, <i>queen</i>) score high; animals sit near zero.',
+  'positive ≈ male (<i>man</i>, <i>king</i>), negative ≈ female (<i>woman</i>, <i>queen</i>); the animals sit near zero.',
+  'only <i>king</i> and <i>queen</i> stand apart — every other word is negative here.',
+  'none of these words is a verb, so every value sits near or below zero: a dimension can simply be "not used".',
+  'only <i>houses</i> is plural, so it alone scores positive.',
+];
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const MINUS = '−';
+const fmt = x => (x < 0 ? MINUS : '') + Math.abs(x).toFixed(1);
+const fmt2 = x => (x < 0 ? MINUS : '') + Math.abs(x).toFixed(2);
+const cos = (a, b) => {
+  let d = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  return d / Math.sqrt(na * nb);
+};
+const heat = v => {
+  const a = Math.min(Math.abs(v), 1) * 0.5;
+  return v >= 0 ? `rgba(42,120,214,${a.toFixed(3)})` : `rgba(227,73,72,${a.toFixed(3)})`;
+};
+
+/* MathML snippet builders (strings) */
+const mtext = s => `<mtext>${s}</mtext>`;
+const mi = s => `<mi>${s}</mi>`;
+const mn = v => `<mn>${v}</mn>`;
+const mo = s => `<mo>${s}</mo>`;
+const mrow = inner => `<mrow>${inner}</mrow>`;
+const math = inner => `<math>${inner}</math>`;
+const wordVecM = w => `<mover>${mtext(w)}${mo('→')}</mover>`;
+const mnum = v => v < 0 ? mrow(mo(MINUS) + mn(Math.abs(v).toFixed(1))) : mn(v.toFixed(1));
+const mnumP = v => v < 0 ? mrow(mo('(') + mo(MINUS) + mn(Math.abs(v).toFixed(1)) + mo(')')) : mn(v.toFixed(1));
+
+/* ---------- state ---------- */
+let selWord = 'cat';
+let sortDim = null;            // dimension index the table is sorted by
+let axX = 0, axY = 1;          // main plot axes: living being × feline
+let A = 'king', B = 'man', C = 'woman';
+
+/* ============ 1 · embedding table ============ */
+function renderTable() {
+  $('embHead').innerHTML = '<th class="word-col">word</th>' + DIMS.map((d, j) =>
+    `<th data-dim="${j}" class="${j === sortDim ? 'sorted' : ''}">${d}${j === sortDim ? ' <span class="arrow">▼</span>' : ''}</th>`
+  ).join('');
+
+  const order = [...WORDS];
+  if (sortDim !== null) order.sort((a, b) => VEC[b][sortDim] - VEC[a][sortDim]);
+
+  $('embBody').innerHTML = order.map(w =>
+    `<tr data-word="${w}" class="${w === selWord ? 'sel' : ''}">` +
+    `<td class="word"><span class="dot" style="background:${COLOR[w]}"></span>${w}</td>` +
+    VEC[w].map((v, j) =>
+      `<td class="${j === sortDim ? 'dimhot' : ''}" style="background:${heat(v)}">${fmt(v)}</td>`
+    ).join('') + '</tr>'
+  ).join('');
+}
+
+function renderNarration() {
+  if (sortDim === null) return;
+  const d = DIMS[sortDim];
+  const ranked = [...WORDS].sort((a, b) => VEC[b][sortDim] - VEC[a][sortDim]);
+  const top = ranked.slice(0, 2).map(w => `<i>${w}</i> (${fmt(VEC[w][sortDim])})`).join(', ');
+  const bot = ranked.slice(-2).reverse().map(w => `<i>${w}</i> (${fmt(VEC[w][sortDim])})`).join(', ');
+  $('dimNarration').innerHTML =
+    `Ranked by <b>${d}</b> — highest: ${top}; lowest: ${bot}. Reading this axis: ${DIM_INSIGHT[sortDim]}`;
+}
+
+$('embTable').addEventListener('click', e => {
+  const th = e.target.closest('th[data-dim]');
+  if (th) {
+    sortDim = +th.dataset.dim;
+    renderTable(); renderNarration();
+    return;
+  }
+  const tr = e.target.closest('tr[data-word]');
+  if (tr) { selWord = tr.dataset.word; renderTable(); renderNeighbors(); renderMainPlot(); }
+});
+
+/* ============ shared scatter renderer ============ */
+const SVG = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs) => {
+  const n = document.createElementNS(SVG, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+};
+
+function drawPlot(svg, cfg) {
+  // cfg: { dimX, dimY, points:[{word,x,y,color,ring,starLabel}], arrows:[{x1,y1,x2,y2,label}] }
+  svg.innerHTML = '';
+  const W = +svg.viewBox.baseVal.width, H = +svg.viewBox.baseVal.height;
+  const m = { l: 46, r: 16, t: 14, b: 44 };
+
+  let lo = -1.15, hi = 1.15;
+  for (const p of cfg.points) { lo = Math.min(lo, p.x - 0.15, p.y - 0.15); hi = Math.max(hi, p.x + 0.15, p.y + 0.15); }
+  const sx = v => m.l + (v - lo) / (hi - lo) * (W - m.l - m.r);
+  const sy = v => H - m.b - (v - lo) / (hi - lo) * (H - m.t - m.b);
+
+  // arrowhead marker
+  const defs = el('defs', {});
+  const mk = el('marker', { id: 'arr-' + svg.id, viewBox: '0 0 10 10', refX: 9, refY: 5,
+    markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' });
+  mk.appendChild(el('path', { d: 'M0,0 L10,5 L0,10 z', fill: '#55627a' }));
+  defs.appendChild(mk);
+  svg.appendChild(defs);
+
+  // gridlines + ticks
+  for (const t of [-1, -0.5, 0, 0.5, 1]) {
+    if (t < lo || t > hi) continue;
+    const major = t === 0;
+    svg.appendChild(el('line', { x1: sx(t), y1: m.t, x2: sx(t), y2: H - m.b,
+      stroke: major ? '#c9c7be' : '#e6e4dd', 'stroke-width': 1 }));
+    svg.appendChild(el('line', { x1: m.l, y1: sy(t), x2: W - m.r, y2: sy(t),
+      stroke: major ? '#c9c7be' : '#e6e4dd', 'stroke-width': 1 }));
+    const tx = el('text', { x: sx(t), y: H - m.b + 16, 'text-anchor': 'middle',
+      'font-size': 10, fill: '#898781' });
+    tx.textContent = fmt(t); svg.appendChild(tx);
+    const ty = el('text', { x: m.l - 7, y: sy(t) + 3.5, 'text-anchor': 'end',
+      'font-size': 10, fill: '#898781' });
+    ty.textContent = fmt(t); svg.appendChild(ty);
+  }
+  // axis titles (math-styled italics via font, not markup — this is SVG text)
+  const xt = el('text', { x: (m.l + W - m.r) / 2, y: H - 8, 'text-anchor': 'middle',
+    'font-size': 12.5, 'font-style': 'italic', fill: '#52514e',
+    'font-family': 'STIX Two Math, Cambria Math, Times New Roman, Georgia, serif' });
+  xt.textContent = DIMS[cfg.dimX]; svg.appendChild(xt);
+  const yt = el('text', { x: 14, y: (m.t + H - m.b) / 2, 'text-anchor': 'middle',
+    'font-size': 12.5, 'font-style': 'italic', fill: '#52514e',
+    transform: `rotate(-90 14 ${(m.t + H - m.b) / 2})`,
+    'font-family': 'STIX Two Math, Cambria Math, Times New Roman, Georgia, serif' });
+  yt.textContent = DIMS[cfg.dimY]; svg.appendChild(yt);
+
+  // arrows
+  for (const a of cfg.arrows || []) {
+    svg.appendChild(el('line', { x1: sx(a.x1), y1: sy(a.y1), x2: sx(a.x2), y2: sy(a.y2),
+      stroke: '#55627a', 'stroke-width': 1.6, 'stroke-dasharray': '5 4',
+      'marker-end': `url(#arr-${svg.id})` }));
+    if (a.label) {
+      const lx = (sx(a.x1) + sx(a.x2)) / 2 + (a.labelDx || 8);
+      const ly = (sy(a.y1) + sy(a.y2)) / 2 + (a.labelDy || -6);
+      const t = el('text', { x: lx, y: ly, 'font-size': 10.5, fill: '#55627a',
+        'text-anchor': a.labelAnchor || 'start' });
+      t.textContent = a.label; svg.appendChild(t);
+    }
+  }
+
+  // points + label placement (try candidate offsets, avoid labels AND points)
+  const CAND = [
+    { dx: 10, dy: 4.5, anchor: 'start' }, { dx: -10, dy: 4.5, anchor: 'end' },
+    { dx: 0, dy: -11, anchor: 'middle' }, { dx: 0, dy: 19, anchor: 'middle' },
+    { dx: 10, dy: -7, anchor: 'start' }, { dx: 10, dy: 16, anchor: 'start' },
+    { dx: -10, dy: -7, anchor: 'end' }, { dx: -10, dy: 16, anchor: 'end' },
+  ];
+  const labelRect = l => {
+    const wpx = l.text.length * 6.8 + 4;
+    const x = l.anchor === 'end' ? l.px + l.dx - wpx :
+      l.anchor === 'middle' ? l.px + l.dx - wpx / 2 : l.px + l.dx;
+    return { x1: x, y1: l.py + l.dy - 10, x2: x + wpx, y2: l.py + l.dy + 3 };
+  };
+  const collide = (r, s) => r.x1 < s.x2 && s.x1 < r.x2 && r.y1 < s.y2 && s.y1 < r.y2;
+  const obstacles = cfg.points.map(p =>
+    ({ x1: sx(p.x) - 8, y1: sy(p.y) - 8, x2: sx(p.x) + 8, y2: sy(p.y) + 8 }));
+
+  for (const p of cfg.points) {
+    const px = sx(p.x), py = sy(p.y);
+    if (p.starLabel !== undefined) {
+      const st = el('text', { x: px, y: py + 6, 'text-anchor': 'middle', 'font-size': 19,
+        fill: '#16213e' });
+      st.textContent = '★'; svg.appendChild(st);
+    } else {
+      if (p.ring) svg.appendChild(el('circle', { cx: px, cy: py, r: 10.5, fill: 'none',
+        stroke: '#f0a04b', 'stroke-width': 2.5 }));
+      svg.appendChild(el('circle', { cx: px, cy: py, r: 5.5, fill: p.color,
+        stroke: '#ffffff', 'stroke-width': 1.5 }));
+    }
+    // hover target
+    const hit = el('circle', { cx: px, cy: py, r: 15, fill: 'transparent', cursor: 'pointer' });
+    hit.dataset.word = p.word || '';
+    hit.dataset.star = p.starLabel !== undefined ? '1' : '';
+    svg.appendChild(hit);
+
+    const lab = { px, py, text: p.starLabel !== undefined ? p.starLabel : p.word };
+    for (const c of CAND) {
+      Object.assign(lab, c);
+      const r = labelRect(lab);
+      if (!obstacles.some(o => collide(r, o))) break;
+    }
+    obstacles.push(labelRect(lab));
+    const t = el('text', {
+      x: px + lab.dx, y: py + lab.dy,
+      'text-anchor': lab.anchor, 'font-size': 12.5,
+      'font-style': p.starLabel !== undefined ? 'normal' : 'italic',
+      'font-weight': p.ring || p.starLabel !== undefined ? 700 : 500,
+      fill: p.starLabel !== undefined ? '#16213e' : '#333',
+      'font-family': 'STIX Two Math, Cambria Math, Times New Roman, Georgia, serif' });
+    t.textContent = lab.text; svg.appendChild(t);
+  }
+}
+
+/* tooltip */
+const tt = $('tt');
+function showTip(e, word, star, starVec) {
+  const v = star ? starVec : VEC[word];
+  const name = star ? word : word;
+  tt.innerHTML = `<div class="tt-word">${name}</div>` +
+    DIMS.map((d, j) => `<span class="tt-dim">${d}</span> <span class="tt-val">${star ? fmt2(v[j]) : fmt(v[j])}</span>`).join('<br>');
+  tt.style.display = 'block';
+  const pad = 14;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  if (x + 250 > innerWidth) x = e.clientX - 250;
+  if (y + 190 > innerHeight) y = e.clientY - 190;
+  tt.style.left = x + 'px'; tt.style.top = y + 'px';
+}
+function bindTips(svg, starVecGetter) {
+  svg.addEventListener('mousemove', e => {
+    const c = e.target.closest('circle[data-word]');
+    if (!c) { tt.style.display = 'none'; return; }
+    if (c.dataset.star) showTip(e, c.dataset.word, true, starVecGetter());
+    else if (c.dataset.word) showTip(e, c.dataset.word, false);
+  });
+  svg.addEventListener('mouseleave', () => { tt.style.display = 'none'; });
+}
+
+/* ============ 2 · main plot + neighbors ============ */
+function renderMainPlot() {
+  drawPlot($('mainPlot'), {
+    dimX: axX, dimY: axY,
+    points: WORDS.map(w => ({ word: w, x: VEC[w][axX], y: VEC[w][axY],
+      color: COLOR[w], ring: w === selWord })),
+  });
+}
+$('mainPlot').addEventListener('click', e => {
+  const c = e.target.closest('circle[data-word]');
+  if (c && c.dataset.word && !c.dataset.star) {
+    selWord = c.dataset.word;
+    renderTable(); renderNeighbors(); renderMainPlot();
+  }
+});
+bindTips($('mainPlot'), () => null);
+
+function similarityRow(w, s, extra = '', flag = '') {
+  const pct = Math.min(Math.abs(s), 1) * 50;
+  const left = s < 0 ? 50 - pct : 50;
+  return `<div class="nb-row ${extra}">` +
+    `<span class="nb-word"><span class="dot" style="background:${COLOR[w]}"></span>${w}</span>${flag}` +
+    `<div class="nb-track"><div class="nb-zero"></div>` +
+    `<div class="nb-bar" style="left:${left}%;width:${pct}%;background:${COLOR[w]}"></div></div>` +
+    `<span class="nb-val">${fmt2(s)}</span></div>`;
+}
+
+function renderNeighbors() {
+  $('nbTitle').innerHTML = `Nearest neighbors of <span style="color:${COLOR[selWord]}">${selWord}</span>`;
+  const ranked = WORDS.filter(w => w !== selWord)
+    .map(w => [w, cos(VEC[selWord], VEC[w])])
+    .sort((a, b) => b[1] - a[1]);
+  $('nbList').innerHTML = ranked.map(([w, s]) => similarityRow(w, s)).join('');
+}
+
+/* axis controls */
+function fillAxisSelects() {
+  const opts = DIMS.map((d, j) => `<option value="${j}">${d}</option>`).join('');
+  $('xSel').innerHTML = opts; $('ySel').innerHTML = opts;
+  $('xSel').value = axX; $('ySel').value = axY;
+}
+function setAxes(x, y, chip) {
+  axX = x; axY = y;
+  $('xSel').value = x; $('ySel').value = y;
+  $('presetAnimals').classList.toggle('on', chip === 'animals');
+  $('presetRoyal').classList.toggle('on', chip === 'royal');
+  renderMainPlot();
+}
+$('xSel').addEventListener('change', () => setAxes(+$('xSel').value, +$('ySel').value, null));
+$('ySel').addEventListener('change', () => setAxes(+$('xSel').value, +$('ySel').value, null));
+$('presetAnimals').addEventListener('click', () => setAxes(0, 1, 'animals'));
+$('presetRoyal').addEventListener('click', () => setAxes(3, 4, 'royal'));
+
+/* ============ 3 · vector arithmetic ============ */
+const resultVec = () => VEC[A].map((v, j) => v - VEC[B][j] + VEC[C][j]);
+
+function fillWordSelects() {
+  const opts = WORDS.map(w => `<option value="${w}">${w}</option>`).join('');
+  for (const [id, val] of [['selA', A], ['selB', B], ['selC', C]]) {
+    $(id).innerHTML = opts; $(id).value = val;
+  }
+}
+['selA', 'selB', 'selC'].forEach(id => $(id).addEventListener('change', () => {
+  A = $('selA').value; B = $('selB').value; C = $('selC').value;
+  renderArithmetic();
+}));
+
+function renderCalcTable() {
+  const res = resultVec();
+  $('calcHead').innerHTML = '<th></th>' + DIMS.map(d => `<th>${d}</th>`).join('');
+  const row = (lab, vec, cls, fmtFn, hover) =>
+    `<tr class="${cls}"><td class="rowlab">${lab}</td>` +
+    vec.map((v, j) =>
+      `<td ${hover ? `data-j="${j}"` : ''} style="background:${heat(v)}">${fmtFn(v)}</td>`
+    ).join('') + '</tr>';
+  $('calcBody').innerHTML =
+    row(`<span class="dot" style="background:${COLOR[A]}"></span>${A}`, VEC[A], '', fmt, false) +
+    row(`− <span class="dot" style="background:${COLOR[B]}"></span>${B}`, VEC[B], '', fmt, false) +
+    row(`+ <span class="dot" style="background:${COLOR[C]}"></span>${C}`, VEC[C], '', fmt, false) +
+    row('= result', res, 'result', fmt2, true);
+}
+
+function expansionDefault() {
+  $('calcExpansion').innerHTML =
+    '<span class="placeholder">Hover a cell of the <b>result</b> row to see its arithmetic, dimension by dimension…</span>';
+}
+function renderExpansion(j) {
+  const a = VEC[A][j], b = VEC[B][j], c = VEC[C][j], r = a - b + c;
+  $('calcExpansion').innerHTML = math(
+    mtext(DIMS[j] + ':') + `<mspace width="0.4em"></mspace>` +
+    mnum(a) + mo(MINUS) + mnumP(b) + mo('+') + mnumP(c) + mo('=') + mnum(Math.round(r * 10) / 10)
+  );
+}
+document.querySelector('table.calc').addEventListener('mouseover', e => {
+  const c = e.target.closest('tr.result td[data-j]');
+  if (c) renderExpansion(+c.dataset.j);
+});
+document.querySelector('table.calc').addEventListener('mouseleave', expansionDefault);
+
+function renderRanking() {
+  const res = resultVec();
+  const inputs = new Set([A, B, C]);
+  const ranked = WORDS.map(w => [w, cos(res, VEC[w])]).sort((a, b) => b[1] - a[1]);
+  const best = ranked.find(([w]) => !inputs.has(w));
+  $('rankList').innerHTML = ranked.map(([w, s]) => {
+    const isInput = inputs.has(w);
+    const flag = isInput ? '<span class="flag">input</span>' :
+      best && w === best[0] ? '<span class="flag win">✓ nearest</span>' : '';
+    return similarityRow(w, s, isInput ? 'input-word' : '', flag);
+  }).join('');
+  return best ? best[0] : null;
+}
+
+function renderParallelogram(best) {
+  const res = resultVec();
+  const shown = [...new Set([A, B, C, best].filter(Boolean))];
+  // choose the 2 dims with the largest spread among the shown points + result
+  const pts7 = shown.map(w => VEC[w]).concat([res]);
+  const spread = DIMS.map((_, j) => {
+    const vals = pts7.map(p => p[j]);
+    return Math.max(...vals) - Math.min(...vals);
+  });
+  const order = spread.map((s, j) => [s, j]).sort((a, b) => b[0] - a[0]);
+  const dx = Math.min(order[0][1], order[1][1]), dy = Math.max(order[0][1], order[1][1]);
+
+  $('paraSub').innerHTML =
+    `Projected onto the two most informative dimensions here (<i>${DIMS[dx]}</i> × <i>${DIMS[dy]}</i>). ` +
+    `The dashed arrows are <b>the same displacement</b>: <i>${B}</i> → <i>${C}</i>, applied to <i>${A}</i>.`;
+
+  drawPlot($('paraPlot'), {
+    dimX: dx, dimY: dy,
+    points: shown.map(w => ({ word: w, x: VEC[w][dx], y: VEC[w][dy], color: COLOR[w] }))
+      .concat([{ word: `${A} ${MINUS} ${B} + ${C}`, x: res[dx], y: res[dy], starLabel: 'result' }]),
+    arrows: [
+      { x1: VEC[B][dx], y1: VEC[B][dy], x2: VEC[C][dx], y2: VEC[C][dy] },
+      { x1: VEC[A][dx], y1: VEC[A][dy], x2: res[dx], y2: res[dy] },
+    ],
+  });
+}
+bindTips($('paraPlot'), resultVec);
+
+function renderArithmetic() {
+  renderCalcTable();
+  expansionDefault();
+  const best = renderRanking();
+  renderParallelogram(best);
+  $('bestWord').innerHTML = best
+    ? `<span style="color:${COLOR[best]}">${math(wordVecM(best))}</span>`
+    : '?';
+  const s = fmt2(cos(resultVec(), VEC[best]));
+  $('analogyInsight').innerHTML =
+    `<b>Why it works:</b> subtraction cancels what <i>${A}</i> and <i>${B}</i> share and keeps what ` +
+    `makes <i>${A}</i> special; addition re-attaches <i>${C}</i>'s traits. The computed vector is not ` +
+    `exactly any word — it lands <b>closest to <i>${best}</i></b> (cosine similarity ${s}). ` +
+    `Relationships like "male → female" are <b>directions</b> in the space, and consistent directions ` +
+    `are what make analogies computable.`;
+}
+
+/* ---------- init ---------- */
+fillAxisSelects();
+fillWordSelects();
+renderTable();
+renderMainPlot();
+renderNeighbors();
+renderArithmetic();
+</script>
+
+</body>
+</html>
