@@ -7,7 +7,8 @@ This repository contains interactive HTML widgets created by AI for teaching tec
 ## Deployment
 
 - **GitHub Pages**: `https://mtgca.github.io/widgets_pubic/`
-- **Entry point**: `README.md` (rendered as the GitHub Pages index via the default Jekyll theme)
+- **Entry point**: `index.html` (the main widget gallery page)
+- Both `README.md` and `index.html` are maintained together for coherence
 - Pushing to `main` automatically deploys to GitHub Pages.
 
 ## Repository Structure
