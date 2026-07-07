@@ -83,6 +83,14 @@
           padding: 8px 6px 4px; overflow-x:auto; }
   .stage svg{ display:block; margin: 0 auto; }
 
+  /* per-cell hover targets (one-hot / logit / softmax rows) + tooltip */
+  svg .cellhov{ fill:transparent; cursor:help; }
+  svg .cellhov:hover{ fill:rgba(59,111,212,.14); }
+  #tip{ position:fixed; z-index:10000; pointer-events:none; display:none;
+        background:#fff; border:1px solid var(--line); border-radius:8px;
+        box-shadow:0 4px 14px rgba(40,70,120,.20); padding:5px 11px;
+        font-size:.85rem; color:var(--text); white-space:nowrap; }
+
   /* click-to-focus dimming of diagram columns */
   svg .tcol{ cursor:pointer; transition: opacity .15s; }
   svg[data-sel="1"] .tcol:not(.t1), svg[data-sel="2"] .tcol:not(.t2),
@@ -442,13 +450,18 @@ const outEqT   = mm(`${iy("t")}<mo>=</mo>${W("hy")}${ih("t")}`);
 
 const SVGNS = "http://www.w3.org/2000/svg";
 
+/* per-row tooltips: every row of a 4-dim vector belongs to one vocab char */
+const TIP_X = CHARS.map((c, j) => `“${c}” — vocabulary position ${j + 1}`);
+const TIP_Y = CHARS.map(c => `logit (score) for “${c}”`);
+const TIP_P = CHARS.map(c => `P(next char = “${c}”)`);
+
 /* italic math label with optional subscript, for use INSIDE <svg> */
 function tsub(base, sub){
   return `<tspan font-style="italic">${base}</tspan><tspan dy="4" font-size="10" font-style="italic">${sub}</tspan><tspan dy="-4"> </tspan>`;
 }
 
-/* a value box: stacked numbers in a rounded rect */
-function valueBox(x, y, w, cellH, values, fill, line, colorFn){
+/* a value box: stacked numbers in a rounded rect; tips = per-cell tooltip text */
+function valueBox(x, y, w, cellH, values, fill, line, colorFn, tips){
   const h = cellH * values.length;
   let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" fill="${fill}" stroke="${line}" stroke-width="1.6"/>`;
   values.forEach((v, i) => {
@@ -458,7 +471,30 @@ function valueBox(x, y, w, cellH, values, fill, line, colorFn){
            font-size="14" font-weight="${bold}" fill="${col}" font-family="var(--mono, monospace)"
            style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">${v}</text>`;
   });
+  if (tips) values.forEach((v, i) => {
+    s += `<rect class="cellhov" x="${x}" y="${y + cellH*i}" width="${w}" height="${cellH}" rx="4"
+           data-tip="${tips[i]}"/>`;
+  });
   return s;
+}
+
+/* one floating tooltip, shared by all diagrams (delegated per-svg) */
+function wireCellTips(){
+  const tip = document.createElement("div");
+  tip.id = "tip";
+  document.body.appendChild(tip);
+  document.querySelectorAll(".stage svg").forEach(svg => {
+    svg.addEventListener("mousemove", e => {
+      const c = e.target.closest(".cellhov");
+      if (c){
+        tip.textContent = c.dataset.tip;
+        tip.style.display = "block";
+        tip.style.left = (e.clientX + 14) + "px";
+        tip.style.top  = (e.clientY + 14) + "px";
+      } else tip.style.display = "none";
+    });
+    svg.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  });
 }
 
 function arrow(x1, y1, x2, y2, color, marker){
@@ -507,12 +543,12 @@ function drawTraining(){
     let c = `<g class="tcol t${i+1}" data-t="${i+1}">`;
     c += `<text x="${cx}" y="${G.yTgt + 4}" text-anchor="middle" font-size="16" font-weight="700" fill="#1a7a4a">“${st.target}”</text>`;
     c += valueBox(x, G.yOut, G.bw, G.coH, st.z.map(fmtNum), "var(--y-fill)", "var(--y-line)",
-                  (v, j) => j === st.ti ? "#1a7a4a" : "#b3402f");
+                  (v, j) => j === st.ti ? "#1a7a4a" : "#b3402f", TIP_Y);
     c += arrow(cx, G.yHid - 6, cx, G.yOut + 4*G.coH + 8, "#6f9cc4", "arB");
     c += valueBox(x, G.yHid, G.bw, G.chH, st.h.map(fmtNum), "var(--h-fill)", "var(--h-line)");
     c += arrow(cx, G.yIn - 6, cx, G.yHid + 3*G.chH + 8, "#c4837c", "arR");
     c += valueBox(x, G.yIn, G.bw, G.ciH, st.x, "var(--x-fill)", "var(--x-line)",
-                  v => v === 1 ? "#8a2f22" : "#c9968f");
+                  v => v === 1 ? "#8a2f22" : "#c9968f", TIP_X);
     c += `<text x="${cx}" y="${G.yChar + 4}" text-anchor="middle" font-size="16" font-weight="700" fill="#4b5568">“${st.inChar}”</text>`;
     /* recurrent arrow to the next column */
     if (i < 3){
@@ -568,15 +604,15 @@ function drawInference(){
     c += `<text x="${cx}" y="${G.ySmp + 4}" text-anchor="middle" font-size="16" font-weight="700" fill="#1f2937">“${st.pick}”</text>`;
     c += arrow(cx, G.ySof - 4, cx, G.ySmp + 10, "#d98e32", "arO");
     c += valueBox(x, G.ySof, G.bw, G.csH, p.map(fmtProb), "var(--s-fill)", "var(--s-line)",
-                  (v, j) => j === st.pi ? "#b06a12" : "#1f2937");
+                  (v, j) => j === st.pi ? "#b06a12" : "#1f2937", TIP_P);
     c += arrow(cx, G.yOut - 6, cx, G.ySof + 4*G.csH + 8, "#d98e32", "arO");
     c += valueBox(x, G.yOut, G.bw, G.coH, st.z.map(fmtNum), "var(--y-fill)", "var(--y-line)",
-                  (v, j) => j === st.pi ? "#1a7a4a" : "#b3402f");
+                  (v, j) => j === st.pi ? "#1a7a4a" : "#b3402f", TIP_Y);
     c += arrow(cx, G.yHid - 6, cx, G.yOut + 4*G.coH + 8, "#6f9cc4", "arB");
     c += valueBox(x, G.yHid, G.bw, G.chH, st.h.map(fmtNum), "var(--h-fill)", "var(--h-line)");
     c += arrow(cx, G.yIn - 6, cx, G.yHid + 3*G.chH + 8, "#c4837c", "arR");
     c += valueBox(x, G.yIn, G.bw, G.ciH, st.x, "var(--x-fill)", "var(--x-line)",
-                  v => v === 1 ? "#8a2f22" : "#c9968f");
+                  v => v === 1 ? "#8a2f22" : "#c9968f", TIP_X);
     c += `<text x="${cx}" y="${G.yChar + 4}" text-anchor="middle" font-size="16" font-weight="700" fill="#4b5568">“${st.inChar}”</text>`;
     if (i < 3){
       const y = G.yHid + 3*G.chH/2;
@@ -789,6 +825,7 @@ drawTraining();
 drawInference();
 wireFocus("trainBtns", "svgTrain", "trainStory", trainStory);
 wireFocus("infBtns",   "svgInf",   "infStory",   infStory);
+wireCellTips();
 wireTemperature();
 </script>
 </body>
