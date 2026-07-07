@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RNNs: Character-Level Language Modeling · Interactive</title>
+<!--
+  ============================================================================
+  RNNs — CHARACTER-LEVEL LANGUAGE MODELING (training · inference · temperature)
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget. Everything (HTML + CSS + JS) in this file.
+
+  DESIGN NOTES:
+  - LIGHT academic theme (maintainer preference). No looping animations —
+    every state is a clear static diagram; the user clicks to explore.
+  - Math notation uses native MathML (<math>, <msub>, <mfrac>, <mover>, ...).
+    Exception: SVG <text> cannot contain MathML, so diagram labels use the
+    italic math-font <tspan> approach (class .mt).
+  - Toy example: train on the word "hello". Vocabulary V = [h, e, l, o],
+    one-hot inputs (n = 4), hidden size d = 3, output logits (k = 4).
+  - Two sets of logits at t = 1: EARLY[0].z is an early-training snapshot
+    (target logit 2.2 is NOT yet the max — that is the point of training);
+    TRAINED[0].z is the model after training (used for inference/sampling).
+
+  HOW TO MODIFY:
+  - All numbers live in the EARLY / TRAINED arrays.
+  - Diagram geometry: the GEO objects inside drawTraining()/drawInference().
+  - Temperature range: the TMIN/TMAX constants.
+  ============================================================================
+-->
+<style>
+  :root{
+    --bg:       #f5f8fd;
+    --bg-soft:  #eef3fa;
+    --panel:    #ffffff;
+    --panel-2:  #f2f6fc;
+    --line:     #d9e2ef;
+    --text:     #1f2937;
+    --text-dim: #64708a;
+    --accent:   #3b6fd4;
+    --x-fill:  #fbe3e1; --x-line:  #c4837c;   /* input  x  (rose)   */
+    --h-fill:  #dcefd2; --h-line:  #74a95f;   /* hidden h  (green)  */
+    --y-fill:  #d7e7f7; --y-line:  #6f9cc4;   /* output ŷ  (blue)   */
+    --s-fill:  #fdeedd; --s-line:  #d98e32;   /* softmax   (orange) */
+    --pos:     #1a7a4a;                        /* target / max logit */
+    --neg:     #b3402f;                        /* other logits       */
+    --radius: 14px;
+    --shadow: 0 6px 20px rgba(40,70,120,.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(1100px 520px at 82% -10%, #e9f0fb 0%, transparent 60%),
+      radial-gradient(900px 460px at -8% 6%, #eafaf6 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.55;
+  }
+  .wrap{ max-width: 1100px; margin: 0 auto; padding: 26px 20px 60px; }
+
+  /* ---------------------------- math rendering --------------------------- */
+  math{ font-family: var(--math); }
+  .story math, .cards math{ font-size: 1.06em; }
+  svg .mt{ font-family: var(--math); }   /* math-styled SVG text */
+
+  /* ------------------------------- header -------------------------------- */
+  .hero{ text-align:center; margin: 26px 0 20px; }
+  .hero h1{ font-size: 1.65rem; margin: 0 0 8px; letter-spacing:-.3px; }
+  .hero p{ color: var(--text-dim); max-width: 820px; margin: 0 auto; font-size:.95rem; }
+
+  /* ----------------------------- main panels ----------------------------- */
+  .panel{ background: var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 20px 22px 18px; margin-top: 24px; }
+  .panel > h2{ margin:0 0 4px; font-size:1.15rem; }
+  .panel > .hint{ color:var(--text-dim); font-size:.88rem; margin: 0 0 14px; }
+
+  .stage{ background: var(--bg-soft); border:1px solid var(--line); border-radius: 12px;
+          padding: 8px 6px 4px; overflow-x:auto; }
+  .stage svg{ display:block; margin: 0 auto; }
+
+  /* click-to-focus dimming of diagram columns */
+  svg .tcol{ cursor:pointer; transition: opacity .15s; }
+  svg[data-sel="1"] .tcol:not(.t1), svg[data-sel="2"] .tcol:not(.t2),
+  svg[data-sel="3"] .tcol:not(.t3), svg[data-sel="4"] .tcol:not(.t4){ opacity:.22; }
+
+  /* step selector pills */
+  .t-row{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin: 0 0 12px; }
+  .t-row .lbl{ font-size:.78rem; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.5px; }
+  .t-btn{ padding:5px 13px; border-radius:999px; border:1.5px solid var(--line); background:var(--panel);
+          font-size:.85rem; cursor:pointer; font-family:var(--font); color:var(--text); }
+  .t-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .t-btn.active{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+
+  /* narration */
+  .story{ background: #f4f8ff; border:1px solid #cfdcf5; border-left: 4px solid var(--accent);
+          border-radius: 10px; padding: 12px 16px; font-size:.94rem; min-height: 3.2em; margin-top: 12px; }
+  .story b{ color: var(--accent); }
+  .story .good{ color: var(--pos); font-weight:700; }
+  .story .bad{ color: var(--neg); font-weight:700; }
+
+  .share-note{ margin-top:12px; background:#fff7e6; border:1px solid #eed9a8; border-radius:10px;
+               padding: 10px 15px; font-size:.9rem; }
+  .share-note b{ color:#9a5b00; }
+
+  /* ----------------------------- config chips ---------------------------- */
+  .cfg{ display:flex; flex-wrap:wrap; gap:12px; }
+  .cfg .item{ background: var(--panel-2); border:1px solid var(--line); border-radius: 10px;
+              padding: 9px 14px; font-size:.9rem; }
+  .cfg .item .k{ display:block; font-size:.68rem; font-weight:700; letter-spacing:.5px;
+                 text-transform:uppercase; color:var(--text-dim); margin-bottom:2px; }
+  .pair{ display:inline-block; background:var(--panel); border:1px solid var(--line);
+         border-radius:8px; padding:1px 9px; font-family:var(--mono); font-size:.85rem; margin:0 2px; }
+  .pair .arr{ color:var(--text-dim); }
+
+  /* ----------------------------- concept cards --------------------------- */
+  .cards{ display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:16px; }
+  @media (max-width: 880px){ .cards{ grid-template-columns: 1fr; } }
+  .card{ background: var(--panel); border:1px solid var(--line); border-radius: 12px;
+         padding: 13px 16px; }
+  .card h3{ margin:0 0 6px; font-size:.93rem; }
+  .card p{ margin:0 0 5px; font-size:.87rem; }
+  .card p.sub{ color:var(--text-dim); font-size:.83rem; }
+  .cards.two{ grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 880px){ .cards.two{ grid-template-columns: 1fr; } }
+
+  /* --------------------------- temperature panel ------------------------- */
+  .temp-eq{ text-align:center; margin: 4px 0 10px; }
+  .temp-eq math{ font-size: 1.35rem; }
+  .temp-controls{ display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin: 12px 0 6px; }
+  .temp-controls input[type="range"]{ flex:1; min-width:180px; accent-color: var(--accent); }
+  .t-val{ font-family: var(--mono); font-size: 1.05rem; font-weight:700; min-width: 92px;
+          text-align:center; background:var(--panel-2); border:1px solid var(--line);
+          border-radius: 8px; padding: 4px 8px; }
+  .presets{ display:flex; flex-wrap:wrap; gap:8px; margin: 6px 0 10px; }
+
+  .regime{ border-radius: 10px; padding: 10px 15px; font-size:.92rem; margin-top: 10px;
+           background: var(--panel-2); border:1px solid var(--line); }
+  .regime b{ color: var(--accent); }
+
+  .chart-note{ color:var(--text-dim); font-size:.82rem; margin: 8px 2px 0; }
+  .bar:hover rect.fill{ filter: brightness(.92); }
+
+  /* sampling row */
+  .sample-row{ display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top: 14px; }
+  .btn{ padding: 8px 18px; border-radius: 10px; border: 1.5px solid var(--line);
+        background: var(--panel); font-size:.9rem; font-weight:600; cursor:pointer;
+        color: var(--text); font-family: var(--font); }
+  .btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .btn.primary{ background: var(--accent); border-color: var(--accent); color:#fff; }
+  .btn.primary:hover{ background:#2f5cb5; color:#fff; }
+  .sample-out{ flex:1; min-width: 260px; }
+  .sample-chars{ font-family: var(--mono); font-size:.95rem; letter-spacing: 2px;
+                 background: var(--panel-2); border:1px solid var(--line); border-radius: 10px;
+                 padding: 8px 12px; word-break: break-all; min-height: 2.2em; }
+  .sample-counts{ margin-top:6px; font-size:.84rem; color:var(--text-dim); }
+  .sample-counts b{ color:var(--text); }
+
+  /* LLM connection card */
+  .llm{ margin-top:18px; background: #f2fbf6; border:1px solid #bfe4cd; border-radius: 12px;
+        padding: 14px 18px; }
+  .llm h3{ margin:0 0 6px; font-size:1rem; color:#166a41; }
+  .llm p{ margin:0 0 8px; font-size:.9rem; }
+  .llm pre{ background:#0f2a1c0d; border:1px solid #cfe7d9; border-radius: 8px;
+            padding: 10px 14px; font-family: var(--mono); font-size:.82rem; overflow-x:auto; margin:8px 0; }
+  .llm ul{ margin: 6px 0 0; padding-left: 20px; font-size:.88rem; }
+  .llm li{ margin-bottom: 4px; }
+
+  footer{ text-align:center; color:var(--text-dim); font-size:.78rem; margin-top: 34px; }
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>RNNs: Character-Level Language Modeling</h1>
+    <p>Train a tiny recurrent network to predict the <b>next character</b> of the word
+       <b>“hello”</b> — then use it to <b>generate</b> text, and discover what the
+       <b>temperature</b> knob really does.</p>
+  </header>
+
+  <!-- ============================ 0 · SETUP ============================== -->
+  <section class="panel">
+    <h2>The toy setup</h2>
+    <p class="hint">Four characters are enough to see everything a real language model does.</p>
+    <div class="cfg">
+      <div class="item"><span class="k">Vocabulary</span>
+        <math><mi>V</mi><mo>=</mo><mo stretchy="false">[</mo><mi mathvariant="normal">h</mi><mo>,</mo><mi mathvariant="normal">e</mi><mo>,</mo><mi mathvariant="normal">l</mi><mo>,</mo><mi mathvariant="normal">o</mi><mo stretchy="false">]</mo></math>
+        &nbsp;·&nbsp;
+        <math><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo><mo>=</mo><mn>4</mn></math>
+      </div>
+      <div class="item"><span class="k">Input / output dim</span>
+        <math><mi>n</mi><mo>=</mo><mn>4</mn></math>,&nbsp;
+        <math><mi>k</mi><mo>=</mo><mn>4</mn></math> (match the vocabulary)
+      </div>
+      <div class="item"><span class="k">Hidden state dim</span>
+        <math><mi>d</mi><mo>=</mo><mn>3</mn></math> (the latent representation)
+      </div>
+      <div class="item"><span class="k">Training pairs from “hello”</span>
+        <span class="pair">h <span class="arr">→</span> e</span>
+        <span class="pair">e <span class="arr">→</span> l</span>
+        <span class="pair">l <span class="arr">→</span> l</span>
+        <span class="pair">l <span class="arr">→</span> o</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================== 1 · TRAINING =========================== -->
+  <section class="panel">
+    <h2>Training — predictive learning with one-hot representations</h2>
+    <p class="hint">Each character enters as a one-hot vector; the network must give the
+      <b>highest score (logit)</b> to the character that comes next. Click a time step to follow it.</p>
+
+    <div class="t-row" id="trainBtns">
+      <span class="lbl">Focus</span>
+      <button class="t-btn active" data-t="0">All steps</button>
+      <button class="t-btn" data-t="1">t = 1</button>
+      <button class="t-btn" data-t="2">t = 2</button>
+      <button class="t-btn" data-t="3">t = 3</button>
+      <button class="t-btn" data-t="4">t = 4</button>
+    </div>
+
+    <div class="stage"><svg id="svgTrain" data-sel="0"></svg></div>
+
+    <div class="story" id="trainStory"></div>
+
+    <div class="share-note"><b>Parameter sharing:</b> the <em>same</em> three weight matrices
+      <math><msub><mi>W</mi><mrow><mi>x</mi><mi>h</mi></mrow></msub></math>,
+      <math><msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub></math>,
+      <math><msub><mi>W</mi><mrow><mi>h</mi><mi>y</mi></mrow></msub></math>
+      process the entire sequence — every column of the diagram reuses them.</div>
+
+    <div class="cards">
+      <div class="card">
+        <h3>Input encoding</h3>
+        <p>Each character is a <b>one-hot vector</b> — a single 1 at its vocabulary index.</p>
+        <p class="sub">Multiplying <math><msub><mi>W</mi><mrow><mi>x</mi><mi>h</mi></mrow></msub><msub><mi>x</mi><mi>t</mi></msub></math> then simply <em>selects one column</em> of <math><msub><mi>W</mi><mrow><mi>x</mi><mi>h</mi></mrow></msub></math>.</p>
+      </div>
+      <div class="card">
+        <h3>State recurrence</h3>
+        <p><math><msub><mi>h</mi><mi>t</mi></msub><mo>=</mo><mi>tanh</mi><mo stretchy="false">(</mo><msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub><msub><mi>h</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>+</mo><msub><mi>W</mi><mrow><mi>x</mi><mi>h</mi></mrow></msub><msub><mi>x</mi><mi>t</mi></msub><mo stretchy="false">)</mo></math></p>
+        <p class="sub">The hidden state mixes the current input with everything read so far — that is why “l” can be followed by “l” once and “o” the next time.</p>
+      </div>
+      <div class="card">
+        <h3>Objective</h3>
+        <p><math><msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mi>t</mi></msub><mo>=</mo><msub><mi>W</mi><mrow><mi>h</mi><mi>y</mi></mrow></msub><msub><mi>h</mi><mi>t</mi></msub></math> gives 4 logits. Training <b>maximizes the logit at the target character’s index</b> (green) and pushes the others (red) down.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================== 2 · INFERENCE =========================== -->
+  <section class="panel">
+    <h2>Inference — autoregressive generation through a feedback loop</h2>
+    <p class="hint">Once trained, the model generates on its own: logits →
+      <b>Softmax</b> → probability distribution → pick a character → <b>feed it back</b> as the next input.
+      Click a time step to follow it.</p>
+
+    <div class="t-row" id="infBtns">
+      <span class="lbl">Focus</span>
+      <button class="t-btn active" data-t="0">All steps</button>
+      <button class="t-btn" data-t="1">t = 1</button>
+      <button class="t-btn" data-t="2">t = 2</button>
+      <button class="t-btn" data-t="3">t = 3</button>
+      <button class="t-btn" data-t="4">t = 4</button>
+    </div>
+
+    <div class="stage"><svg id="svgInf" data-sel="0"></svg></div>
+
+    <div class="story" id="infStory"></div>
+
+    <div class="cards two">
+      <div class="card">
+        <h3>Argmax — greedy decoding</h3>
+        <p>Always pick the character with the <b>highest probability</b>.</p>
+        <p class="sub">Deterministic: the same start character always generates exactly the same text.</p>
+      </div>
+      <div class="card">
+        <h3>Sampling</h3>
+        <p><b>Draw</b> the next character at random, using the softmax probabilities as the odds.</p>
+        <p class="sub">Stochastic: mostly picks likely characters, but can surprise you — and <b>temperature</b> controls how often. ↓</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================== 3 · TEMPERATURE ========================== -->
+  <section class="panel">
+    <h2>Temperature — the randomness dial</h2>
+    <p class="hint">Before Softmax, every logit is divided by a constant
+      <math><mi>T</mi></math>. That one division is the whole trick — drag the slider and watch the
+      distribution reshape while the <b>ranking never changes</b>.</p>
+
+    <div class="temp-eq">
+      <math display="block">
+        <mi>Softmax</mi><mo stretchy="false">(</mo><msub><mi>z</mi><mi>i</mi></msub><mo stretchy="false">)</mo>
+        <mo>=</mo>
+        <mfrac>
+          <msup><mi>e</mi><mrow><msub><mi>z</mi><mi>i</mi></msub><mo>/</mo><mi>T</mi></mrow></msup>
+          <mrow><munder><mo>∑</mo><mi>j</mi></munder><msup><mi>e</mi><mrow><msub><mi>z</mi><mi>j</mi></msub><mo>/</mo><mi>T</mi></mrow></msup></mrow>
+        </mfrac>
+      </math>
+    </div>
+
+    <div class="t-row" id="ctxBtns">
+      <span class="lbl">Model has read</span>
+      <button class="t-btn active" data-c="0">“h”</button>
+      <button class="t-btn" data-c="1">“he”</button>
+      <button class="t-btn" data-c="2">“hel”</button>
+      <button class="t-btn" data-c="3">“hell”</button>
+    </div>
+
+    <div class="temp-controls">
+      <span class="lbl" style="font-size:.78rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;">Temperature</span>
+      <input type="range" id="tSlider" min="0" max="100" step="0.5" value="50">
+      <span class="t-val" id="tVal">T = 1.00</span>
+    </div>
+    <div class="presets" id="tPresets">
+      <button class="t-btn" data-tv="0.05">T → 0</button>
+      <button class="t-btn" data-tv="0.5">T = 0.5</button>
+      <button class="t-btn" data-tv="0.7">T = 0.7</button>
+      <button class="t-btn" data-tv="1">T = 1</button>
+      <button class="t-btn" data-tv="2">T = 2</button>
+      <button class="t-btn" data-tv="20">T → ∞</button>
+    </div>
+
+    <div class="stage"><svg id="svgTemp"></svg></div>
+    <p class="chart-note">Solid bars: probabilities at the current <math><mi>T</mi></math> ·
+      dashed markers: the same probabilities at <math><mi>T</mi><mo>=</mo><mn>1</mn></math> (plain softmax) ·
+      hover a bar for the arithmetic.</p>
+
+    <div class="regime" id="regime"></div>
+
+    <div class="sample-row">
+      <button class="btn primary" id="drawBtn">Draw 60 next characters</button>
+      <div class="sample-out">
+        <div class="sample-chars" id="sampleChars">Press the button to sample from the distribution above.</div>
+        <div class="sample-counts" id="sampleCounts"></div>
+      </div>
+    </div>
+
+    <div class="llm">
+      <h3>This is exactly the “temperature” hyperparameter of modern LLMs</h3>
+      <p>A large language model is the same machine scaled up: a next-token predictor with a vocabulary of
+        <math><mo>≈</mo><mn>100000</mn></math> tokens instead of 4 characters. When you call an LLM API,
+        the <b>temperature</b> you pass divides its logits exactly as the slider above:</p>
+<pre>response = client.messages.create(
+    model="claude-sonnet-5",
+    temperature=0.2,   # &lt;-- the same T you just explored
+    messages=[...]
+)</pre>
+      <ul>
+        <li><b>T ≈ 0 – 0.3</b> — near-greedy, repeatable answers: code, math, data extraction.</li>
+        <li><b>T ≈ 0.7 – 1.0</b> — the usual chat default: fluent but varied phrasing.</li>
+        <li><b>T &gt; 1</b> — flatter distribution: brainstorming and creative writing; push it too far and
+          low-probability tokens get real mass — the text degrades into incoherence.</li>
+        <li><b>T = 0</b> in an API is greedy decoding: the argmax token every time.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>Character-level language modeling with an RNN · training, autoregressive inference, and temperature scaling</footer>
+</div>
+
+<script>
+"use strict";
+
+/* ================================ DATA ================================== */
+
+const CHARS = ["h","e","l","o"];
+
+/* Early-training snapshot (used in the TRAINING diagram): at t = 1 the target
+   logit 2.2 is NOT yet the largest — training exists to fix that. */
+const EARLY = [
+  { inChar:"h", x:[1,0,0,0], h:[ 0.3,-0.1, 0.9], z:[ 1.0, 2.2,-3.0, 4.1], target:"e", ti:1 },
+  { inChar:"e", x:[0,1,0,0], h:[ 1.0, 0.3, 0.1], z:[ 0.5, 0.3, 2.0, 1.2], target:"l", ti:2 },
+  { inChar:"l", x:[0,0,1,0], h:[ 0.1,-0.5,-0.3], z:[ 0.1, 0.5, 1.9,-1.1], target:"l", ti:2 },
+  { inChar:"l", x:[0,0,1,0], h:[-0.3, 0.9, 0.7], z:[ 0.2,-1.5,-0.1, 2.2], target:"o", ti:3 }
+];
+
+/* After training (used for INFERENCE + temperature): the t = 1 logits now put
+   the most mass on the correct next character "e". */
+const TRAINED = [
+  { inChar:"h", x:[1,0,0,0], h:[ 0.3,-0.1, 0.9], z:[ 1.0, 4.1,-3.0, 2.2], pick:"e", pi:1 },
+  { inChar:"e", x:[0,1,0,0], h:[ 1.0, 0.3, 0.1], z:[ 0.5, 0.3, 2.0, 1.2], pick:"l", pi:2 },
+  { inChar:"l", x:[0,0,1,0], h:[ 0.1,-0.5,-0.3], z:[ 0.1, 0.5, 1.9,-1.1], pick:"l", pi:2 },
+  { inChar:"l", x:[0,0,1,0], h:[-0.3, 0.9, 0.7], z:[ 0.2,-1.5,-0.1, 2.2], pick:"o", pi:3 }
+];
+
+const CONTEXTS = ["h","he","hel","hell"];  /* prefix read before each prediction */
+
+function softmax(z, T){
+  const m = Math.max(...z.map(v => v/T));
+  const e = z.map(v => Math.exp(v/T - m));
+  const s = e.reduce((a,b) => a+b, 0);
+  return e.map(v => v/s);
+}
+const fmtNum  = v => (v < 0 ? "−" + Math.abs(v).toFixed(1) : v.toFixed(1));
+const fmtProb = p => p.toFixed(2).replace(/^0\./, ".");
+
+/* ============================ MATH SNIPPETS ============================= */
+/* Native MathML (no libraries). Helpers build <math> strings for the
+   narration. SVG <text> can't contain MathML, so diagram labels use the
+   italic math-font <tspan> approach instead (see the SVG builders). */
+
+const mm    = inner => `<math>${inner}</math>`;
+const paren = inner => `<mo stretchy="false">(</mo>${inner}<mo stretchy="false">)</mo>`;
+const msub  = (b,s) => `<msub>${b}${s}</msub>`;
+const mrow  = inner => `<mrow>${inner}</mrow>`;
+const mi = v => `<mi>${v}</mi>`, mn = v => `<mn>${v}</mn>`, mo = v => `<mo>${v}</mo>`;
+const YHAT = '<mover accent="true"><mi>y</mi><mo>^</mo></mover>';
+const W    = s => msub(mi("W"), mrow(s.split("").map(mi).join("")));
+const idx  = t => typeof t === "number" ? mn(t) : mi(t);
+const ih = t => msub(mi("h"), idx(t));
+const ix = t => msub(mi("x"), idx(t));
+const iy = t => msub(YHAT, idx(t));
+const vecF = (a, d) => `<mo stretchy="false">[</mo>${a.map(v =>
+  (v < 0 ? mo("−") + mn(Math.abs(v).toFixed(d)) : mn(v.toFixed(d)))
+).join(mo(","))}<mo stretchy="false">]</mo>`;
+const vecInt = a => `<mo stretchy="false">[</mo>${a.map(v => mn(v)).join(mo(","))}<mo stretchy="false">]</mo>`;
+
+const HTM1 = msub(mi("h"), mrow(`${mi("t")}${mo("−")}${mn(1)}`));
+const stateEqT = mm(`${ih("t")}<mo>=</mo><mi>tanh</mi>${paren(`${W("hh")}${HTM1}<mo>+</mo>${W("xh")}${ix("t")}`)}`);
+const outEqT   = mm(`${iy("t")}<mo>=</mo>${W("hy")}${ih("t")}`);
+
+/* ============================ SVG HELPERS =============================== */
+
+const SVGNS = "http://www.w3.org/2000/svg";
+
+/* italic math label with optional subscript, for use INSIDE <svg> */
+function tsub(base, sub){
+  return `<tspan font-style="italic">${base}</tspan><tspan dy="4" font-size="10" font-style="italic">${sub}</tspan><tspan dy="-4"> </tspan>`;
+}
+
+/* a value box: stacked numbers in a rounded rect */
+function valueBox(x, y, w, cellH, values, fill, line, colorFn){
+  const h = cellH * values.length;
+  let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" fill="${fill}" stroke="${line}" stroke-width="1.6"/>`;
+  values.forEach((v, i) => {
+    const col = colorFn ? colorFn(v, i) : "#1f2937";
+    const bold = col === "#1f2937" ? "600" : "700";
+    s += `<text x="${x + w/2}" y="${y + cellH*i + cellH/2 + 4.5}" text-anchor="middle"
+           font-size="14" font-weight="${bold}" fill="${col}" font-family="var(--mono, monospace)"
+           style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">${v}</text>`;
+  });
+  return s;
+}
+
+function arrow(x1, y1, x2, y2, color, marker){
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2" marker-end="url(#${marker})"/>`;
+}
+
+function defs(){
+  const mk = (id, col) => `<marker id="${id}" viewBox="0 0 10 10" refX="8.5" refY="5"
+      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="${col}"/></marker>`;
+  return `<defs>${mk("arB","#6f9cc4")}${mk("arG","#74a95f")}${mk("arR","#c4837c")}
+          ${mk("arO","#d98e32")}${mk("arGy","#8a94a6")}</defs>`;
+}
+
+/* ========================== TRAINING DIAGRAM =========================== */
+
+function drawTraining(){
+  const G = { cx:[330, 510, 690, 870], bw:70,
+              yTgt:36, yOut:56, coH:29, yHid:250, chH:31, yIn:424, ciH:29, yChar:574 };
+  const svg = document.getElementById("svgTrain");
+  svg.setAttribute("viewBox", "0 0 1020 600");
+  svg.setAttribute("width", "1020"); svg.setAttribute("height", "600");
+
+  let s = defs();
+
+  /* ---- left layer labels + equations (SVG text; MathML not allowed here) */
+  const L = 282;
+  s += `<text x="${L}" y="${G.yTgt + 4}" text-anchor="end" font-size="14" font-weight="700" fill="#1a7a4a">target chars:</text>`;
+  s += `<text x="${L}" y="100" text-anchor="end" font-size="14" font-weight="700" fill="#33608a">output layer</text>`;
+  s += `<text x="${L}" y="124" text-anchor="end" font-size="13.5" class="mt" fill="#33608a">${tsub("ŷ","t")}<tspan> = </tspan>${tsub("W","hy")}${tsub("h","t")}</text>`;
+  s += `<text x="${L}" y="290" text-anchor="end" font-size="14" font-weight="700" fill="#3e6e2e">hidden layer</text>`;
+  s += `<text x="${L}" y="314" text-anchor="end" font-size="13" class="mt" fill="#3e6e2e">${tsub("h","t")}<tspan> = tanh(</tspan>${tsub("W","hh")}${tsub("h","t−1")}<tspan> + </tspan>${tsub("W","xh")}${tsub("x","t")}<tspan>)</tspan></text>`;
+  s += `<text x="${L}" y="486" text-anchor="end" font-size="14" font-weight="700" fill="#8a4a41">input layer</text>`;
+  s += `<text x="${L}" y="510" text-anchor="end" font-size="12.5" fill="#8a4a41">one-hot vectors</text>`;
+  s += `<text x="${L}" y="${G.yChar + 4}" text-anchor="end" font-size="14" font-weight="700" fill="#4b5568">input chars:</text>`;
+
+  /* ---- shared-weight labels near the last column */
+  const c4 = G.cx[3];
+  s += `<text x="${c4 + 44}" y="216" font-size="14" class="mt" fill="#33608a">${tsub("W","hy")}</text>`;
+  s += `<text x="${(G.cx[2]+G.cx[3])/2 - 12}" y="${G.yHid + 3*G.chH/2 - 10}" font-size="14" class="mt" fill="#3e6e2e">${tsub("W","hh")}</text>`;
+  s += `<text x="${c4 + 44}" y="396" font-size="14" class="mt" fill="#8a4a41">${tsub("W","xh")}</text>`;
+
+  /* ---- per-time-step columns */
+  EARLY.forEach((st, i) => {
+    const cx = G.cx[i], x = cx - G.bw/2;
+    let c = `<g class="tcol t${i+1}" data-t="${i+1}">`;
+    c += `<text x="${cx}" y="${G.yTgt + 4}" text-anchor="middle" font-size="16" font-weight="700" fill="#1a7a4a">“${st.target}”</text>`;
+    c += valueBox(x, G.yOut, G.bw, G.coH, st.z.map(fmtNum), "var(--y-fill)", "var(--y-line)",
+                  (v, j) => j === st.ti ? "#1a7a4a" : "#b3402f");
+    c += arrow(cx, G.yHid - 6, cx, G.yOut + 4*G.coH + 8, "#6f9cc4", "arB");
+    c += valueBox(x, G.yHid, G.bw, G.chH, st.h.map(fmtNum), "var(--h-fill)", "var(--h-line)");
+    c += arrow(cx, G.yIn - 6, cx, G.yHid + 3*G.chH + 8, "#c4837c", "arR");
+    c += valueBox(x, G.yIn, G.bw, G.ciH, st.x, "var(--x-fill)", "var(--x-line)",
+                  v => v === 1 ? "#8a2f22" : "#c9968f");
+    c += `<text x="${cx}" y="${G.yChar + 4}" text-anchor="middle" font-size="16" font-weight="700" fill="#4b5568">“${st.inChar}”</text>`;
+    /* recurrent arrow to the next column */
+    if (i < 3){
+      const y = G.yHid + 3*G.chH/2;
+      c += arrow(cx + G.bw/2 + 5, y, G.cx[i+1] - G.bw/2 - 7, y, "#74a95f", "arG");
+    }
+    c += `</g>`;
+    s += c;
+  });
+
+  svg.innerHTML = s;
+}
+
+/* ========================== INFERENCE DIAGRAM ========================== */
+
+function drawInference(){
+  const G = { cx:[330, 510, 690, 870], bw:70,
+              ySmp:32, ySof:56, csH:29, yOut:200, coH:29, yHid:392, chH:31,
+              yIn:562, ciH:29, yChar:712 };
+  const svg = document.getElementById("svgInf");
+  svg.setAttribute("viewBox", "0 0 1020 752");
+  svg.setAttribute("width", "1020"); svg.setAttribute("height", "752");
+
+  let s = defs();
+  const L = 282;
+  s += `<text x="${L}" y="${G.ySmp + 4}" text-anchor="end" font-size="14" font-weight="700" fill="#1f2937">Sample</text>`;
+  s += `<text x="${L}" y="118" text-anchor="end" font-size="14" font-weight="700" fill="#b06a12">Softmax</text>`;
+  s += `<text x="${L}" y="142" text-anchor="end" font-size="12.5" fill="#b06a12">probabilities (T = 1)</text>`;
+  s += `<text x="${L}" y="248" text-anchor="end" font-size="14" font-weight="700" fill="#33608a">output layer</text>`;
+  s += `<text x="${L}" y="272" text-anchor="end" font-size="13.5" class="mt" fill="#33608a">${tsub("ŷ","t")}<tspan> = </tspan>${tsub("W","hy")}${tsub("h","t")}</text>`;
+  s += `<text x="${L}" y="432" text-anchor="end" font-size="14" font-weight="700" fill="#3e6e2e">hidden layer</text>`;
+  s += `<text x="${L}" y="456" text-anchor="end" font-size="13" class="mt" fill="#3e6e2e">${tsub("h","t")}<tspan> = tanh(</tspan>${tsub("W","hh")}${tsub("h","t−1")}<tspan> + </tspan>${tsub("W","xh")}${tsub("x","t")}<tspan>)</tspan></text>`;
+  s += `<text x="${L}" y="624" text-anchor="end" font-size="14" font-weight="700" fill="#8a4a41">input layer</text>`;
+  s += `<text x="${L}" y="${G.yChar + 4}" text-anchor="end" font-size="14" font-weight="700" fill="#4b5568">input chars:</text>`;
+
+  const c4 = G.cx[3];
+  s += `<text x="${c4 + 44}" y="360" font-size="14" class="mt" fill="#33608a">${tsub("W","hy")}</text>`;
+  s += `<text x="${(G.cx[2]+G.cx[3])/2 - 12}" y="${G.yHid + 3*G.chH/2 - 10}" font-size="14" class="mt" fill="#3e6e2e">${tsub("W","hh")}</text>`;
+  s += `<text x="${c4 + 44}" y="532" font-size="14" class="mt" fill="#8a4a41">${tsub("W","xh")}</text>`;
+
+  /* feedback arrows FIRST so columns render on top of them */
+  for (let i = 0; i < 3; i++){
+    const a = G.cx[i], b = G.cx[i+1];
+    s += `<path d="M ${a + 26} 26 C ${a + 130} -14, ${b + 74} 300, ${b + 8} ${G.yChar - 26}"
+           fill="none" stroke="#8a94a6" stroke-width="2.2" marker-end="url(#arGy)"/>`;
+  }
+  s += `<text x="${G.cx[0] + 90}" y="${G.yChar + 34}" text-anchor="middle" font-size="12.5" fill="#5c6779">the sampled char becomes the next input</text>`;
+
+  TRAINED.forEach((st, i) => {
+    const cx = G.cx[i], x = cx - G.bw/2;
+    const p = softmax(st.z, 1);
+    let c = `<g class="tcol t${i+1}" data-t="${i+1}">`;
+    c += `<text x="${cx}" y="${G.ySmp + 4}" text-anchor="middle" font-size="16" font-weight="700" fill="#1f2937">“${st.pick}”</text>`;
+    c += arrow(cx, G.ySof - 4, cx, G.ySmp + 10, "#d98e32", "arO");
+    c += valueBox(x, G.ySof, G.bw, G.csH, p.map(fmtProb), "var(--s-fill)", "var(--s-line)",
+                  (v, j) => j === st.pi ? "#b06a12" : "#1f2937");
+    c += arrow(cx, G.yOut - 6, cx, G.ySof + 4*G.csH + 8, "#d98e32", "arO");
+    c += valueBox(x, G.yOut, G.bw, G.coH, st.z.map(fmtNum), "var(--y-fill)", "var(--y-line)",
+                  (v, j) => j === st.pi ? "#1a7a4a" : "#b3402f");
+    c += arrow(cx, G.yHid - 6, cx, G.yOut + 4*G.coH + 8, "#6f9cc4", "arB");
+    c += valueBox(x, G.yHid, G.bw, G.chH, st.h.map(fmtNum), "var(--h-fill)", "var(--h-line)");
+    c += arrow(cx, G.yIn - 6, cx, G.yHid + 3*G.chH + 8, "#c4837c", "arR");
+    c += valueBox(x, G.yIn, G.bw, G.ciH, st.x, "var(--x-fill)", "var(--x-line)",
+                  v => v === 1 ? "#8a2f22" : "#c9968f");
+    c += `<text x="${cx}" y="${G.yChar + 4}" text-anchor="middle" font-size="16" font-weight="700" fill="#4b5568">“${st.inChar}”</text>`;
+    if (i < 3){
+      const y = G.yHid + 3*G.chH/2;
+      c += arrow(cx + G.bw/2 + 5, y, G.cx[i+1] - G.bw/2 - 7, y, "#74a95f", "arG");
+    }
+    c += `</g>`;
+    s += c;
+  });
+
+  svg.innerHTML = s;
+}
+
+/* ============================= NARRATION ================================ */
+
+function trainStory(t){
+  if (t === 0){
+    return `<b>Read the diagram bottom-up.</b> Each input character enters as a one-hot vector
+      ${mm(ix("t"))}; the hidden state updates via ${stateEqT}
+      — carrying memory left-to-right along the green arrows — and is projected to 4 logits
+      ${outEqT}. The goal at every step: make the <span class="good">green logit</span>
+      (the target character’s index) the largest, and push the <span class="bad">red ones</span> down.
+      Click a step above (or a column) to see its numbers.`;
+  }
+  const st = EARLY[t-1];
+  const zTgt = fmtNum(st.z[st.ti]);
+  const zMax = Math.max(...st.z);
+  const argmax = CHARS[st.z.indexOf(zMax)];
+  const common = `<b>Step t = ${t}:</b> the input “${st.inChar}” enters as
+    ${mm(`${ix(t)}<mo>=</mo>${vecInt(st.x)}`)}. ` +
+    (t === 1
+      ? `Memory starts empty, ${mm(`${ih(0)}<mo>=</mo><mn>0</mn>`)}, so `
+      : `Combined with the memory ${mm(ih(t-1))} of everything read so far, `) +
+    `the hidden state becomes ${mm(`${ih(t)}<mo>=</mo>${vecF(st.h, 1)}`)}, and the logits are
+    ${mm(`${iy(t)}<mo>=</mo>${W("hy")}${ih(t)}<mo>=</mo>${vecF(st.z, 1)}`)}.
+    The target is <b>“${st.target}”</b> (index ${st.ti + 1}), so training wants the logit
+    <span class="good">${zTgt}</span> to win. `;
+  if (st.z[st.ti] === zMax){
+    return common + `It already does — the model currently ranks “${argmax}” first.
+      The loss still nudges it higher and the <span class="bad">red logits</span> lower.`;
+  }
+  return common + `Right now the model scores “${argmax}” highest
+    (<span class="bad">${fmtNum(zMax)}</span>) — wrong! Backpropagation will adjust
+    ${mm(W("xh"))}, ${mm(W("hh"))}, ${mm(W("hy"))} to raise
+    <span class="good">${zTgt}</span> and lower the rest.`;
+}
+
+function infStory(t){
+  if (t === 0){
+    return `<b>Generation loop:</b> feed a start character, compute the logits, convert them to
+      probabilities with <b>Softmax</b>, pick a character (argmax or sampling), then feed that
+      character back in — the gray arrows. The model writes “hello” one character at a time,
+      consuming its own output. Note the logits after “h” now favor “e”: this is the
+      <b>trained</b> model.`;
+  }
+  const st = TRAINED[t-1];
+  const p = softmax(st.z, 1);
+  return `<b>Step t = ${t}:</b> fed “${st.inChar}”, the trained model outputs logits
+    ${mm(`${iy(t)}<mo>=</mo>${vecF(st.z, 1)}`)}. Softmax turns them into probabilities
+    ${mm(vecF(p, 2))} over ${mm(`<mo stretchy="false">[</mo><mi mathvariant="normal">h</mi><mo>,</mo><mi mathvariant="normal">e</mi><mo>,</mo><mi mathvariant="normal">l</mi><mo>,</mo><mi mathvariant="normal">o</mi><mo stretchy="false">]</mo>`)}.
+    We pick <b>“${st.pick}”</b> (probability ${fmtProb(p[st.pi])})` +
+    (t < 4 ? ` and feed it back as the input for step t = ${t + 1}.` : ` — and the model has spelled “hello”.`);
+}
+
+/* ------------------------- focus/pill wiring --------------------------- */
+
+function wireFocus(btnRowId, svgId, storyId, storyFn){
+  const row = document.getElementById(btnRowId);
+  const svg = document.getElementById(svgId);
+  const story = document.getElementById(storyId);
+  const set = t => {
+    svg.setAttribute("data-sel", t);
+    row.querySelectorAll(".t-btn").forEach(b => b.classList.toggle("active", +b.dataset.t === t));
+    story.innerHTML = storyFn(t);
+  };
+  row.addEventListener("click", e => {
+    const b = e.target.closest(".t-btn"); if (b) set(+b.dataset.t);
+  });
+  svg.addEventListener("click", e => {
+    const g = e.target.closest(".tcol");
+    if (g) set(+g.dataset.t === +svg.getAttribute("data-sel") ? 0 : +g.dataset.t);
+  });
+  set(0);
+}
+
+/* ========================= TEMPERATURE PLAYGROUND ======================= */
+
+const TMIN = 0.05, TMAX = 20;
+let curT = 1, curCtx = 0;
+
+const sliderToT = v => TMIN * Math.pow(TMAX/TMIN, v/100);
+const tToSlider = T => 100 * Math.log(T/TMIN) / Math.log(TMAX/TMIN);
+
+function drawTempChart(){
+  const st = TRAINED[curCtx];
+  const p  = softmax(st.z, curT);
+  const p1 = softmax(st.z, 1);
+
+  const svg = document.getElementById("svgTemp");
+  const Wd = 680, Ht = 342, x0 = 74, x1 = 650, yTop = 22, yBase = 244;
+  svg.setAttribute("viewBox", `0 0 ${Wd} ${Ht}`);
+  svg.setAttribute("width", Wd); svg.setAttribute("height", Ht);
+
+  const slot = (x1 - x0) / 4, bw = 64;
+  const yOf = prob => yBase - prob * (yBase - yTop);
+
+  let s = "";
+  /* recessive grid + % axis */
+  [0, .25, .5, .75, 1].forEach(g => {
+    const y = yOf(g);
+    s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="#e3e9f2" stroke-width="1"/>`;
+    s += `<text x="${x0 - 8}" y="${y + 4}" text-anchor="end" font-size="11.5" fill="#64708a">${g*100}%</text>`;
+  });
+  s += `<line x1="${x0}" y1="${yBase}" x2="${x1}" y2="${yBase}" stroke="#c6d0de" stroke-width="1.4"/>`;
+
+  CHARS.forEach((ch, i) => {
+    const xs = x0 + slot*i + (slot - bw)/2;
+    const y = yOf(p[i]), h = yBase - y;
+    const zi = st.z[i];
+    /* rounded top anchored to the baseline (flat bottom) */
+    const r = Math.min(4, h);
+    const bar = h <= 0.5
+      ? `<rect class="fill" x="${xs}" y="${yBase - 1}" width="${bw}" height="1" fill="#3b6fd4"/>`
+      : `<path class="fill" d="M ${xs} ${yBase} L ${xs} ${y + r} Q ${xs} ${y} ${xs + r} ${y}
+           L ${xs + bw - r} ${y} Q ${xs + bw} ${y} ${xs + bw} ${y + r} L ${xs + bw} ${yBase} Z" fill="#3b6fd4"/>`;
+    const pct = p[i] >= 0.095 ? (p[i]*100).toFixed(0) + "%" : (p[i]*100).toFixed(1) + "%";
+    let pctY = Math.min(y - 7, yBase - 6);
+    const dashY = yOf(p1[i]);
+    if (dashY > pctY - 14 && dashY < pctY + 10) pctY = dashY - 10;   /* dodge the T=1 marker */
+    pctY = Math.max(14, pctY);
+    s += `<g class="bar">
+      <title>P(“${ch}”) = e^(${fmtNum(zi)} / ${curT.toFixed(2)}) ÷ Σ = ${p[i].toFixed(3)}</title>
+      <rect x="${xs - 14}" y="${yTop - 10}" width="${bw + 28}" height="${yBase - yTop + 10}" fill="transparent"/>
+      ${bar}
+      <text x="${xs + bw/2}" y="${pctY}" text-anchor="middle"
+            font-size="13" font-weight="700" fill="#1f2937">${pct}</text>
+      <line x1="${xs - 8}" y1="${yOf(p1[i])}" x2="${xs + bw + 8}" y2="${yOf(p1[i])}"
+            stroke="#64708a" stroke-width="2" stroke-dasharray="5 4"/>
+      <text x="${xs + bw/2}" y="${yBase + 24}" text-anchor="middle" font-size="17" font-weight="700" fill="#1f2937">“${ch}”</text>
+      <text x="${xs + bw/2}" y="${yBase + 46}" text-anchor="middle" font-size="12.5" fill="#64708a" class="mt"><tspan font-style="italic">z</tspan><tspan> = ${fmtNum(zi)}</tspan></text>
+      <text x="${xs + bw/2}" y="${yBase + 64}" text-anchor="middle" font-size="12.5" fill="#64708a" class="mt"><tspan font-style="italic">z</tspan><tspan>/</tspan><tspan font-style="italic">T</tspan><tspan> = ${fmtNum(zi/curT)}</tspan></text>
+    </g>`;
+  });
+
+  /* mark the argmax — its identity never changes with T */
+  const am = st.z.indexOf(Math.max(...st.z));
+  const amx = x0 + slot*am + slot/2;
+  s += `<text x="${amx}" y="${yBase + 82}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#3b6fd4">▲ argmax (fixed for every T)</text>`;
+
+  svg.innerHTML = s;
+}
+
+function regimeText(){
+  const el = document.getElementById("regime");
+  let msg;
+  if      (curT <= 0.07) msg = `<b>T → 0:</b> the division blows the gap between logits wide open — softmax collapses onto the argmax. Sampling becomes <b>greedy decoding</b>: deterministic, same output every time.`;
+  else if (curT < 0.95)  msg = `<b>T &lt; 1 — sharper:</b> dividing by a small T <b>stretches</b> the differences between logits, so the top character grabs even more probability. More conservative, more predictable text.`;
+  else if (curT <= 1.05) msg = `<b>T = 1 — plain softmax:</b> the logits pass through unchanged. This is the distribution the model actually learned.`;
+  else if (curT < 10)    msg = `<b>T &gt; 1 — flatter:</b> dividing by a large T <b>shrinks</b> the differences between logits, handing probability to the underdogs. More diverse, more “creative” — and more likely to derail.`;
+  else                   msg = `<b>T → ∞:</b> every scaled logit approaches 0, so softmax approaches the <b>uniform distribution</b> — each character ≈ 25%. Pure noise: the model’s knowledge is ignored.`;
+  msg += ` <span style="color:var(--text-dim)">Dividing by T never reorders the logits — temperature reshapes <em>confidence</em>, never <em>preference</em>.</span>`;
+  el.innerHTML = msg;
+}
+
+function setT(T, fromSlider){
+  curT = Math.min(TMAX, Math.max(TMIN, T));
+  if (!fromSlider) document.getElementById("tSlider").value = tToSlider(curT);
+  document.getElementById("tVal").textContent =
+    curT >= TMAX ? "T → ∞" : (curT <= TMIN ? "T → 0" : "T = " + curT.toFixed(2));
+  document.getElementById("tPresets").querySelectorAll(".t-btn").forEach(b =>
+    b.classList.toggle("active", Math.abs(+b.dataset.tv - curT) < 0.011));
+  drawTempChart();
+  regimeText();
+  document.getElementById("sampleChars").textContent = "Press the button to sample from the distribution above.";
+  document.getElementById("sampleCounts").textContent = "";
+}
+
+function wireTemperature(){
+  document.getElementById("tSlider").addEventListener("input", e => setT(sliderToT(+e.target.value), true));
+  document.getElementById("tPresets").addEventListener("click", e => {
+    const b = e.target.closest(".t-btn"); if (b) setT(+b.dataset.tv, false);
+  });
+  document.getElementById("ctxBtns").addEventListener("click", e => {
+    const b = e.target.closest(".t-btn"); if (!b) return;
+    curCtx = +b.dataset.c;
+    document.getElementById("ctxBtns").querySelectorAll(".t-btn").forEach(x =>
+      x.classList.toggle("active", x === b));
+    setT(curT, false);
+  });
+  document.getElementById("drawBtn").addEventListener("click", () => {
+    const p = softmax(TRAINED[curCtx].z, curT);
+    const counts = [0, 0, 0, 0];
+    let out = "";
+    for (let i = 0; i < 60; i++){
+      let r = Math.random(), j = 0;
+      while (j < 3 && r >= p[j]){ r -= p[j]; j++; }
+      counts[j]++; out += CHARS[j] + " ";
+    }
+    document.getElementById("sampleChars").textContent = out.trim();
+    document.getElementById("sampleCounts").innerHTML =
+      "Counts — " + CHARS.map((c, i) => `<b>${c}</b>: ${counts[i]}`).join(" · ") +
+      ` &nbsp;(after “${CONTEXTS[curCtx]}”, at ` +
+      (curT >= TMAX ? "T → ∞" : curT <= TMIN ? "T → 0" : "T = " + curT.toFixed(2)) + ")";
+  });
+  setT(1, false);
+}
+
+/* ================================ INIT ================================== */
+
+drawTraining();
+drawInference();
+wireFocus("trainBtns", "svgTrain", "trainStory", trainStory);
+wireFocus("infBtns",   "svgInf",   "infStory",   infStory);
+wireTemperature();
+</script>
+</body>
+</html>
