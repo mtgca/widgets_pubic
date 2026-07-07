@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Backpropagation Through Time: Vanishing &amp; Exploding Gradients · Interactive</title>
+<!--
+  ============================================================================
+  BACKPROPAGATION THROUGH TIME — THE MULTIPLICATIVE CHALLENGE
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget. Everything (HTML + CSS + JS) in this file.
+
+  DESIGN NOTES:
+  - LIGHT academic theme (maintainer preference), no looping animations —
+    every state is a static diagram re-rendered on input change.
+  - Math notation uses native MathML in HTML text. SVG <text> cannot contain
+    MathML, so diagram labels use italic math-font <tspan> sub/superscripts
+    (see mtext / wlabel / sciTspan helpers).
+  - One diagram covers the whole continuum: the largest eigenvalue λ of W_hh
+    is a slider; presets jump to the two classic regimes (0.5 and 2) and the
+    knife-edge (1).
+
+  HOW TO MODIFY:
+  - Diagram geometry: the GEO object.
+  - Regime text: regimeInfo().
+  - Chart scales: renderChart().
+  ============================================================================
+-->
+<style>
+  :root{
+    --bg:       #f5f8fd;
+    --bg-soft:  #eef3fa;
+    --panel:    #ffffff;
+    --panel-2:  #f2f6fc;
+    --line:     #d9e2ef;
+    --text:     #1f2937;
+    --text-dim: #64708a;
+    --accent:   #3b6fd4;
+    --h-fill:   #dcefd2; --h-line: #74a95f;   /* hidden-state cells (green) */
+    --fwd:      #3579c8;                       /* forward pass arrows (blue) */
+    --grad:     #c0392b;                       /* backward gradient (red)    */
+    --grad-dk:  #96281b;
+    --explode:  #fdecea; --explode-line: #e5a49c;
+    --vanish:   #e8f1fb; --vanish-line:  #a9c4e6;
+    --stable:   #fff8e6; --stable-line:  #e2c877;
+    --radius: 14px;
+    --shadow: 0 6px 20px rgba(40,70,120,.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(1100px 520px at 82% -10%, #e9f0fb 0%, transparent 60%),
+      radial-gradient(900px 460px at -8% 6%, #fdf0ee 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.55;
+  }
+  .wrap{ max-width: 1120px; margin: 0 auto; padding: 26px 20px 60px; }
+
+  math{ font-family: var(--math); }
+  .story math, .regime math{ font-size: 1.05em; }
+
+  .hero{ text-align:center; margin: 26px 0 20px; }
+  .hero h1{ font-size: 1.6rem; margin: 0 0 8px; letter-spacing:-.3px; }
+  .hero p{ color: var(--text-dim); max-width: 860px; margin: 0 auto; font-size:.95rem; }
+
+  .panel{ background: var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 20px 22px 18px; }
+  .panel h2{ margin:0 0 4px; font-size:1.12rem; }
+  .panel .hint{ color:var(--text-dim); font-size:.85rem; margin:0 0 12px; }
+
+  /* ------------------------------ controls ------------------------------- */
+  .controls{ display:flex; flex-wrap:wrap; gap:14px 26px; align-items:center; margin: 4px 0 16px; }
+  .ctl{ display:flex; align-items:center; gap:10px; }
+  .ctl .lbl{ font-size:.82rem; font-weight:700; color:var(--text-dim); white-space:nowrap; }
+  .ctl input[type="range"]{ width:180px; accent-color: var(--accent); }
+  .ctl .val{ font-family: var(--mono); font-size:.88rem; min-width:44px; }
+  .presets{ display:flex; gap:8px; }
+  .p-btn{ padding:5px 13px; border-radius:999px; border:1.5px solid var(--line); background:var(--panel);
+          font-size:.84rem; cursor:pointer; font-family:var(--font); color:var(--text); }
+  .p-btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .p-btn.active{ font-weight:700; }
+  .p-btn.active.p-vanish { background:var(--vanish);  border-color:var(--vanish-line);  color:#2c5c96; }
+  .p-btn.active.p-stable { background:var(--stable);  border-color:var(--stable-line);  color:#8a6d1a; }
+  .p-btn.active.p-explode{ background:var(--explode); border-color:var(--explode-line); color:var(--grad-dk); }
+
+  /* --------------------------- regime + diagram -------------------------- */
+  .duo{ display:flex; gap:16px; align-items:stretch; }
+  @media (max-width: 900px){ .duo{ flex-direction:column; } }
+
+  .regime{ flex: 0 0 262px; border-radius:12px; border:2px solid var(--line);
+           padding: 13px 16px 11px; font-size:.88rem; }
+  .regime[data-mode="explode"]{ background:var(--explode); border-color:var(--explode-line); }
+  .regime[data-mode="vanish"] { background:var(--vanish);  border-color:var(--vanish-line); }
+  .regime[data-mode="stable"] { background:var(--stable);  border-color:var(--stable-line); }
+  .regime h3{ margin:0 0 6px; font-size:.9rem; letter-spacing:.3px; text-transform:uppercase; }
+  .regime[data-mode="explode"] h3{ color:var(--grad-dk); }
+  .regime[data-mode="vanish"]  h3{ color:#2c5c96; }
+  .regime[data-mode="stable"]  h3{ color:#8a6d1a; }
+  .regime .row{ margin: 4px 0; }
+  .regime .row b{ font-size:.78rem; text-transform:uppercase; letter-spacing:.4px; color:var(--text-dim); }
+  .regime .prod{ margin:7px 0; font-size:1.02rem; }
+  .regime .result{ display:flex; align-items:center; gap:9px; margin-top:9px; padding-top:9px;
+                   border-top:1px dashed rgba(0,0,0,.16); font-weight:700; }
+  .regime .result .ico{ font-size:1.3rem; line-height:1; }
+  .regime .result .sub{ display:block; font-weight:400; font-size:.8rem; color:var(--text-dim); }
+
+  .stage{ flex:1; background: var(--bg-soft); border:1px solid var(--line); border-radius:12px;
+          padding: 6px 4px 0; overflow-x:auto; display:flex; align-items:center; }
+  .stage svg{ display:block; margin:0 auto; width:100%; min-width:700px; max-width:950px; height:auto; }
+
+  .story{ background:#f4f8ff; border:1px solid #cfdcf5; border-left:4px solid var(--accent);
+          border-radius:10px; padding:11px 15px; font-size:.93rem; margin-top:14px; }
+  .story b{ color:var(--accent); }
+
+  /* ------------------------------- chart --------------------------------- */
+  .chart-panel{ margin-top:22px; }
+  .chart-box{ position:relative; }
+  .chart-box svg{ display:block; width:100%; height:auto; }
+  .tip{ position:absolute; pointer-events:none; background:#fff; border:1px solid var(--line);
+        border-radius:8px; box-shadow:0 4px 14px rgba(40,70,120,.16); padding:7px 11px;
+        font-size:.82rem; white-space:nowrap; display:none; z-index:5; }
+  .tip b{ font-family: var(--mono); font-weight:600; }
+
+  /* ------------------------------ equations ------------------------------ */
+  .eq-panel{ margin-top:22px; }
+  .eq-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:10px; }
+  @media (max-width: 940px){ .eq-grid{ grid-template-columns:1fr; } }
+  .eq-card{ background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:13px 16px; }
+  .eq-card h3{ margin:0 0 8px; font-size:.88rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; }
+  .eq-card .eq{ font-size:1.16rem; margin:6px 0 8px; overflow-x:auto; }
+  .eq-card p{ margin:0; font-size:.85rem; color:var(--text-dim); }
+
+  /* ------------------------------ fact cards ----------------------------- */
+  .facts{ display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:22px; }
+  @media (max-width: 940px){ .facts{ grid-template-columns:1fr; } }
+  .fact-card{ background:var(--panel); border:1px solid var(--line); border-radius:12px;
+              padding:14px 17px; box-shadow:var(--shadow); }
+  .fact-card h3{ margin:0 0 7px; font-size:.95rem; }
+  .fact-card p{ margin:0 0 6px; font-size:.88rem; }
+  .fact-card p.sub{ color:var(--text-dim); font-size:.84rem; }
+
+  footer{ text-align:center; color:var(--text-dim); font-size:.78rem; margin-top:34px; }
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>Backpropagation Through Time: The Multiplicative Challenge</h1>
+    <p>To train an RNN, the loss gradient must travel <em>backwards</em> through the unrolled chain —
+       and every step back multiplies it by the <em>same</em> shared weight matrix
+       <math><msubsup><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow><mi>T</mi></msubsup></math>.
+       Repeated multiplication by one matrix is numerically unstable: the gradient
+       <b>explodes</b> or <b>vanishes</b> depending on the largest eigenvalue
+       <math><msub><mi>λ</mi><mi>max</mi></msub></math> of
+       <math><msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub></math>.
+       Drag the sliders to see both failure modes.</p>
+  </header>
+
+  <section class="panel">
+    <h2>Gradient flow through the unrolled chain</h2>
+    <p class="hint">Blue arrows: forward pass (hidden states flow right). Red arrows: backward pass —
+       the gradient of the loss <math><mi>ℒ</mi></math> flows left, picking up one factor of
+       <math><msubsup><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow><mi>T</mi></msubsup></math> per step.</p>
+
+    <div class="controls">
+      <div class="ctl">
+        <span class="lbl">Largest eigenvalue <math><msub><mi>λ</mi><mi>max</mi></msub></math>:</span>
+        <input type="range" id="lamSlider" min="-10" max="10" step="1" value="-10">
+        <span class="val" id="lamVal">0.50</span>
+      </div>
+      <div class="ctl">
+        <span class="lbl">Time steps <math><mi>T</mi></math>:</span>
+        <input type="range" id="tSlider" min="6" max="40" step="1" value="20">
+        <span class="val" id="tVal">20</span>
+      </div>
+      <div class="presets" id="presets">
+        <button class="p-btn p-vanish"  data-v="-10">Vanishing · λ = 0.5</button>
+        <button class="p-btn p-stable"  data-v="0">Knife-edge · λ = 1</button>
+        <button class="p-btn p-explode" data-v="10">Exploding · λ = 2</button>
+      </div>
+    </div>
+
+    <div class="duo">
+      <aside class="regime" id="regime"></aside>
+      <div class="stage"><div id="svgHost"></div></div>
+    </div>
+
+    <div class="story" id="story"></div>
+  </section>
+
+  <section class="panel chart-panel">
+    <h2>Gradient magnitude vs. distance back in time</h2>
+    <p class="hint">Each step back multiplies the gradient norm by
+      <math><msub><mi>λ</mi><mi>max</mi></msub></math>, so after
+      <math><mi>k</mi></math> steps
+      <math><mrow><mo>‖</mo><mfrac><mrow><mo>∂</mo><mi>ℒ</mi></mrow><mrow><mo>∂</mo><msub><mi>h</mi><mrow><mi>T</mi><mo>−</mo><mi>k</mi></mrow></msub></mrow></mfrac><mo>‖</mo><mo>∝</mo><msubsup><mi>λ</mi><mi>max</mi><mi>k</mi></msubsup></mrow></math>.
+      Note the <b>logarithmic</b> vertical axis: a straight line here is exponential growth or decay. Hover for values.</p>
+    <div class="chart-box" id="chartBox">
+      <div id="chartHost"></div>
+      <div class="tip" id="tip"></div>
+    </div>
+  </section>
+
+  <section class="panel eq-panel">
+    <h2>Where the multiplication comes from</h2>
+    <div class="eq-grid">
+      <div class="eq-card">
+        <h3>1 · The recurrence</h3>
+        <div class="eq"><math>
+          <msub><mi>h</mi><mi>t</mi></msub><mo>=</mo>
+          <mi>tanh</mi><mo stretchy="false">(</mo>
+          <msub><mi>W</mi><mrow><mi>x</mi><mi>h</mi></mrow></msub><msub><mi>x</mi><mi>t</mi></msub>
+          <mo>+</mo>
+          <msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub><msub><mi>h</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub>
+          <mo stretchy="false">)</mo>
+        </math></div>
+        <p>The <em>same</em> matrix <math><msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub></math>
+           connects every hidden state to the next — parameter sharing across time.</p>
+      </div>
+      <div class="eq-card">
+        <h3>2 · Chain rule over time</h3>
+        <div class="eq"><math>
+          <mfrac><mrow><mo>∂</mo><mi>ℒ</mi></mrow><mrow><mo>∂</mo><msub><mi>h</mi><mn>0</mn></msub></mrow></mfrac>
+          <mo>=</mo>
+          <mrow><mo>(</mo>
+            <munderover><mo>∏</mo><mrow><mi>t</mi><mo>=</mo><mn>1</mn></mrow><mi>T</mi></munderover>
+            <mfrac><mrow><mo>∂</mo><msub><mi>h</mi><mi>t</mi></msub></mrow><mrow><mo>∂</mo><msub><mi>h</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub></mrow></mfrac>
+          <mo>)</mo></mrow>
+          <mfrac><mrow><mo>∂</mo><mi>ℒ</mi></mrow><mrow><mo>∂</mo><msub><mi>h</mi><mi>T</mi></msub></mrow></mfrac>
+        </math></div>
+        <p>Reaching back <math><mi>T</mi></math> steps chains <math><mi>T</mi></math> Jacobians —
+           each one contains a factor of
+           <math><msubsup><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow><mi>T</mi></msubsup></math>.</p>
+      </div>
+      <div class="eq-card">
+        <h3>3 · The norm bound</h3>
+        <div class="eq"><math>
+          <mrow><mo>‖</mo><mfrac><mrow><mo>∂</mo><mi>ℒ</mi></mrow><mrow><mo>∂</mo><msub><mi>h</mi><mn>0</mn></msub></mrow></mfrac><mo>‖</mo></mrow>
+          <mo>≲</mo>
+          <msubsup><mi>λ</mi><mi>max</mi><mi>T</mi></msubsup>
+          <mo>⋅</mo>
+          <mrow><mo>‖</mo><mfrac><mrow><mo>∂</mo><mi>ℒ</mi></mrow><mrow><mo>∂</mo><msub><mi>h</mi><mi>T</mi></msub></mrow></mfrac><mo>‖</mo></mrow>
+        </math></div>
+        <p><math><msubsup><mi>λ</mi><mi>max</mi><mi>T</mi></msubsup></math> is a geometric sequence:
+           it races to <math><mo>∞</mo></math> when
+           <math><mrow><msub><mi>λ</mi><mi>max</mi></msub><mo>&gt;</mo><mn>1</mn></mrow></math>
+           and collapses to <math><mn>0</mn></math> when
+           <math><mrow><msub><mi>λ</mi><mi>max</mi></msub><mo>&lt;</mo><mn>1</mn></mrow></math>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="facts">
+    <div class="fact-card">
+      <h3>💥 Fixing exploding gradients</h3>
+      <p><b>Gradient clipping:</b> if the gradient norm exceeds a threshold, rescale it back down before the update.</p>
+      <p class="sub">Crude but effective — it keeps one bad batch from producing NaN weights and crashing training.</p>
+    </div>
+    <div class="fact-card">
+      <h3>🔗 Fixing vanishing gradients</h3>
+      <p><b>Gated architectures (LSTM, GRU):</b> an additive cell-state path with gates lets gradients flow back without repeated multiplication by
+         <math><msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub></math>.</p>
+      <p class="sub">Careful initialization (e.g. orthogonal <math><msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub></math>) and ReLU variants also help; attention/Transformers sidestep recurrence entirely.</p>
+    </div>
+    <div class="fact-card">
+      <h3>⚖️ Why there is no easy middle</h3>
+      <p>Keeping <math><mrow><msub><mi>λ</mi><mi>max</mi></msub><mo>=</mo><mn>1</mn></mrow></math> exactly is a knife-edge — training constantly changes
+         <math><msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub></math>, and the
+         <math><mi>tanh</mi></math> derivative (≤ 1) shrinks the product further.</p>
+      <p class="sub">That is why plain RNNs struggle with long-range dependencies even when carefully tuned.</p>
+    </div>
+  </section>
+
+  <footer>Interactive teaching widget · backpropagation through time · native MathML rendering</footer>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* =============================== STATE ================================== */
+const state = { v: -10, T: 20 };            /* λ = 2^(v/10)  →  0.5 … 2 */
+const lambda = () => Math.pow(2, state.v / 10);
+
+/* ============================ MATH SNIPPETS ============================= */
+/* Native MathML string helpers for HTML narration (never used inside SVG). */
+const mm  = inner => `<math>${inner}</math>`;
+const LAM  = '<msub><mi>λ</mi><mi>max</mi></msub>';
+const WHH  = '<msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub>';
+const WHHT = '<msubsup><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow><mi>T</mi></msubsup>';
+const lamPow = e => `<msubsup><mi>λ</mi><mi>max</mi>${typeof e === "number" ? `<mn>${e}</mn>` : `<mi>${e}</mi>`}</msubsup>`;
+
+/* λ^e as MathML scientific notation: m × 10^p (or plain number when tame) */
+function mmNum(x){
+  if (x === 0) return '<mn>0</mn>';
+  const p = Math.floor(Math.log10(x));
+  if (p >= -3 && p <= 4){
+    const s = x >= 100 ? Math.round(x).toString() : x.toPrecision(3);
+    return `<mn>${parseFloat(s)}</mn>`;
+  }
+  const m = (x / Math.pow(10, p)).toPrecision(2);
+  return `<mrow><mn>${parseFloat(m)}</mn><mo>×</mo><msup><mn>10</mn><mn>${p < 0 ? "−" + (-p) : p}</mn></msup></mrow>`;
+}
+
+/* ============================ SVG TEXT HELPERS ========================== */
+/* SVG <text> cannot contain MathML/HTML tags — math-font tspans only. */
+const MATH_FONT = 'STIX Two Math, Cambria Math, Times New Roman, Georgia, serif';
+
+function mtext(x, y, main, sub, size, fill, anchor, sup){
+  size = size || 16; fill = fill || 'var(--text)'; anchor = anchor || 'middle';
+  const subT = sub == null ? '' :
+    `<tspan dy="4.5" font-size="${size*0.66}" font-style="${/^[0-9]/.test(sub) ? 'normal' : 'italic'}">${sub}</tspan>`;
+  const supT = sup == null ? '' :
+    `<tspan dy="${sub == null ? -6 : -11}" font-size="${size*0.66}" font-style="italic">${sup}</tspan>`;
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="${MATH_FONT}" font-style="italic"
+          font-size="${size}" fill="${fill}">${main}${subT}${supT}</text>`;
+}
+
+/* ×W_hh^T label used under every backward arrow */
+function wlabel(x, y, opacity, size){
+  size = size || 14.5;
+  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="${MATH_FONT}" font-size="${size}"
+      fill="var(--grad-dk)" opacity="${opacity}"><tspan>×</tspan><tspan font-style="italic">W</tspan><tspan dy="4" font-size="${size*0.66}" font-style="italic">hh</tspan><tspan dy="-10" font-size="${size*0.66}" font-style="italic">T</tspan></text>`;
+}
+
+/* value as m×10^p with a real superscript tspan (proper minus U+2212) */
+function sciTspan(x){
+  if (x === 0) return '0';
+  const p = Math.floor(Math.log10(x));
+  if (p >= -2 && p <= 3){
+    const s = x >= 100 ? Math.round(x).toString() : x.toPrecision(3);
+    return `${parseFloat(s)}`;
+  }
+  const m = (x / Math.pow(10, p)).toPrecision(2);
+  return `${parseFloat(m)}×10<tspan dy="-4.5" font-size="0.68em">${p < 0 ? "−" + (-p) : p}</tspan>`;
+}
+
+/* horizontal arrow: dir = 1 (→) or −1 (←) */
+function arrow(x1, x2, y, bodyH, fill, opacity, dir){
+  const headL = Math.min(24, bodyH * 1.4 + 9);
+  const headH = Math.max(bodyH * 2.1, bodyH + 7);
+  const tail = dir > 0 ? x1 : x2, tipEnd = dir > 0 ? x2 : x1;
+  const neck = tipEnd - dir * headL;
+  return `<path d="M ${tail} ${y - bodyH/2}
+    L ${neck} ${y - bodyH/2} L ${neck} ${y - headH/2} L ${tipEnd} ${y}
+    L ${neck} ${y + headH/2} L ${neck} ${y + bodyH/2} L ${tail} ${y + bodyH/2} Z"
+    fill="${fill}" opacity="${opacity}"/>`;
+}
+
+/* ============================ DIAGRAM =================================== */
+const GEO = {
+  W: 950, H: 232,
+  cellCx: [90, 262, 434, 606, 778],   /* 5 cells: t = 0, 1, …, T−1, T */
+  cellW: 30, cellTop: 30, cellH: 140,
+  fwdY: 60, bwdY: 122,
+  lossX: 905
+};
+
+function renderDiagram(){
+  const g = GEO, lam = lambda(), T = state.T;
+  const cx = g.cellCx, cr = i => cx[i] + g.cellW/2, cl = i => cx[i] - g.cellW/2;
+  let s = `<svg viewBox="0 0 ${g.W} ${g.H}"
+             font-family="${MATH_FONT}" role="img"
+             aria-label="Unrolled RNN chain with forward hidden-state arrows and backward gradient arrows whose size scales with the eigenvalue raised to the number of steps">`;
+
+  /* cells */
+  for (let i = 0; i < 5; i++){
+    s += `<rect x="${cl(i)}" y="${g.cellTop}" width="${g.cellW}" height="${g.cellH}" rx="9"
+           fill="var(--h-fill)" stroke="var(--h-line)" stroke-width="1.6"/>`;
+  }
+
+  /* t labels under cells — italic t, upright digits, italic T */
+  const tLabel = (x, txt) => txt === '…'
+    ? `<text x="${x}" y="198" text-anchor="middle" font-size="17" fill="var(--text-dim)">…</text>`
+    : `<text x="${x}" y="198" text-anchor="middle" font-family="${MATH_FONT}" font-size="15.5" fill="var(--text)"><tspan font-style="italic">t</tspan> = ${txt}</text>`;
+  s += tLabel(cx[0], '0');
+  s += tLabel(cx[1], '1');
+  s += tLabel(cx[2], '…');
+  s += `<text x="${cx[3]}" y="198" text-anchor="middle" font-family="${MATH_FONT}" font-size="15.5" fill="var(--text)"><tspan font-style="italic">t</tspan> = <tspan font-style="italic">T</tspan> − 1</text>`;
+  s += `<text x="${cx[4]}" y="198" text-anchor="middle" font-family="${MATH_FONT}" font-size="15.5" fill="var(--text)"><tspan font-style="italic">t</tspan> = <tspan font-style="italic">T</tspan></text>`;
+
+  /* forward (blue) arrows + h labels */
+  const fwdLabels = [['h','0'], ['h','1'], null, ['h','T−1'], ['h','T']];
+  for (let i = 0; i < 5; i++){
+    const x1 = i < 4 ? cr(i) + 5 : cr(4) + 5;
+    const x2 = i < 4 ? cl(i+1) - 5 : g.lossX - 22;
+    s += arrow(x1, x2, g.fwdY, 9, 'var(--fwd)', 1, 1);
+    const lb = fwdLabels[i];
+    if (lb){
+      const mid = (x1 + x2) / 2;
+      const sub = lb[1];
+      s += `<text x="${mid}" y="${g.fwdY - 16}" text-anchor="middle" font-family="${MATH_FONT}" font-size="17" fill="var(--text)"><tspan font-style="italic">h</tspan><tspan dy="4.5" font-size="11.5" font-style="${sub === '0' || sub === '1' ? 'normal' : 'italic'}">${sub}</tspan></text>`;
+    }
+  }
+
+  /* loss ℒ */
+  s += `<text x="${g.lossX}" y="${(g.fwdY + g.bwdY)/2 + 8}" text-anchor="middle" font-family="${MATH_FONT}"
+         font-style="italic" font-size="30" fill="var(--grad-dk)">ℒ</text>`;
+
+  /* backward (red) gradient arrows — exponents per gap, right → left */
+  const gaps = [
+    { x1: cr(4) + 5, x2: g.lossX - 22, e: 1 },
+    { x1: cr(3) + 5, x2: cl(4) - 5,    e: 2 },
+    { x1: cr(2) + 5, x2: cl(3) - 5,    e: 3 },
+    { x1: cr(1) + 5, x2: cl(2) - 5,    e: T - 1 },
+    { x1: cr(0) + 5, x2: cl(1) - 5,    e: T }
+  ];
+  for (const gp of gaps){
+    const scale = Math.pow(lam, gp.e);
+    const bodyH = Math.max(3, Math.min(40, 9.5 * Math.pow(scale, 0.35)));
+    const op    = Math.max(0.08, Math.min(1, Math.pow(scale, 0.5)));
+    const labOp = Math.max(0.22, Math.min(1, op + 0.15));
+    const mid   = (gp.x1 + gp.x2) / 2;
+    const labY  = g.bwdY + Math.max(bodyH, 12)/2 + 20;
+    s += `<g><title>after ${gp.e} step${gp.e > 1 ? 's' : ''} back: gradient scaled by λ^${gp.e} ≈ ${scale.toExponential(1)}</title>`;
+    s += arrow(gp.x1, gp.x2, g.bwdY, bodyH, 'var(--grad)', op, -1);
+    s += wlabel(mid, labY, labOp);
+    s += `<text x="${mid}" y="${labY + 16}" text-anchor="middle" font-family="${MATH_FONT}" font-size="11.5"
+           fill="var(--text-dim)" opacity="${labOp}">×${sciTspan(scale)}</text></g>`;
+  }
+
+  s += `</svg>`;
+  $('svgHost').innerHTML = s;
+}
+
+/* ============================ REGIME PANEL ============================== */
+function regimeInfo(){
+  const lam = lambda(), T = state.T, total = Math.pow(lam, T);
+  const lamS = lam.toFixed(2).replace('-', '−');
+  const prod = mm(`<mrow><mn>${lamS}</mn><mo>×</mo><mn>${lamS}</mn><mo>×</mo><mo>⋯</mo><mo>×</mo><mn>${lamS}</mn><mo>→</mo>${
+      lam > 1 ? '<mo>∞</mo>' : lam < 1 ? '<mn>0</mn>' : '<mn>1</mn>'}</mrow>`);
+  if (lam > 1) return {
+    mode: 'explode', title: 'Gradient signal amplified',
+    cause: `Largest eigenvalue of ${mm(WHH)} <b style="color:var(--grad-dk)">&gt; 1</b>`,
+    prod, ico: '💥', result: 'Model crashes (NaN)',
+    sub: 'weight updates blow up — training diverges'
+  };
+  if (lam < 1) return {
+    mode: 'vanish', title: 'Gradient signal diminished',
+    cause: `Largest eigenvalue of ${mm(WHH)} <b style="color:#2c5c96">&lt; 1</b>`,
+    prod, ico: '🔗', result: 'No long-range learning',
+    sub: 'early time steps receive (almost) no gradient'
+  };
+  return {
+    mode: 'stable', title: 'Knife-edge stability',
+    cause: `Largest eigenvalue of ${mm(WHH)} <b style="color:#8a6d1a">= 1</b>`,
+    prod, ico: '⚖️', result: 'Marginally stable',
+    sub: 'unstable in practice: training moves λ, and tanh′ ≤ 1 still shrinks it'
+  };
+}
+
+function renderRegime(){
+  const r = regimeInfo(), lam = lambda(), T = state.T, total = Math.pow(lam, T);
+  const el = $('regime');
+  el.dataset.mode = r.mode;
+  el.innerHTML = `
+    <h3>${r.title}</h3>
+    <div class="row"><b>Cause:</b> ${r.cause}</div>
+    <div class="prod">${r.prod}</div>
+    <div class="row"><b>After ${mm(`<mrow><mi>T</mi><mo>=</mo><mn>${T}</mn></mrow>`)} steps:</b>
+      ${mm(`<mrow>${lamPow(T)}<mo>≈</mo>${mmNum(total)}</mrow>`)}</div>
+    <div class="result"><span class="ico">${r.ico}</span>
+      <span>${r.result}<span class="sub">${r.sub}</span></span></div>`;
+}
+
+function renderStory(){
+  const lam = lambda(), T = state.T, total = Math.pow(lam, T);
+  let msg;
+  if (lam > 1){
+    msg = `<b>Exploding:</b> every backward step multiplies the gradient by ${mm(WHHT)}, and with
+      ${mm(`<mrow>${LAM}<mo>=</mo><mn>${lam.toFixed(2)}</mn></mrow>`)} each factor makes it bigger.
+      By the time it reaches ${mm('<mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow>')} it has grown by
+      ${mm(`<mrow>${lamPow(T)}<mo>≈</mo>${mmNum(total)}</mrow>`)} — one step of gradient descent with numbers
+      that large overflows to NaN and the model crashes.`;
+  } else if (lam < 1){
+    msg = `<b>Vanishing:</b> every backward step multiplies the gradient by ${mm(WHHT)}, and with
+      ${mm(`<mrow>${LAM}<mo>=</mo><mn>${lam.toFixed(2)}</mn></mrow>`)} each factor makes it smaller.
+      By the time it reaches ${mm('<mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow>')} it has shrunk to
+      ${mm(`<mrow>${lamPow(T)}<mo>≈</mo>${mmNum(total)}</mrow>`)} of its size — the early time steps
+      effectively get <em>no learning signal</em>, so long-range dependencies are never learned.`;
+  } else {
+    msg = `<b>Knife-edge:</b> with ${mm(`<mrow>${LAM}<mo>=</mo><mn>1</mn></mrow>`)} the product
+      ${mm(`<mrow><mn>1</mn><mo>×</mo><mn>1</mn><mo>×</mo><mo>⋯</mo><mo>×</mo><mn>1</mn><mo>=</mo><mn>1</mn></mrow>`)}
+      neither grows nor shrinks — but this balance cannot be maintained: gradient descent keeps changing
+      ${mm(WHH)}, and the ${mm('<mi>tanh</mi>')} derivative (at most 1) shrinks the true product anyway.
+      Nudge the slider either way to fall off the edge.`;
+  }
+  $('story').innerHTML = msg;
+}
+
+/* ============================== CHART =================================== */
+const CH = { W: 960, H: 330, l: 76, r: 30, t: 18, b: 48 };
+
+function renderChart(){
+  const lam = lambda(), T = state.T, c = CH;
+  const iw = c.W - c.l - c.r, ih = c.H - c.t - c.b;
+  const logLam = Math.log10(lam);
+  const endLog = T * logLam;
+
+  /* y domain in log10 units, always includes 0 (the "×1" line) */
+  let yMin = Math.min(-0.6, endLog), yMax = Math.max(0.6, endLog);
+  const pad = (yMax - yMin) * 0.08; yMin -= pad; yMax += pad;
+  const X = k => c.l + (k / T) * iw;
+  const Y = v => c.t + (yMax - v) / (yMax - yMin) * ih;   /* v in log10 units */
+
+  let s = `<svg viewBox="0 0 ${c.W} ${c.H}" font-family="var(--font)" id="chartSvg" role="img"
+            aria-label="Line chart of gradient norm versus steps back in time on a logarithmic axis">`;
+
+  /* y grid + tick labels at integer powers of 10 */
+  const span = yMax - yMin, step = Math.max(1, Math.ceil(span / 7));
+  for (let p = Math.ceil(yMin); p <= Math.floor(yMax); p += step){
+    const y = Y(p);
+    s += `<line x1="${c.l}" y1="${y}" x2="${c.W - c.r}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`;
+    const lbl = p === 0 ? '1' : `10<tspan dy="-4.5" font-size="10">${p < 0 ? '−' + (-p) : p}</tspan>`;
+    s += `<text x="${c.l - 9}" y="${y + 4}" text-anchor="end" font-size="12.5"
+           font-family="${MATH_FONT}" fill="var(--text-dim)">${lbl}</text>`;
+  }
+  /* x ticks */
+  const xStep = T <= 12 ? 2 : T <= 24 ? 4 : 5;
+  for (let k = 0; k <= T; k += xStep){
+    s += `<line x1="${X(k)}" y1="${c.t + ih}" x2="${X(k)}" y2="${c.t + ih + 5}" stroke="var(--text-dim)" stroke-width="1"/>
+          <text x="${X(k)}" y="${c.t + ih + 20}" text-anchor="middle" font-size="12.5" fill="var(--text-dim)">${k}</text>`;
+  }
+  /* axes */
+  s += `<line x1="${c.l}" y1="${c.t}" x2="${c.l}" y2="${c.t + ih}" stroke="var(--text-dim)" stroke-width="1.2"/>
+        <line x1="${c.l}" y1="${c.t + ih}" x2="${c.W - c.r}" y2="${c.t + ih}" stroke="var(--text-dim)" stroke-width="1.2"/>`;
+  /* axis titles */
+  s += `<text x="${c.l + iw/2}" y="${c.H - 8}" text-anchor="middle" font-size="13" fill="var(--text)">
+          <tspan font-family="${MATH_FONT}" font-style="italic">k</tspan> — steps back in time from the loss</text>`;
+  s += `<text x="20" y="${c.t + ih/2}" text-anchor="middle" font-size="13" fill="var(--text)"
+          transform="rotate(-90 20 ${c.t + ih/2})">gradient scale
+          <tspan font-family="${MATH_FONT}" font-style="italic"> λ</tspan><tspan font-family="${MATH_FONT}" dy="4" font-size="9.5" font-style="italic">max</tspan><tspan font-family="${MATH_FONT}" dy="-9.5" font-size="9.5" font-style="italic">k</tspan><tspan dy="5.5"> (log axis)</tspan></text>`;
+
+  /* stable reference at ×1 */
+  s += `<line x1="${c.l}" y1="${Y(0)}" x2="${c.W - c.r}" y2="${Y(0)}" stroke="#9aa5b8"
+         stroke-width="1.4" stroke-dasharray="6 5"/>
+        <text x="${c.W - c.r - 4}" y="${Y(0) - 6}" text-anchor="end" font-size="11.5" fill="var(--text-dim)">stable gradient (×1)</text>`;
+
+  /* the λ^k line (straight in log space) */
+  s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(T)}" y2="${Y(endLog)}"
+         stroke="var(--grad)" stroke-width="2.4" stroke-linecap="round"/>`;
+  /* endpoint marker + direct label */
+  const endY = Y(endLog);
+  s += `<circle cx="${X(T)}" cy="${endY}" r="4.5" fill="var(--grad)" stroke="#fff" stroke-width="2"/>`;
+  const labAbove = endLog < 0;
+  s += `<text x="${X(T) - 6}" y="${endY + (labAbove ? -12 : 20)}" text-anchor="end" font-size="12.5"
+         font-family="${MATH_FONT}" fill="var(--grad-dk)"><tspan font-style="italic">λ</tspan><tspan dy="4" font-size="9" font-style="italic">max</tspan><tspan dy="-9" font-size="9" font-style="italic">T</tspan><tspan dy="5"> ≈ ${sciTspan(Math.pow(lam, T))}</tspan></text>`;
+
+  /* hover elements (hidden until mousemove) */
+  s += `<line id="chX" x1="0" y1="${c.t}" x2="0" y2="${c.t + ih}" stroke="var(--text-dim)"
+         stroke-width="1" stroke-dasharray="3 3" style="display:none"/>
+        <circle id="chDot" r="5" fill="var(--grad)" stroke="#fff" stroke-width="2" style="display:none"/>
+        <rect id="chHit" x="${c.l}" y="${c.t}" width="${iw}" height="${ih}" fill="transparent"/>`;
+  s += `</svg>`;
+  $('chartHost').innerHTML = s;
+  attachHover(X, Y, logLam);
+}
+
+function attachHover(X, Y, logLam){
+  const svg = $('chartSvg'), hit = $('chHit'), xL = $('chX'), dot = $('chDot'),
+        tip = $('tip'), box = $('chartBox');
+  function move(ev){
+    const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const T = state.T, lam = lambda();
+    let k = Math.round((p.x - CH.l) / (CH.W - CH.l - CH.r) * T);
+    k = Math.max(0, Math.min(T, k));
+    const val = Math.pow(lam, k), x = X(k), y = Y(k * logLam);
+    xL.setAttribute('x1', x); xL.setAttribute('x2', x); xL.style.display = '';
+    dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.style.display = '';
+    tip.style.display = 'block';
+    tip.innerHTML = `<math><mrow><mi>k</mi><mo>=</mo><mn>${k}</mn></mrow></math> steps back &nbsp;·&nbsp; gradient scaled by ${mm(`<mrow>${lamPow(k)}<mo>≈</mo>${mmNum(val)}</mrow>`)}`;
+    const bb = box.getBoundingClientRect(), sb = svg.getBoundingClientRect();
+    const px = sb.left - bb.left + x / CH.W * sb.width;
+    const py = sb.top - bb.top + y / CH.H * sb.height;
+    tip.style.left = Math.min(px + 14, bb.width - tip.offsetWidth - 6) + 'px';
+    tip.style.top  = Math.max(py - 44, 2) + 'px';
+  }
+  function leave(){ xL.style.display = 'none'; dot.style.display = 'none'; tip.style.display = 'none'; }
+  hit.addEventListener('mousemove', move);
+  hit.addEventListener('mouseleave', leave);
+}
+
+/* ============================== WIRING ================================== */
+function renderAll(){
+  $('lamVal').textContent = lambda().toFixed(2);
+  $('tVal').textContent = state.T;
+  document.querySelectorAll('.p-btn').forEach(b =>
+    b.classList.toggle('active', Number(b.dataset.v) === state.v));
+  renderDiagram();
+  renderRegime();
+  renderStory();
+  renderChart();
+}
+
+$('lamSlider').addEventListener('input', e => { state.v = Number(e.target.value); renderAll(); });
+$('tSlider').addEventListener('input',  e => { state.T = Number(e.target.value); renderAll(); });
+$('presets').addEventListener('click', e => {
+  const b = e.target.closest('.p-btn'); if (!b) return;
+  state.v = Number(b.dataset.v);
+  $('lamSlider').value = state.v;
+  renderAll();
+});
+
+renderAll();
+</script>
+</body>
+</html>
