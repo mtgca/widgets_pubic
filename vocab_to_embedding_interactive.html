@@ -169,6 +169,9 @@
     display: flex; align-items: center; overflow-x: auto;
   }
   .expansion .placeholder{ color: #9aa5bb; font-size: 0.82rem; font-style: italic; }
+  .expansion math{ font-size: 0.84rem; }
+  .expansion mtd{ text-align: left; padding: 1px 0; }
+  .expansion mtd.cont{ padding-left: 2.6em; } /* continuation line: indent under the RHS */
   math .zero-term{ opacity: 0.33; }
   math .live-term{ background: var(--orange-bg); border-radius: 3px; padding: 0 2px; }
 
@@ -618,19 +621,28 @@ function renderExpansionDefault() {
 }
 
 function renderExpansion(j) {
-  // x_t[j] = sum_v E[v][j] * onehot[v]  — zero terms grayed, surviving term highlighted
-  const terms = [];
+  // x_t[j] = sum_v E[v][j] * onehot[v]  — zero terms grayed, surviving term highlighted.
+  // Split into two aligned mtable rows (MathML has no automatic line-breaking,
+  // and all V terms on one line overflow the card).
+  const term = v => mrow(
+    mo('(') + mnum(E[v][j]) + mo(')') + mo('·') + mn(v === sel ? 1 : 0),
+    v === sel ? 'live-term' : 'zero-term'
+  );
+  const half = Math.ceil(V / 2);
+  const line1 = [], line2 = [];
   for (let v = 0; v < V; v++) {
-    const prod = mrow(
-      mo('(') + mnum(E[v][j]) + mo(')') + mo('·') + mn(v === sel ? 1 : 0),
-      v === sel ? 'live-term' : 'zero-term'
-    );
-    terms.push(prod);
-    if (v < V - 1) terms.push(mo('+'));
+    const dst = v < half ? line1 : line2;
+    if (dst.length) dst.push(mo('+'));
+    dst.push(term(v));
   }
   const lhs = `<msub><mi>x</mi><mi>t</mi></msub>` +
     `<mo stretchy="false">[</mo>${mn(j)}<mo stretchy="false">]</mo>`;
-  $('expansion').innerHTML = math(lhs + mo('=') + terms.join('') + mo('=') + mnum(E[sel][j]));
+  $('expansion').innerHTML = math(
+    '<mtable>' +
+    `<mtr><mtd>${lhs}${mo('=')}${line1.join('')}${mo('+')}</mtd></mtr>` +
+    `<mtr><mtd class="cont">${line2.join('')}${mo('=')}${mnum(E[sel][j])}</mtd></mtr>` +
+    '</mtable>'
+  );
 }
 
 function renderAll() {
