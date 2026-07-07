@@ -31,6 +31,7 @@ widgets_pubic/
 - Widget filenames should be descriptive and end in `_interactive.html` for interactive demos, or be clearly named for the concept they teach.
 - When adding a new widget, **both** `README.md` and `index.html` must be updated (see below).
 - Every widget carries a **verification badge** (`data-verified`) indicating whether a human expert has reviewed it; new widgets start `"false"` (see "Human-Expert Verification").
+- **Descriptions must be concise: 3 lines maximum** (roughly 70–100 words) in both README and index.html. Lead with the core concept or action, omit implementation details.
 
 ## Visual Style (maintainer preferences)
 
@@ -65,8 +66,8 @@ Widgets that show equations must render them with **native MathML** — real typ
 1. Create a self-contained `.html` file in the repo root.
 2. Keep all CSS and JS inline (no CDN dependencies when avoidable).
 3. Add the **verification badge** snippet immediately after `<body>`, with `data-verified="false"` (see below). Every new widget starts unverified.
-4. Add a row to the table of contents in `README.md` with the GitHub Pages URL, a one-line description, and a `⚠️ AI-only` Status cell.
-5. Add a card to `index.html` inside the `#grid` div, following the existing card pattern (`data-verified="false"` on the `<a class="card">`, tags, title, desc, `<span class="verify-badge"></span>`, arrow link).
+4. Add a row to the table of contents in `README.md` with the GitHub Pages URL, a concise description (3 lines max, 70–100 words), and a `⚠️ AI-only` Status cell.
+5. Add a card to `index.html` inside the `#grid` div, following the existing card pattern (`data-verified="false"` on the `<a class="card">`, tags, title, desc, `<span class="verify-badge"></span>`, arrow link). Use the same concise description.
 6. Commit and push — GitHub Pages deploys automatically.
 
 > **Important**: Steps 4 and 5 are both required every time a widget is added. Never update one without the other.
