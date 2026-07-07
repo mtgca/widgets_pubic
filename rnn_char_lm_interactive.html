@@ -513,37 +513,48 @@ function defs(){
 
 function drawTraining(){
   const G = { cx:[330, 510, 690, 870], bw:70,
-              yTgt:36, yOut:56, coH:29, yHid:250, chH:31, yIn:424, ciH:29, yChar:574 };
+              yTgt:36, yGuess:68, yOut:90, coH:29, yHid:284, chH:31, yIn:458, ciH:29, yChar:608 };
   const svg = document.getElementById("svgTrain");
-  svg.setAttribute("viewBox", "0 0 1020 600");
-  svg.setAttribute("width", "1020"); svg.setAttribute("height", "600");
+  svg.setAttribute("viewBox", "0 0 1020 634");
+  svg.setAttribute("width", "1020"); svg.setAttribute("height", "634");
 
   let s = defs();
 
   /* ---- left layer labels + equations (SVG text; MathML not allowed here) */
   const L = 282;
   s += `<text x="${L}" y="${G.yTgt + 4}" text-anchor="end" font-size="14" font-weight="700" fill="#1a7a4a">target chars:</text>`;
-  s += `<text x="${L}" y="100" text-anchor="end" font-size="14" font-weight="700" fill="#33608a">output layer</text>`;
-  s += `<text x="${L}" y="124" text-anchor="end" font-size="13.5" class="mt" fill="#33608a">${tsub("ŷ","t")}<tspan> = </tspan>${tsub("W","hy")}${tsub("h","t")}</text>`;
-  s += `<text x="${L}" y="290" text-anchor="end" font-size="14" font-weight="700" fill="#3e6e2e">hidden layer</text>`;
-  s += `<text x="${L}" y="314" text-anchor="end" font-size="13" class="mt" fill="#3e6e2e">${tsub("h","t")}<tspan> = tanh(</tspan>${tsub("W","hh")}${tsub("h","t−1")}<tspan> + </tspan>${tsub("W","xh")}${tsub("x","t")}<tspan>)</tspan></text>`;
-  s += `<text x="${L}" y="486" text-anchor="end" font-size="14" font-weight="700" fill="#8a4a41">input layer</text>`;
-  s += `<text x="${L}" y="510" text-anchor="end" font-size="12.5" fill="#8a4a41">one-hot vectors</text>`;
+  s += `<text x="${L}" y="${G.yGuess + 4}" text-anchor="end" font-size="14" font-weight="700" fill="#4b5568">model says:</text>`;
+  s += `<text x="${L}" y="134" text-anchor="end" font-size="14" font-weight="700" fill="#33608a">output layer</text>`;
+  s += `<text x="${L}" y="158" text-anchor="end" font-size="13.5" class="mt" fill="#33608a">${tsub("ŷ","t")}<tspan> = </tspan>${tsub("W","hy")}${tsub("h","t")}</text>`;
+  s += `<text x="${L}" y="324" text-anchor="end" font-size="14" font-weight="700" fill="#3e6e2e">hidden layer</text>`;
+  s += `<text x="${L}" y="348" text-anchor="end" font-size="13" class="mt" fill="#3e6e2e">${tsub("h","t")}<tspan> = tanh(</tspan>${tsub("W","hh")}${tsub("h","t−1")}<tspan> + </tspan>${tsub("W","xh")}${tsub("x","t")}<tspan>)</tspan></text>`;
+  s += `<text x="${L}" y="520" text-anchor="end" font-size="14" font-weight="700" fill="#8a4a41">input layer</text>`;
+  s += `<text x="${L}" y="544" text-anchor="end" font-size="12.5" fill="#8a4a41">one-hot vectors</text>`;
   s += `<text x="${L}" y="${G.yChar + 4}" text-anchor="end" font-size="14" font-weight="700" fill="#4b5568">input chars:</text>`;
 
   /* ---- shared-weight labels near the last column */
   const c4 = G.cx[3];
-  s += `<text x="${c4 + 44}" y="216" font-size="14" class="mt" fill="#33608a">${tsub("W","hy")}</text>`;
+  s += `<text x="${c4 + 44}" y="250" font-size="14" class="mt" fill="#33608a">${tsub("W","hy")}</text>`;
   s += `<text x="${(G.cx[2]+G.cx[3])/2 - 12}" y="${G.yHid + 3*G.chH/2 - 10}" font-size="14" class="mt" fill="#3e6e2e">${tsub("W","hh")}</text>`;
-  s += `<text x="${c4 + 44}" y="396" font-size="14" class="mt" fill="#8a4a41">${tsub("W","xh")}</text>`;
+  s += `<text x="${c4 + 44}" y="430" font-size="14" class="mt" fill="#8a4a41">${tsub("W","xh")}</text>`;
 
   /* ---- per-time-step columns */
   EARLY.forEach((st, i) => {
     const cx = G.cx[i], x = cx - G.bw/2;
     let c = `<g class="tcol t${i+1}" data-t="${i+1}">`;
     c += `<text x="${cx}" y="${G.yTgt + 4}" text-anchor="middle" font-size="16" font-weight="700" fill="#1a7a4a">“${st.target}”</text>`;
+    /* model's current guess = argmax of the logits; ✗ when it misses the target */
+    const am = st.z.indexOf(Math.max(...st.z)), ok = am === st.ti;
+    c += `<text x="${cx}" y="${G.yGuess + 4}" text-anchor="middle" font-size="16" font-weight="700"
+           fill="${ok ? "#1a7a4a" : "#b3402f"}">“${CHARS[am]}” ${ok ? "✓" : "✗"}</text>`;
     c += valueBox(x, G.yOut, G.bw, G.coH, st.z.map(fmtNum), "var(--y-fill)", "var(--y-line)",
                   (v, j) => j === st.ti ? "#1a7a4a" : "#b3402f", TIP_Y);
+    if (!ok){
+      c += `<rect x="${x - 3.5}" y="${G.yOut + G.coH*am - 1}" width="${G.bw + 7}" height="${G.coH + 2}"
+             rx="6" fill="none" stroke="#b3402f" stroke-width="2.2"/>`;
+      c += `<text x="${x + G.bw + 11}" y="${G.yOut + G.coH*am + G.coH/2 + 4}" font-size="11.5"
+             font-weight="700" fill="#b3402f">← model’s pick</text>`;
+    }
     c += arrow(cx, G.yHid - 6, cx, G.yOut + 4*G.coH + 8, "#6f9cc4", "arB");
     c += valueBox(x, G.yHid, G.bw, G.chH, st.h.map(fmtNum), "var(--h-fill)", "var(--h-line)");
     c += arrow(cx, G.yIn - 6, cx, G.yHid + 3*G.chH + 8, "#c4837c", "arR");
@@ -634,6 +645,9 @@ function trainStory(t){
       — carrying memory left-to-right along the green arrows — and is projected to 4 logits
       ${outEqT}. The goal at every step: make the <span class="good">green logit</span>
       (the target character’s index) the largest, and push the <span class="bad">red ones</span> down.
+      The <b>“model says”</b> row shows the character whose logit is currently highest —
+      a <span class="bad">✗</span> marks where that guess misses the target: at step 1 the model
+      still says “o”, not “e” (its pick is ringed in red). Training exists to fix exactly that.
       Click a step above (or a column) to see its numbers.`;
   }
   const st = EARLY[t-1];
@@ -654,7 +668,7 @@ function trainStory(t){
       The loss still nudges it higher and the <span class="bad">red logits</span> lower.`;
   }
   return common + `Right now the model scores “${argmax}” highest
-    (<span class="bad">${fmtNum(zMax)}</span>) — wrong! Backpropagation will adjust
+    (<span class="bad">${fmtNum(zMax)}</span>, ringed in red) — wrong! Backpropagation will adjust
     ${mm(W("xh"))}, ${mm(W("hh"))}, ${mm(W("hy"))} to raise
     <span class="good">${zTgt}</span> and lower the rest.`;
 }
