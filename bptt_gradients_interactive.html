@@ -127,6 +127,34 @@
         font-size:.82rem; white-space:nowrap; display:none; z-index:5; }
   .tip b{ font-family: var(--mono); font-weight:600; }
 
+  /* --------------------------- 2×2 eigen demo ---------------------------- */
+  .demo-panel{ margin-top:22px; }
+  .demo-flex{ display:flex; gap:20px; align-items:flex-start; }
+  @media (max-width: 900px){ .demo-flex{ flex-direction:column; } }
+  .demo-plot{ flex: 0 0 350px; background: var(--bg-soft); border:1px solid var(--line);
+              border-radius:12px; padding:6px; }
+  .demo-plot svg{ display:block; width:100%; height:auto; }
+  .demo-side{ flex:1; min-width:0; }
+  .demo-ctl{ display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:0 0 12px; }
+  .btn{ padding:7px 16px; border-radius:10px; border:1.5px solid var(--line); background:var(--panel);
+        font-size:.88rem; font-weight:600; cursor:pointer; color:var(--text); font-family:var(--font); }
+  .btn:hover:not(:disabled){ border-color:var(--accent); color:var(--accent); }
+  .btn.primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.primary:hover:not(:disabled){ background:#2f5cb5; color:#fff; }
+  .btn:disabled{ opacity:.4; cursor:default; }
+  .demo-eq{ background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+            padding:10px 14px; font-size:1.02rem; margin-bottom:12px; overflow-x:auto; }
+  .demo-eq .why{ font-size:.83rem; color:var(--text-dim); margin:6px 0 0; }
+  .demo-table{ border-collapse:collapse; font-size:.84rem; width:100%; max-width:430px; }
+  .demo-table th{ text-align:right; font-weight:700; color:var(--text-dim); font-size:.76rem;
+                  text-transform:uppercase; letter-spacing:.4px; padding:3px 12px 5px 0; }
+  .demo-table td{ text-align:right; font-family:var(--mono); padding:2.5px 12px 2.5px 0;
+                  border-top:1px solid var(--line); }
+  .demo-table td math{ font-size:1.05em; }
+  .demo-table tr.now td{ font-weight:700; background:#f4f8ff; }
+  .demo-note{ margin-top:10px; font-size:.88rem; background:#f4f8ff; border:1px solid #cfdcf5;
+              border-left:4px solid var(--accent); border-radius:10px; padding:9px 13px; }
+
   /* ------------------------------ equations ------------------------------ */
   .eq-panel{ margin-top:22px; }
   .eq-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:10px; }
@@ -218,6 +246,39 @@
     <div class="chart-box" id="chartBox">
       <div id="chartHost"></div>
       <div class="tip" id="tip"></div>
+    </div>
+  </section>
+
+  <section class="panel demo-panel">
+    <h2>Why the largest eigenvalue wins: a 2×2 demo</h2>
+    <p class="hint">A tiny hidden state (2 units) makes the collapse visible. This
+      <math><msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub></math> has eigenvalues
+      <math><msub><mi>λ</mi><mn>1</mn></msub></math> (taken from the
+      <math><msub><mi>λ</mi><mi>max</mi></msub></math> slider above) and a fixed smaller
+      <math><mrow><msub><mi>λ</mi><mn>2</mn></msub><mo>=</mo><mn>0.35</mn></mrow></math>.
+      Pick a starting direction for the gradient vector <math><mi>g</mi></math>, then press
+      <b>× <math><msub><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow></msub></math></b> repeatedly —
+      whatever direction you start from, <math><mi>g</mi></math>
+      swings onto the dominant eigenvector <math><msub><mi>v</mi><mn>1</mn></msub></math>
+      (arrows are drawn normalized; the table tracks the true length).</p>
+
+    <div class="demo-ctl">
+      <button class="btn primary" id="btnDemoStep"></button>
+      <button class="btn" id="btnDemoReset">⟲ Reset</button>
+      <div class="ctl">
+        <span class="lbl">Start direction of <math><mi>g</mi></math>:</span>
+        <input type="range" id="thetaSlider" min="0" max="180" step="5" value="100">
+        <span class="val" id="thetaVal">100°</span>
+      </div>
+    </div>
+
+    <div class="demo-flex">
+      <div class="demo-plot"><div id="demoHost"></div></div>
+      <div class="demo-side">
+        <div class="demo-eq" id="demoEq"></div>
+        <table class="demo-table" id="demoTable"></table>
+        <div class="demo-note" id="demoNote"></div>
+      </div>
     </div>
   </section>
 
@@ -601,6 +662,154 @@ function attachHover(X, Y, logLam){
   hit.addEventListener('mouseleave', leave);
 }
 
+/* ========================= 2×2 EIGEN-COLLAPSE DEMO ====================== */
+const DEMO = { k: 0, theta0: 100, maxK: 10, lam2: 0.35, ang1: 25 };  /* v1 at 25° */
+
+const deg = d => d * Math.PI / 180;
+function demoBasis(){
+  const a = deg(DEMO.ang1);
+  return { u1: [Math.cos(a), Math.sin(a)], u2: [-Math.sin(a), Math.cos(a)] };
+}
+/* symmetric W_hh = λ1·u1u1ᵀ + λ2·u2u2ᵀ  (so its eigenvalues are exactly λ1, λ2) */
+function demoW(){
+  const { u1, u2 } = demoBasis(), l1 = lambda(), l2 = DEMO.lam2;
+  return [
+    [l1*u1[0]*u1[0] + l2*u2[0]*u2[0], l1*u1[0]*u1[1] + l2*u2[0]*u2[1]],
+    [l1*u1[0]*u1[1] + l2*u2[0]*u2[1], l1*u1[1]*u1[1] + l2*u2[1]*u2[1]]
+  ];
+}
+function demoVectors(){
+  const W = demoW(), t0 = deg(DEMO.theta0);
+  let g = [Math.cos(t0), Math.sin(t0)];
+  const out = [g];
+  for (let i = 0; i < DEMO.k; i++){
+    g = [W[0][0]*g[0] + W[0][1]*g[1], W[1][0]*g[0] + W[1][1]*g[1]];
+    out.push(g);
+  }
+  return out;
+}
+const vNorm  = g => Math.hypot(g[0], g[1]);
+/* angle (deg, 0–90) between g and the v1 eigen-line */
+function angleToV1(g){
+  const { u1 } = demoBasis(), n = vNorm(g);
+  if (n < 1e-12) return 0;
+  const c = Math.min(1, Math.abs(g[0]*u1[0] + g[1]*u1[1]) / n);
+  return Math.acos(c) * 180 / Math.PI;
+}
+
+function renderDemo(){
+  const S = 350, c = S/2, R = 150;
+  const P = (v, r) => {                      /* unit direction → svg point at radius r */
+    const n = vNorm(v) || 1;
+    return [c + r*v[0]/n, c - r*v[1]/n];
+  };
+  const { u1, u2 } = demoBasis();
+  const vecs = demoVectors(), k = DEMO.k, gk = vecs[k];
+
+  let s = `<svg viewBox="0 0 ${S} ${S}" role="img"
+            aria-label="Unit circle with two eigenvector lines and a trail of gradient directions collapsing onto the dominant eigenvector">`;
+  s += `<circle cx="${c}" cy="${c}" r="${R}" fill="#fff" stroke="var(--line)" stroke-width="1.2"/>`;
+
+  /* eigen-lines */
+  const [x1a, y1a] = P(u1, R), [x1b, y1b] = P([-u1[0], -u1[1]], R);
+  const [x2a, y2a] = P(u2, R), [x2b, y2b] = P([-u2[0], -u2[1]], R);
+  s += `<line x1="${x1b}" y1="${y1b}" x2="${x1a}" y2="${y1a}" stroke="var(--grad)" stroke-width="2"/>`;
+  s += `<line x1="${x2b}" y1="${y2b}" x2="${x2a}" y2="${y2a}" stroke="#9aa5b8" stroke-width="1.4" stroke-dasharray="6 5"/>`;
+  /* v1 label: anchored inside the right edge, above the line end;
+     v2 label: at the bottom end of its line, away from the arrow trail */
+  s += `<text x="${Math.min(x1a, S - 6)}" y="${y1a - 10}" text-anchor="end" font-family="${MATH_FONT}" font-size="15" fill="var(--grad-dk)"><tspan font-style="italic">v</tspan><tspan dy="4" font-size="10.5">1</tspan><tspan dy="-4"> (</tspan><tspan font-style="italic">λ</tspan><tspan dy="4" font-size="10.5">1</tspan><tspan dy="-4"> = ${lambda().toFixed(2)})</tspan></text>`;
+  const [lx2, ly2] = P([-u2[0], -u2[1]], R + 16);
+  s += `<text x="${lx2}" y="${Math.min(ly2 + 4, S - 8)}" text-anchor="middle" font-family="${MATH_FONT}" font-size="14" fill="var(--text-dim)"><tspan font-style="italic">v</tspan><tspan dy="4" font-size="10">2</tspan><tspan dy="-4"> (</tspan><tspan font-style="italic">λ</tspan><tspan dy="4" font-size="10">2</tspan><tspan dy="-4"> = ${DEMO.lam2})</tspan></text>`;
+
+  /* trail of directions g0 … gk (normalized; true length lives in the table) */
+  for (let i = 0; i <= k; i++){
+    const g = vecs[i];
+    if (vNorm(g) < 1e-12) continue;
+    const last = i === k;
+    const op = last ? 1 : Math.max(0.15, 0.7 - (k - i) * 0.12);
+    const wdt = last ? 3 : 2;
+    const len = last ? R * 0.94 : R * 0.88;
+    const [tx, ty] = P(g, len);
+    /* arrowhead */
+    const n = vNorm(g), dx = g[0]/n, dy = -g[1]/n;
+    const hl = last ? 13 : 10, hw = last ? 5.5 : 4.5;
+    const bx = tx - hl*dx, by = ty - hl*dy;
+    const px = -dy, py = dx;                 /* unit perpendicular for the head base */
+    s += `<g stroke="var(--fwd)" fill="var(--fwd)" opacity="${op}">
+      <line x1="${c}" y1="${c}" x2="${bx}" y2="${by}" stroke-width="${wdt}" stroke-linecap="round"/>
+      <path d="M ${tx} ${ty} L ${bx + hw*px} ${by + hw*py} L ${bx - hw*px} ${by - hw*py} Z" stroke="none"/></g>`;
+    if (i === 0 || last){
+      let [gx, gy] = P(g, len + 16);
+      if (last && angleToV1(g) < 12) gy += 18;   /* dodge the v1 label once collapsed */
+      gy = Math.min(Math.max(gy + 4, 14), S - 8);
+      s += `<text x="${gx}" y="${gy}" text-anchor="middle" font-family="${MATH_FONT}" font-size="14.5"
+             font-style="italic" fill="var(--fwd)" opacity="${Math.max(op, 0.55)}">g<tspan dy="4" font-size="10" font-style="normal">${i}</tspan></text>`;
+    }
+  }
+  s += `<circle cx="${c}" cy="${c}" r="3" fill="var(--text-dim)"/></svg>`;
+  $('demoHost').innerHTML = s;
+
+  /* --- equation + numeric matrix --- */
+  const W = demoW();
+  const f2 = x => x.toFixed(2).replace('-', '−');
+  const mat = `<mrow><mo>(</mo><mtable columnspacing="0.7em">
+      <mtr><mtd><mn>${f2(W[0][0])}</mn></mtd><mtd><mn>${f2(W[0][1])}</mn></mtd></mtr>
+      <mtr><mtd><mn>${f2(W[1][0])}</mn></mtd><mtd><mn>${f2(W[1][1])}</mn></mtd></mtr>
+    </mtable><mo>)</mo></mrow>`;
+  const li = (b, s2) => `<msub><mi>${b}</mi><mn>${s2}</mn></msub>`;
+  const lik = (b, s2) => `<msubsup><mi>${b}</mi><mn>${s2}</mn><mi>k</mi></msubsup>`;
+  $('demoEq').innerHTML =
+    mm(`<mrow>${WHH}<mo>=</mo>${mat}</mrow>`) + ' &nbsp;&nbsp; ' +
+    mm(`<mrow><mi>g</mi><mo>=</mo>${li('c',1)}${li('v',1)}<mo>+</mo>${li('c',2)}${li('v',2)}
+        <mspace width="0.9em"></mspace><mo>⟹</mo><mspace width="0.9em"></mspace>
+        <msubsup><mi>W</mi><mrow><mi>h</mi><mi>h</mi></mrow><mi>k</mi></msubsup><mi>g</mi>
+        <mo>=</mo>${li('c',1)}${lik('λ',1)}${li('v',1)}<mo>+</mo>${li('c',2)}${lik('λ',2)}${li('v',2)}
+        <mo>≈</mo>${li('c',1)}${lik('λ',1)}${li('v',1)}</mrow>`) +
+    `<p class="why">Each multiplication scales the ${mm(li('v',1))}-part by ${mm(`<mrow>${li('λ',1)}<mo>=</mo><mn>${lambda().toFixed(2)}</mn></mrow>`)}
+     but the ${mm(li('v',2))}-part only by ${mm(`<mrow>${li('λ',2)}<mo>=</mo><mn>${DEMO.lam2}</mn></mrow>`)} —
+     so the ${mm(li('v',1))} share wins every round, no matter the starting mix.</p>`;
+
+  /* --- per-step table --- */
+  let rows = `<tr><th>k</th><th>angle to ${mm(li('v',1))}</th><th>true length ${mm('<mrow><mo>‖</mo><msub><mi>g</mi><mi>k</mi></msub><mo>‖</mo></mrow>')}</th></tr>`;
+  for (let i = 0; i <= k; i++){
+    rows += `<tr${i === k ? ' class="now"' : ''}><td>${i}</td><td>${angleToV1(vecs[i]).toFixed(1)}°</td><td>${mm(mmNum(vNorm(vecs[i])))}</td></tr>`;
+  }
+  $('demoTable').innerHTML = rows;
+
+  /* --- narration --- */
+  const { u1: b1 } = demoBasis();
+  const g0 = vecs[0], c1 = g0[0]*b1[0] + g0[1]*b1[1];
+  const th = angleToV1(gk);
+  let note;
+  if (Math.abs(c1) < 1e-9){
+    note = `<b>Special case:</b> you started <em>exactly</em> on ${mm(li('v',2))}
+      (${mm(`<mrow>${li('c',1)}<mo>=</mo><mn>0</mn></mrow>`)}), so there is no
+      ${mm(li('v',1))}-component to amplify — the vector stays put in direction and only scales by
+      ${mm(li('λ',2))}. A measure-zero exception: nudge the start direction and the collapse returns.`;
+  } else if (k === 0){
+    note = `Press <b>× ${mm(WHH)}</b> to apply the matrix once. Watch both the direction
+      (it swings toward ${mm(li('v',1))}) and the length in the table
+      (it heads toward pure ${mm(lik('λ',1))} scaling).`;
+  } else if (th < 3){
+    note = `<b>Collapsed.</b> After ${k} step${k > 1 ? 's' : ''} the vector points along
+      ${mm(li('v',1))} (${th.toFixed(1)}° away). From here on, each multiplication just scales the length by
+      ${mm(`<mrow>${li('λ',1)}<mo>=</mo><mn>${lambda().toFixed(2)}</mn></mrow>`)} — exactly the
+      ${mm(lamPow('k'))} behavior in the chart above. One number now rules the whole loop.`;
+  } else {
+    note = `After ${k} step${k > 1 ? 's' : ''}: the angle to ${mm(li('v',1))} shrank from
+      ${angleToV1(g0).toFixed(1)}° to <b>${th.toFixed(1)}°</b>. The ${mm(li('v',2))}-component loses ground by a factor
+      ${mm(`<mrow>${li('λ',2)}<mo>/</mo>${li('λ',1)}<mo>=</mo><mn>${(DEMO.lam2/lambda()).toFixed(2)}</mn></mrow>`)}
+      every multiplication. Keep pressing.`;
+  }
+  $('demoNote').innerHTML = note;
+
+  /* --- button state --- */
+  const btn = $('btnDemoStep');
+  btn.innerHTML = `× ${mm(WHH)} &nbsp;(step ${k}/${DEMO.maxK})`;
+  btn.disabled = k >= DEMO.maxK;
+  $('thetaVal').textContent = DEMO.theta0 + '°';
+}
+
 /* ============================== WIRING ================================== */
 function renderAll(){
   $('lamVal').textContent = lambda().toFixed(2);
@@ -611,6 +820,7 @@ function renderAll(){
   renderRegime();
   renderStory();
   renderChart();
+  renderDemo();
 }
 
 $('lamSlider').addEventListener('input', e => { state.v = Number(e.target.value); renderAll(); });
@@ -620,6 +830,16 @@ $('presets').addEventListener('click', e => {
   state.v = Number(b.dataset.v);
   $('lamSlider').value = state.v;
   renderAll();
+});
+
+$('btnDemoStep').addEventListener('click', () => {
+  DEMO.k = Math.min(DEMO.k + 1, DEMO.maxK);
+  renderDemo();
+});
+$('btnDemoReset').addEventListener('click', () => { DEMO.k = 0; renderDemo(); });
+$('thetaSlider').addEventListener('input', e => {
+  DEMO.theta0 = Number(e.target.value);
+  renderDemo();
 });
 
 renderAll();
