@@ -6,7 +6,7 @@ This repository contains interactive HTML widgets created by AI for teaching tec
 
 ## Deployment
 
-- **GitHub Pages**: `https://mtgca.github.io/widgets_pubic/`
+- **GitHub Pages**: `https://mtgca.github.io/interactive-widgets/`
 - **Entry point**: `index.html` (the main widget gallery page)
 - Both `README.md` and `index.html` are maintained together for coherence
 - Pushing to `main` automatically deploys to GitHub Pages.
@@ -14,7 +14,7 @@ This repository contains interactive HTML widgets created by AI for teaching tec
 ## Repository Structure
 
 ```
-widgets_pubic/
+interactive-widgets/
 ├── README.md                          # Entry point / index page
 ├── CLAUDE.md                          # This file
 ├── llmpretraining.html                # LLM next-word prediction
