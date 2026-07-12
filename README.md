@@ -1,6 +1,6 @@
-# AI Teaching Widgets
+# Interactive Widgets
 
-Interactive HTML widgets created by AI for teaching Machine Learning, Artificial Intelligence, and other technology areas. Each widget is a self-contained demo — no installation required. Click any link below to open it directly in your browser.
+Interactive HTML widgets created by AI for teaching Computer Science and related courses — Machine Learning, Artificial Intelligence, and other CS topics. Each widget is a self-contained demo — no installation required. Click any link below to open it directly in your browser.
 
 Hosted on GitHub Pages: **https://mtgca.github.io/interactive-widgets/**
 

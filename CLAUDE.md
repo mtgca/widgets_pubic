@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This repository contains interactive HTML widgets created by AI for teaching technology courses — primarily Machine Learning, Artificial Intelligence, and related areas. Each widget is a self-contained, standalone HTML file with embedded CSS and JavaScript (no build step needed).
+This repository contains interactive HTML widgets created by AI for teaching Computer Science and related courses — Machine Learning, Artificial Intelligence, and other CS topics as the need arises. Each widget is a self-contained, standalone HTML file with embedded CSS and JavaScript (no build step needed).
 
 ## Deployment
 
@@ -57,9 +57,11 @@ Widgets that show equations must render them with **native MathML** — real typ
 
 ## Courses Covered
 
+This repo is not limited to AI/ML — it's meant for **any Computer Science or related course** the maintainer teaches. Current coverage includes:
+
 - **Machine Learning**: clustering algorithms, model evaluation metrics, probabilistic models
 - **Artificial Intelligence / Deep Learning**: LLM pretraining, neural networks
-- Other technology areas as needed
+- Other CS areas (algorithms, data structures, systems, theory, etc.) as new widgets are added
 
 ## Adding a New Widget
 
