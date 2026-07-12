@@ -4,6 +4,8 @@
 
 This repository contains interactive HTML widgets created by AI for teaching Computer Science and related courses — Machine Learning, Artificial Intelligence, and other CS topics as the need arises. Each widget is a self-contained, standalone HTML file with embedded CSS and JavaScript (no build step needed).
 
+**Do not use the Artifact tool / `artifact-design` skill in this repo.** Widgets must be written directly to `.html` files in the repo (via Write/Edit) so they live in git and deploy through GitHub Pages — not published to a separate claude.ai-hosted artifact URL.
+
 ## Deployment
 
 - **GitHub Pages**: `https://mtgca.github.io/interactive-widgets/`
