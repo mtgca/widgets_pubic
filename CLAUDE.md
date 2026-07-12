@@ -87,3 +87,13 @@ Status is tracked by a single `data-verified` attribute (`"true"` / `"false"`) i
 - **`README.md`** — the Status column cell: `✅ Verified` or `⚠️ AI-only`.
 
 **To mark a widget verified**, flip all three: `data-verified="true"` in the widget file, `data-verified="true"` on its `index.html` card, and the README Status cell to `✅ Verified`.
+
+## Contributing
+
+Outside contributions are welcome through three channels, all linked from the `index.html` footer and the README:
+
+- **Issues** — suggest a new widget idea, report a bug or inaccuracy, or volunteer as an expert reviewer for an unverified widget.
+- **Pull requests** — add a new widget (follow "Adding a New Widget" above) or fix an existing one.
+- **Expert review** — a domain expert can review an unverified widget for correctness; see "Human-Expert Verification" above for how status gets flipped.
+
+When reviewing an incoming PR that adds a widget, check it follows the conventions in this file (single self-contained file, verification badge with `data-verified="false"`, MathML for any equations, light theme, matching README/index.html updates) before merging.

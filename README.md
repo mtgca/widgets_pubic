@@ -39,4 +39,10 @@ Hosted on GitHub Pages: **https://mtgca.github.io/interactive-widgets/**
 
 All widgets are single-file HTML apps with embedded CSS and JavaScript — no frameworks, no build step. They are designed to be used in class as interactive lecture aids or assigned as self-study explorations.
 
-Contributions welcome. See [CLAUDE.md](CLAUDE.md) for conventions on adding new widgets.
+## Contributing
+
+Contributions welcome, in any of these forms:
+
+- **Suggest a widget or report a bug** — [open an issue](https://github.com/mtgca/interactive-widgets/issues/new).
+- **Add or fix a widget** — [submit a pull request](https://github.com/mtgca/interactive-widgets/pulls) following the conventions in [CLAUDE.md](CLAUDE.md).
+- **Volunteer as an expert reviewer** — widgets are AI-generated and start unverified; if you're a domain expert willing to review one for correctness, open an issue and let us know.
