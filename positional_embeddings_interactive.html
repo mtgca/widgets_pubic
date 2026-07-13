@@ -145,6 +145,10 @@
   .r-pos  .vec{outline:2px solid var(--pos);outline-offset:-1px;border-radius:4px;}
   .r-sum  .vec{outline:2px solid var(--sum);outline-offset:-1px;border-radius:4px;}
   .op{font-size:1.2rem;font-weight:700;color:var(--muted);width:18px;text-align:center;flex:0 0 18px;}
+  .technote{margin-top:18px;border:1px solid var(--sum-line);border-left:4px solid var(--sum);
+    background:var(--sum-soft);border-radius:8px;padding:12px 16px;font-size:.92rem;}
+  .technote b:first-child{color:var(--sum);}
+  .technote p+p{margin-top:8px;}
 
   /* ---- prediction bars ---- */
   .pred-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
@@ -431,6 +435,17 @@
     </math>
   </div>
   <div class="add-stack" id="addStack"></div>
+  <div class="technote">
+    <p><b>Technical note — why add instead of concatenate?</b>
+    We add the two vectors so the result keeps the same size,
+    <math><mi>d</mi></math>. If we glued them together instead, the vector would double in length,
+    and every layer after it would need to grow too. The embedding tables themselves cost the same
+    either way — the savings is in the rest of the network.</p>
+    <p>Doesn&rsquo;t mixing two signals into one vector scramble them? In principle it could, but with
+    many dimensions to work with, the model has plenty of room to store <em>what the word means</em> and
+    <em>where it sits</em> along different directions of the vector — and since both tables are learned,
+    training figures this out on its own. So the layers that follow can still read each signal separately.</p>
+  </div>
 </div>
 
 <!-- ============ STEP 4: prediction ============ -->
