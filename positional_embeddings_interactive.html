@@ -55,6 +55,7 @@
   .wrap{max-width:1100px;margin:0 auto;}
   h1{font-size:1.7rem;line-height:1.25;margin-bottom:6px;}
   .subtitle{color:var(--muted);max-width:820px;margin-bottom:26px;}
+  .subtitle a,.h2-sub a{color:var(--word);}
   h2{font-size:1.15rem;margin-bottom:4px;}
   .h2-sub{color:var(--muted);font-size:.92rem;margin-bottom:14px;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
@@ -221,7 +222,10 @@
   <code style="font-family:var(--mono)">nn.Embedding</code> — the very same lookup-table object used for words.
   The only difference is <strong>where the row index comes from</strong>: the word table is indexed by
   <em>which token it is</em>, the position table by <em>where the token sits in the sentence</em>.
-  The model below was trained live in your browser with the exact PyTorch recipe from class.
+  The model below was trained live in your browser with the same PyTorch recipe from the
+  &ldquo;Trainable Positional Embeddings&rdquo; section of this
+  <a href="https://colab.research.google.com/drive/1rwTFsXwlJbQl_u6lV--50UCxONn92z3A?usp=sharing"
+     target="_blank" rel="noopener">notebook</a>.
 </p>
 
 <div class="card keyidea">
@@ -341,8 +345,10 @@
 <!-- ============ training ============ -->
 <div class="card">
   <span class="step-tag">Under the hood · Trained in your browser</span>
-  <h2>Both tables were learned just now, with the class recipe</h2>
-  <p class="h2-sub">Full-batch Adam, lr = 0.1, 300 epochs of cross-entropy on the 34 (word, position, next-word) triplets — matching the PyTorch script.</p>
+  <h2>Both tables were learned just now, with the notebook&rsquo;s recipe</h2>
+  <p class="h2-sub">Full-batch Adam, lr = 0.1, 300 epochs of cross-entropy on the 34 (word, position, next-word) triplets — matching the
+    <a href="https://colab.research.google.com/drive/1rwTFsXwlJbQl_u6lV--50UCxONn92z3A?usp=sharing"
+       target="_blank" rel="noopener">Colab notebook</a>.</p>
   <div class="train-flex">
     <div class="loss-log" id="lossLog"></div>
     <div class="train-side">
