@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trainable Positional Embeddings · Same Table, Different Index</title>
+<!--
+  ============================================================================
+  TRAINABLE POSITIONAL EMBEDDINGS — SAME TABLE, DIFFERENT INDEX
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget. Everything (HTML + CSS + JS) in this file.
+
+  PEDAGOGICAL GOAL (per maintainer):
+  Students struggle to see that a positional embedding is *exactly* the same
+  object as a word embedding — an nn.Embedding lookup table — and that the
+  ONLY difference is where the row index comes from:
+      word_embedding[ stoi[word] ]      index = which token it is
+      position_embedding[ p ]           index = where the token sits
+  The widget mirrors the maintainer's PyTorch script 1:1 (same 14-sentence
+  dataset, vocab_size=11, n_embed=8, num_positions=4, AdamW-style lr=0.1,
+  300 epochs, CrossEntropyLoss) and TRAINS THE MODEL LIVE IN THE BROWSER,
+  so every vector shown is a genuinely learned parameter.
+
+  DESIGN NOTES:
+  - LIGHT academic theme, no looping animations (repo conventions).
+  - Math rendered with native MathML (no libraries), per CLAUDE.md.
+  - The two embedding tables are rendered with IDENTICAL markup/geometry on
+    purpose — visual sameness is the argument.
+  - Accent colors: word lookup = blue, position lookup = green, sum = purple.
+  - Training: full-batch Adam (bias-corrected), seeded PRNG (mulberry32) so
+    the page is reproducible; "Retrain" draws a new seed.
+
+  HOW TO MODIFY:
+  - TEXTS holds the dataset; vocab/positions are derived from it.
+  - N_EMBED / EPOCHS / LR near the top of the script.
+  - renderAll() is the single re-render entry point after state changes.
+  ============================================================================
+-->
+<style>
+  :root{
+    --ink:#1f2937; --muted:#6b7280; --bg:#f6f7fb; --card:#ffffff;
+    --line:#e5e7eb; --soft:#f1f5f9;
+    --word:#2563eb; --word-soft:#eff4ff; --word-line:#c7d7fe;
+    --pos:#059669;  --pos-soft:#ecfdf5;  --pos-line:#a7e3cd;
+    --sum:#7c3aed;  --sum-soft:#f5f0ff;  --sum-line:#ddd0f7;
+    --target:#b45309;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --math:"STIX Two Math","Cambria Math","Latin Modern Math","Times New Roman",Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--ink);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:32px 16px 64px;}
+  math{font-family:var(--math);}
+  .wrap{max-width:1100px;margin:0 auto;}
+  h1{font-size:1.7rem;line-height:1.25;margin-bottom:6px;}
+  .subtitle{color:var(--muted);max-width:820px;margin-bottom:26px;}
+  h2{font-size:1.15rem;margin-bottom:4px;}
+  .h2-sub{color:var(--muted);font-size:.92rem;margin-bottom:14px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:20px 22px;margin-bottom:22px;box-shadow:0 1px 3px rgba(15,23,42,.05);}
+  .step-tag{display:inline-block;font:700 .72rem/1 var(--mono);letter-spacing:.06em;
+    color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+
+  /* ---- key idea banner ---- */
+  .keyidea{border-left:4px solid var(--sum);background:var(--sum-soft);}
+  .keyidea .big{font-size:1.05rem;margin-bottom:12px;}
+  .two-lines{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:760px){.two-lines{grid-template-columns:1fr;}}
+  .codeline{font:.82rem/1.5 var(--mono);background:#fff;border:1px solid var(--line);
+    border-radius:8px;padding:10px 12px;overflow-x:auto;white-space:nowrap;}
+  .codeline .hl-w{color:var(--word);font-weight:700;}
+  .codeline .hl-p{color:var(--pos);font-weight:700;}
+  .codeline .cm{color:var(--muted);}
+  .idx-note{font-size:.85rem;color:var(--muted);margin-top:6px;}
+
+  /* ---- sentence picker ---- */
+  select,button{font:inherit;}
+  select{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;
+    color:var(--ink);max-width:100%;}
+  .controls-row{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:14px;}
+  .controls-row label{font-weight:600;font-size:.92rem;}
+  .token-strip{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;}
+  .tok{border:2px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;
+    padding:8px 14px 6px;text-align:center;min-width:74px;}
+  .tok:hover{border-color:#9ca3af;}
+  .tok .w{font:600 1rem/1.2 var(--mono);display:block;}
+  .tok .p{display:block;font-size:.72rem;color:var(--muted);margin-top:3px;}
+  .tok.sel{border-color:var(--word);background:var(--word-soft);}
+  .tok.next{border-style:dashed;border-color:#f0c088;background:#fdf7ef;cursor:default;}
+  .tok.last{opacity:.45;cursor:not-allowed;}
+  .tok.next .p{color:var(--target);font-weight:700;}
+  .strip-legend{font-size:.85rem;color:var(--muted);margin-top:10px;}
+  .strip-legend b{color:var(--target);}
+
+  /* ---- lookup tables ---- */
+  .tables{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+  @media (max-width:900px){.tables{grid-template-columns:1fr;}}
+  .lookup{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fff;}
+  .lookup.word-side{border-top:4px solid var(--word);}
+  .lookup.pos-side{border-top:4px solid var(--pos);}
+  .lookup h3{font-size:.98rem;margin-bottom:2px;}
+  .lookup .decl{font:.74rem/1.5 var(--mono);color:var(--muted);margin-bottom:10px;
+    overflow-x:auto;white-space:nowrap;}
+  .idx-derive{font:600 .84rem/1.4 var(--mono);border-radius:8px;padding:7px 10px;margin-bottom:12px;}
+  .word-side .idx-derive{background:var(--word-soft);border:1px solid var(--word-line);color:var(--word);}
+  .pos-side  .idx-derive{background:var(--pos-soft);border:1px solid var(--pos-line);color:var(--pos);}
+  .emb-scroll{overflow-x:auto;}
+  table.emb{border-collapse:collapse;font:.72rem/1 var(--mono);}
+  table.emb th{font-weight:600;color:var(--muted);padding:3px 6px;text-align:center;}
+  table.emb td.lab{padding:3px 8px 3px 2px;text-align:right;white-space:nowrap;color:var(--ink);
+    font-weight:600;}
+  table.emb td.lab .ri{color:var(--muted);font-weight:400;}
+  table.emb td.c{width:38px;min-width:38px;height:24px;text-align:center;border:1px solid #fff;
+    color:#1f2937;}
+  table.emb tr.hi td.c{border-top:2px solid currentColor;border-bottom:2px solid currentColor;}
+  table.emb tr.hi td.c:last-child{border-right:2px solid currentColor;}
+  table.emb tr.hi td.lab + td.c{border-left:2px solid currentColor;}
+  .word-side table.emb tr.hi{color:var(--word);}
+  .pos-side  table.emb tr.hi{color:var(--pos);}
+  table.emb tr.hi td.lab{color:inherit;}
+  .same-note{margin-top:16px;font-size:.92rem;background:var(--soft);border-radius:8px;
+    padding:10px 14px;color:var(--ink);}
+
+  /* ---- addition ---- */
+  .eq-block{margin:6px 0 16px;overflow-x:auto;}
+  .add-stack{display:flex;flex-direction:column;gap:6px;}
+  .add-row{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;overflow-x:auto;padding:2px 0;}
+  .add-row .rlab{flex:0 0 240px;font:.78rem/1.35 var(--mono);text-align:right;white-space:nowrap;}
+  @media (max-width:760px){.add-row .rlab{flex-basis:150px;font-size:.7rem;}}
+  .add-row.r-word .rlab{color:var(--word);font-weight:700;}
+  .add-row.r-pos  .rlab{color:var(--pos);font-weight:700;}
+  .add-row.r-sum  .rlab{color:var(--sum);font-weight:700;}
+  .vec{display:flex;}
+  .vec .c{width:44px;min-width:44px;height:26px;font:.72rem/26px var(--mono);text-align:center;
+    border:1px solid #fff;}
+  .r-word .vec{outline:2px solid var(--word);outline-offset:-1px;border-radius:4px;}
+  .r-pos  .vec{outline:2px solid var(--pos);outline-offset:-1px;border-radius:4px;}
+  .r-sum  .vec{outline:2px solid var(--sum);outline-offset:-1px;border-radius:4px;}
+  .op{font-size:1.2rem;font-weight:700;color:var(--muted);width:18px;text-align:center;flex:0 0 18px;}
+
+  /* ---- prediction bars ---- */
+  .pred-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+  @media (max-width:900px){.pred-grid{grid-template-columns:1fr;}}
+  .pred-panel{border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+  .pred-panel h3{font-size:.95rem;margin-bottom:2px;}
+  .pred-panel .ps{font-size:.8rem;color:var(--muted);margin-bottom:12px;font-family:var(--mono);}
+  .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+  .bar-row .bw{flex:0 0 62px;text-align:right;font:.78rem/1.2 var(--mono);}
+  .bar-row .btrack{flex:1;background:var(--soft);border-radius:4px;height:16px;position:relative;}
+  .bar-row .bfill{height:100%;border-radius:4px;background:#93b4f5;}
+  .bar-row.is-max .bfill{background:var(--word);}
+  .bar-row .bpct{flex:0 0 52px;font:.74rem/1.2 var(--mono);color:var(--muted);}
+  .bar-row.is-target .bw{color:var(--target);font-weight:700;}
+  .bar-row .tmark{font-size:.7rem;color:var(--target);font-weight:700;margin-left:4px;}
+  .pred-note{margin-top:14px;font-size:.9rem;background:var(--soft);border-radius:8px;padding:10px 14px;}
+
+  /* ---- playground ---- */
+  .pg-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px;}
+  @media (max-width:900px){.pg-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:560px){.pg-grid{grid-template-columns:1fr;}}
+  .pg-cell{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff;}
+  .pg-cell h4{font:700 .82rem/1.3 var(--mono);color:var(--pos);margin-bottom:8px;}
+  .pg-cell .seen{font-size:.72rem;border-radius:999px;padding:2px 8px;margin-left:6px;
+    background:var(--pos-soft);border:1px solid var(--pos-line);color:var(--pos);font-weight:600;}
+  .pg-cell .unseen{font-size:.72rem;border-radius:999px;padding:2px 8px;margin-left:6px;
+    background:var(--soft);border:1px solid var(--line);color:var(--muted);font-weight:600;}
+  .pg-item{display:flex;align-items:center;gap:6px;font:.78rem/1.6 var(--mono);}
+  .pg-item .pw{flex:0 0 52px;}
+  .pg-item .pt{flex:1;background:var(--soft);height:10px;border-radius:3px;}
+  .pg-item .pf{height:100%;border-radius:3px;background:#93b4f5;}
+  .pg-item:first-of-type .pf{background:var(--word);}
+  .pg-item .pp{flex:0 0 46px;color:var(--muted);text-align:right;}
+  .pg-note{font-size:.9rem;color:var(--muted);margin-top:12px;}
+  .pg-note code{font-family:var(--mono);background:var(--soft);padding:1px 5px;border-radius:4px;}
+
+  /* ---- training log ---- */
+  .train-flex{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;}
+  .loss-log{font:.8rem/1.7 var(--mono);background:#fff;border:1px solid var(--line);
+    border-radius:8px;padding:12px 16px;white-space:pre;overflow-x:auto;flex:1 1 260px;}
+  .train-side{flex:1 1 320px;font-size:.92rem;}
+  .btn{background:var(--word);color:#fff;border:none;border-radius:8px;padding:9px 18px;
+    font-weight:600;cursor:pointer;}
+  .btn:hover{background:#1d4ed8;}
+  .vocab-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+  .chip{font:.74rem/1 var(--mono);background:var(--word-soft);border:1px solid var(--word-line);
+    color:var(--word);border-radius:999px;padding:5px 9px;}
+  .chip b{font-weight:700;}
+
+  /* ---- code map ---- */
+  pre.codemap{font:.8rem/1.6 var(--mono);background:#fff;border:1px solid var(--line);
+    border-radius:8px;padding:14px 18px;overflow-x:auto;}
+  pre.codemap .k{color:#7c3aed;}
+  pre.codemap .cm{color:var(--muted);}
+  pre.codemap .lw{background:var(--word-soft);display:inline-block;border-radius:3px;}
+  pre.codemap .lp{background:var(--pos-soft);display:inline-block;border-radius:3px;}
+  pre.codemap .ls{background:var(--sum-soft);display:inline-block;border-radius:3px;}
+
+  footer{color:var(--muted);font-size:.85rem;margin-top:34px;text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+<h1>Trainable Positional Embeddings: Same Table, Different Index</h1>
+<p class="subtitle">
+  A positional embedding is <em>not</em> a new mechanism. It is a second
+  <code style="font-family:var(--mono)">nn.Embedding</code> — the very same lookup-table object used for words.
+  The only difference is <strong>where the row index comes from</strong>: the word table is indexed by
+  <em>which token it is</em>, the position table by <em>where the token sits in the sentence</em>.
+  The model below was trained live in your browser with the exact PyTorch recipe from class.
+</p>
+
+<div class="card keyidea">
+  <span class="step-tag">The whole idea</span>
+  <p class="big">Two copies of the same layer. One is indexed by token identity, the other by position.</p>
+  <div class="two-lines">
+    <div>
+      <div class="codeline">self.<span class="hl-w">word_embedding</span> = nn.Embedding(<span class="hl-w">vocab_size</span>, n_embed)</div>
+      <p class="idx-note">Row index = <strong>stoi[word]</strong> &nbsp;·&nbsp; “which word is this?”</p>
+    </div>
+    <div>
+      <div class="codeline">self.<span class="hl-p">position_embedding</span> = nn.Embedding(<span class="hl-p">n_positions</span>, n_embed)</div>
+      <p class="idx-note">Row index = <strong>position p</strong> &nbsp;·&nbsp; “where in the sentence is it?”</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ STEP 1: pick a token ============ -->
+<div class="card">
+  <span class="step-tag">Step 1 · Pick an input token</span>
+  <h2>Choose a sentence, then click a word</h2>
+  <p class="h2-sub">Each training example is a triplet <span style="font-family:var(--mono)">(word, position, next&nbsp;word)</span> — exactly what the dataset-preparation loop builds.</p>
+  <div class="controls-row">
+    <label for="sentSel">Sentence:</label>
+    <select id="sentSel"></select>
+  </div>
+  <div class="token-strip" id="tokStrip"></div>
+  <p class="strip-legend" id="tripletLine"></p>
+</div>
+
+<!-- ============ STEP 2: two lookups ============ -->
+<div class="card">
+  <span class="step-tag">Step 2 · Two lookups, one mechanism</span>
+  <h2>The same operation runs twice — only the index differs</h2>
+  <p class="h2-sub">Both tables below are learned parameter matrices with <em>n_embed = 8</em> columns. A lookup just returns one row. Nothing else happens.</p>
+  <div class="tables">
+    <div class="lookup word-side">
+      <h3>Word embedding table</h3>
+      <div class="decl">word_embedding.weight — shape (vocab_size = 11, n_embed = 8)</div>
+      <div class="idx-derive" id="wordDerive"></div>
+      <div class="emb-scroll"><table class="emb" id="wordTable"></table></div>
+    </div>
+    <div class="lookup pos-side">
+      <h3>Position embedding table</h3>
+      <div class="decl">position_embedding.weight — shape (n_positions = 4, n_embed = 8)</div>
+      <div class="idx-derive" id="posDerive"></div>
+      <div class="emb-scroll"><table class="emb" id="posTable"></table></div>
+    </div>
+  </div>
+  <p class="same-note">
+    Notice the position table has <strong>fewer rows (4)</strong> only because this toy corpus never
+    feeds the model a word beyond position 3 — its “vocabulary” is the set of positions
+    {0,&nbsp;1,&nbsp;2,&nbsp;3}, just as the word table’s vocabulary is the set of 11 words.
+    Both tables start random and both are updated by the same backpropagation step.
+  </p>
+</div>
+
+<!-- ============ STEP 3: add ============ -->
+<div class="card">
+  <span class="step-tag">Step 3 · Add the two rows</span>
+  <h2>The input to the rest of the network is the element-wise sum</h2>
+  <div class="eq-block">
+    <math display="block">
+      <mrow>
+        <mi>emb</mi><mo>=</mo>
+        <msub><mi>E</mi><mtext>word</mtext></msub>
+        <mo stretchy="false">[</mo><mi>stoi</mi><mo stretchy="false">(</mo><mi>w</mi><mo stretchy="false">)</mo><mo stretchy="false">]</mo>
+        <mo>+</mo>
+        <msub><mi>E</mi><mtext>pos</mtext></msub>
+        <mo stretchy="false">[</mo><mi>p</mi><mo stretchy="false">]</mo>
+        <mo>,</mo><mspace width="1.2em"></mspace>
+        <mi>logits</mi><mo>=</mo><mi>W</mi><mo>·</mo><mi>emb</mi><mo>+</mo><mi>b</mi>
+        <mo>,</mo><mspace width="1.2em"></mspace>
+        <mover accent="true"><mi>y</mi><mo>^</mo></mover><mo>=</mo>
+        <mi>softmax</mi><mo stretchy="false">(</mo><mi>logits</mi><mo stretchy="false">)</mo>
+      </mrow>
+    </math>
+  </div>
+  <div class="add-stack" id="addStack"></div>
+</div>
+
+<!-- ============ STEP 4: prediction ============ -->
+<div class="card">
+  <span class="step-tag">Step 4 · Predict the next word</span>
+  <h2>Does position actually change the prediction?</h2>
+  <p class="h2-sub">Left: the trained model as-is. Right: the <em>same</em> word vector with the position row zeroed out — the model goes “position-blind”.</p>
+  <div class="pred-grid">
+    <div class="pred-panel">
+      <h3>word_emb + pos_emb</h3>
+      <p class="ps" id="predLabA"></p>
+      <div id="predBarsA"></div>
+    </div>
+    <div class="pred-panel">
+      <h3>word_emb only (pos_emb zeroed)</h3>
+      <p class="ps" id="predLabB"></p>
+      <div id="predBarsB"></div>
+    </div>
+  </div>
+  <p class="pred-note" id="predNote"></p>
+</div>
+
+<!-- ============ STEP 5: playground ============ -->
+<div class="card">
+  <span class="step-tag">Step 5 · Same word, four positions</span>
+  <h2>Slide one word across every position slot</h2>
+  <p class="h2-sub">The word row is frozen; only the position row changes. Any difference between the four panels is caused <em>entirely</em> by the positional embedding.</p>
+  <div class="controls-row">
+    <label for="pgWord">Word:</label>
+    <select id="pgWord"></select>
+  </div>
+  <div class="pg-grid" id="pgGrid"></div>
+  <p class="pg-note">Try <code>and</code>: in training it is followed by <code>love</code> at position 2
+    (“we eat <b>and</b> love pasta”) but by <code>pasta</code> at position 3 (“we like pizza <b>and</b> pasta”).
+    Only the position table lets the model tell those two cases apart.</p>
+</div>
+
+<!-- ============ training ============ -->
+<div class="card">
+  <span class="step-tag">Under the hood · Trained in your browser</span>
+  <h2>Both tables were learned just now, with the class recipe</h2>
+  <p class="h2-sub">Full-batch Adam, lr = 0.1, 300 epochs of cross-entropy on the 34 (word, position, next-word) triplets — matching the PyTorch script.</p>
+  <div class="train-flex">
+    <div class="loss-log" id="lossLog"></div>
+    <div class="train-side">
+      <p><strong>Vocabulary (stoi):</strong> the fixed word → row mapping.</p>
+      <div class="vocab-chips" id="vocabChips"></div>
+      <p style="margin-top:14px"><button class="btn" id="retrainBtn">Retrain with a new random seed</button></p>
+      <p style="margin-top:10px;color:var(--muted);font-size:.88rem">
+        Every heatmap on this page re-fills with newly learned values —
+        the vectors differ, but the <em>mechanism</em> (and the predictions) barely change.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ code map ============ -->
+<div class="card">
+  <span class="step-tag">Back to the code</span>
+  <h2>The forward pass you already know</h2>
+<pre class="codemap"><span class="k">def</span> forward(self, word_idx, pos_idx):
+    <span class="lw">word_emb = self.word_embedding(word_idx)</span>   <span class="cm"># row lookup, index = which word   (blue table)</span>
+    <span class="lp">pos_emb  = self.position_embedding(pos_idx)</span> <span class="cm"># row lookup, index = which slot   (green table)</span>
+    <span class="ls">emb = word_emb + pos_emb</span>                    <span class="cm"># element-wise sum                 (purple row)</span>
+    logits = self.linear(emb)
+    <span class="k">return</span> logits</pre>
+</div>
+
+<footer>Self-contained teaching widget · trains a tiny language model with positional embeddings entirely in your browser · no libraries.</footer>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   DATA — identical to the PyTorch script
+   ============================================================ */
+const TEXTS = [
+  "i like pizza","i like pasta","i love pizza","you like pizza",
+  "i eat pizza","i eat pasta","you love pasta","we like pizza and pasta",
+  "i hate pizza","you hate pasta","we love pasta","i like to eat",
+  "you like to eat","we eat and love pasta"
+];
+const VOCAB = [...new Set(TEXTS.join(" ").split(" "))].sort();
+const STOI = {}; VOCAB.forEach((w,i)=>STOI[w]=i);
+const V = VOCAB.length;                       // 11
+
+const DATA = [];                              // {w,p,y} triplets
+TEXTS.forEach(s=>{
+  const ids = s.split(" ").map(w=>STOI[w]);
+  for(let p=0;p<ids.length-1;p++) DATA.push({w:ids[p], p, y:ids[p+1]});
+});
+const P = Math.max(...DATA.map(d=>d.p)) + 1;  // 4 positions
+const D = 8;                                  // n_embed
+const EPOCHS = 300, LR = 0.1;
+
+// (word,pos) -> set of observed next words, for playground badges
+const SEEN = {};
+DATA.forEach(d=>{
+  const k = d.w+"_"+d.p;
+  (SEEN[k] = SEEN[k] || new Set()).add(d.y);
+});
+
+/* ============================================================
+   MODEL + TRAINING (full-batch Adam, seeded)
+   ============================================================ */
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function gauss(rng){ // Box–Muller
+  const u = Math.max(rng(), 1e-12), v = rng();
+  return Math.sqrt(-2*Math.log(u)) * Math.cos(2*Math.PI*v);
+}
+const zeros = (r,c)=>Array.from({length:r},()=>new Float64Array(c));
+
+let model = null, lossLines = [];
+
+function train(seed){
+  const rng = mulberry32(seed);
+  // PyTorch defaults: Embedding ~ N(0,1); Linear ~ U(-1/sqrt(D), 1/sqrt(D))
+  const Ew = zeros(V,D), Ep = zeros(P,D), W = zeros(V,D);
+  const b  = new Float64Array(V);
+  for(const M of [Ew,Ep]) for(const row of M) for(let j=0;j<D;j++) row[j]=gauss(rng);
+  const k = 1/Math.sqrt(D);
+  for(const row of W) for(let j=0;j<D;j++) row[j]=(rng()*2-1)*k;
+  for(let i=0;i<V;i++) b[i]=(rng()*2-1)*k;
+
+  // Adam state (one flat list of [param,grad,m,v] tensors)
+  const params = [];
+  const reg = (p)=>{ const g = p.map(r=>new Float64Array(D)),
+                           m = p.map(r=>new Float64Array(D)),
+                           v = p.map(r=>new Float64Array(D));
+                     params.push({p,g,m,v,mat:true}); return g; };
+  const gEw = reg(Ew), gEp = reg(Ep), gW = reg(W);
+  const gb = new Float64Array(V);
+  params.push({p:b,g:gb,m:new Float64Array(V),v:new Float64Array(V),mat:false});
+
+  const B1=0.9, B2=0.999, EPS=1e-8, N = DATA.length;
+  lossLines = [];
+  let loss = 0;
+  for(let ep=0; ep<EPOCHS; ep++){
+    // zero grads
+    for(const t of params){
+      if(t.mat) for(const r of t.g) r.fill(0); else t.g.fill(0);
+    }
+    loss = 0;
+    for(const {w,p,y} of DATA){
+      const e = new Float64Array(D);
+      for(let j=0;j<D;j++) e[j] = Ew[w][j] + Ep[p][j];
+      const logits = new Float64Array(V);
+      let mx = -Infinity;
+      for(let i=0;i<V;i++){ let s=b[i]; for(let j=0;j<D;j++) s+=W[i][j]*e[j];
+        logits[i]=s; if(s>mx) mx=s; }
+      let Z=0; const probs=new Float64Array(V);
+      for(let i=0;i<V;i++){ probs[i]=Math.exp(logits[i]-mx); Z+=probs[i]; }
+      for(let i=0;i<V;i++) probs[i]/=Z;
+      loss += -Math.log(Math.max(probs[y],1e-12));
+      // backward
+      const de = new Float64Array(D);
+      for(let i=0;i<V;i++){
+        const dl = (probs[i] - (i===y?1:0)) / N;
+        gb[i] += dl;
+        for(let j=0;j<D;j++){ gW[i][j] += dl*e[j]; de[j] += dl*W[i][j]; }
+      }
+      for(let j=0;j<D;j++){ gEw[w][j] += de[j]; gEp[p][j] += de[j]; }
+    }
+    loss /= N;
+    if(ep % 50 === 0) lossLines.push(`epoch ${String(ep).padStart(3)} | loss ${loss.toFixed(4)}`);
+    // Adam step
+    const t = ep+1, c1 = 1-Math.pow(B1,t), c2 = 1-Math.pow(B2,t);
+    for(const T of params){
+      const upd = (p,g,m,v,i)=>{
+        m[i] = B1*m[i] + (1-B1)*g[i];
+        v[i] = B2*v[i] + (1-B2)*g[i]*g[i];
+        p[i] -= LR * (m[i]/c1) / (Math.sqrt(v[i]/c2) + EPS);
+      };
+      if(T.mat) for(let r=0;r<T.p.length;r++) for(let j=0;j<D;j++) upd(T.p[r],T.g[r],T.m[r],T.v[r],j);
+      else for(let i=0;i<T.p.length;i++) upd(T.p,T.g,T.m,T.v,i);
+    }
+  }
+  lossLines.push(`epoch ${EPOCHS-1} | loss ${loss.toFixed(4)}  (final)`);
+  model = {Ew,Ep,W,b};
+}
+
+function predict(wIdx, pIdx, usePos){
+  const {Ew,Ep,W,b} = model;
+  const e = new Float64Array(D);
+  for(let j=0;j<D;j++) e[j] = Ew[wIdx][j] + (usePos ? Ep[pIdx][j] : 0);
+  const logits = new Float64Array(V);
+  let mx=-Infinity;
+  for(let i=0;i<V;i++){ let s=b[i]; for(let j=0;j<D;j++) s+=W[i][j]*e[j];
+    logits[i]=s; if(s>mx) mx=s; }
+  let Z=0; const probs=new Float64Array(V);
+  for(let i=0;i<V;i++){ probs[i]=Math.exp(logits[i]-mx); Z+=probs[i]; }
+  for(let i=0;i<V;i++) probs[i]/=Z;
+  return probs;
+}
+
+/* ============================================================
+   RENDERING
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const state = { sent: 7, pos: 2, pgWord: STOI["and"] };  // "we like pizza and pasta", token "pizza"
+
+function heatColor(v){
+  const t = Math.max(-1, Math.min(1, v/2.5));
+  const a = Math.abs(t)*0.85;
+  return t < 0 ? `rgba(59,111,181,${a.toFixed(3)})` : `rgba(217,95,75,${a.toFixed(3)})`;
+}
+const MINUS = "−";
+const fmt1 = v => (v<0?MINUS:"") + Math.abs(v).toFixed(1);
+const fmt2 = v => (v<0?MINUS:"") + Math.abs(v).toFixed(2);
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+
+function sentTokens(){ return TEXTS[state.sent].split(" "); }
+
+function renderSentenceSelect(){
+  $("sentSel").innerHTML = TEXTS.map((s,i)=>
+    `<option value="${i}"${i===state.sent?" selected":""}>&ldquo;${esc(s)}&rdquo;</option>`).join("");
+}
+
+function renderTokens(){
+  const toks = sentTokens();
+  $("tokStrip").innerHTML = toks.map((w,p)=>{
+    const isLast = p === toks.length-1;
+    const isSel  = p === state.pos;
+    const isNext = p === state.pos+1;
+    const cls = "tok" + (isSel?" sel":"") + (isNext?" next":"") + (isLast&&!isNext?" last":"");
+    const sub = isSel ? `pos = ${p}` : isNext ? "target" : isLast ? "no next word" : `pos = ${p}`;
+    return `<button class="${cls}" data-p="${p}" ${isLast?"disabled":""}
+      title="${isLast ? "Last token: it has no next word, so it is never an input (only a target)." : "word: "+w+", position: "+p}">
+      <span class="w">${w}</span><span class="p">${sub}</span></button>`;
+  }).join("");
+  $("tokStrip").querySelectorAll("button[data-p]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{ state.pos = +btn.dataset.p; renderAll(); });
+  });
+  const w = toks[state.pos], y = toks[state.pos+1];
+  $("tripletLine").innerHTML =
+    `Training triplet: (word = &ldquo;<span style="font-family:var(--mono)">${w}</span>&rdquo;, ` +
+    `position = <span style="font-family:var(--mono)">${state.pos}</span>) &nbsp;&rarr;&nbsp; ` +
+    `predict next word <b>&ldquo;${y}&rdquo;</b>. The dashed token is the target; the grayed-out final token is never an input.`;
+}
+
+function embTableHTML(M, labels, hiRow){
+  let h = "<tr><th></th>";
+  for(let j=0;j<D;j++) h += `<th>d${j}</th>`;
+  h += "</tr>";
+  M.forEach((row,r)=>{
+    h += `<tr${r===hiRow?' class="hi"':''}><td class="lab">${labels[r]} <span class="ri">row ${r}</span></td>`;
+    for(let j=0;j<D;j++)
+      h += `<td class="c" style="background:${heatColor(row[j])}" title="${fmt2(row[j])}">${fmt1(row[j])}</td>`;
+    h += "</tr>";
+  });
+  return h;
+}
+
+function renderTables(){
+  const toks = sentTokens();
+  const w = toks[state.pos], wIdx = STOI[w], p = state.pos;
+  $("wordDerive").innerHTML = `stoi[&ldquo;${w}&rdquo;] = ${wIdx} &nbsp;&rarr;&nbsp; look up row ${wIdx}`;
+  $("posDerive").innerHTML  = `position&nbsp;p = ${p} &nbsp;&rarr;&nbsp; look up row ${p}`;
+  $("wordTable").innerHTML = embTableHTML(model.Ew, VOCAB.map(v=>`&ldquo;${v}&rdquo;`), wIdx);
+  $("posTable").innerHTML  = embTableHTML(model.Ep, [...Array(P)].map((_,i)=>`pos ${i}`), p);
+}
+
+function vecHTML(v, cls){
+  let h = `<div class="vec">`;
+  for(let j=0;j<D;j++)
+    h += `<div class="c" style="background:${heatColor(v[j])}" title="${fmt2(v[j])}">${fmt1(v[j])}</div>`;
+  return h + "</div>";
+}
+
+function renderAdd(){
+  const toks = sentTokens();
+  const w = toks[state.pos], wIdx = STOI[w], p = state.pos;
+  const a = model.Ew[wIdx], c = model.Ep[p];
+  const s = new Float64Array(D);
+  for(let j=0;j<D;j++) s[j] = a[j] + c[j];
+  $("addStack").innerHTML =
+    `<div class="add-row r-word"><div class="rlab">word_embedding[${wIdx}] &nbsp;(&ldquo;${w}&rdquo;)</div>${vecHTML(a)}</div>` +
+    `<div class="add-row"><div class="rlab"></div><div class="op">+</div></div>` +
+    `<div class="add-row r-pos"><div class="rlab">position_embedding[${p}] &nbsp;(pos ${p})</div>${vecHTML(c)}</div>` +
+    `<div class="add-row"><div class="rlab"></div><div class="op">=</div></div>` +
+    `<div class="add-row r-sum"><div class="rlab">emb &nbsp;(goes to the linear layer)</div>${vecHTML(s)}</div>`;
+}
+
+function barsHTML(probs, targetIdx){
+  const mx = Math.max(...probs);
+  let h = "";
+  for(let i=0;i<V;i++){
+    const isMax = probs[i] === mx, isTgt = i === targetIdx;
+    h += `<div class="bar-row${isMax?" is-max":""}${isTgt?" is-target":""}">
+      <div class="bw">${VOCAB[i]}</div>
+      <div class="btrack"><div class="bfill" style="width:${(probs[i]*100).toFixed(1)}%"></div></div>
+      <div class="bpct">${(probs[i]*100).toFixed(1)}%${isTgt?'<span class="tmark"> ◂ actual</span>':""}</div>
+    </div>`;
+  }
+  return h;
+}
+
+function renderPred(){
+  const toks = sentTokens();
+  const w = toks[state.pos], wIdx = STOI[w], p = state.pos, yIdx = STOI[toks[state.pos+1]];
+  const pa = predict(wIdx, p, true), pb = predict(wIdx, p, false);
+  $("predLabA").textContent = `softmax( linear( Ew["${w}"] + Ep[${p}] ) )`;
+  $("predLabB").textContent = `softmax( linear( Ew["${w}"] + 0 ) )`;
+  $("predBarsA").innerHTML = barsHTML(pa, yIdx);
+  $("predBarsB").innerHTML = barsHTML(pb, yIdx);
+  const topA = VOCAB[pa.indexOf(Math.max(...pa))], topB = VOCAB[pb.indexOf(Math.max(...pb))];
+  $("predNote").innerHTML = topA === topB
+    ? `Here both versions pick <b>&ldquo;${topA}&rdquo;</b> — for this word the position row mostly sharpens confidence. Try a word that appears at several positions (e.g. select <b>&ldquo;and&rdquo;</b> in “we like pizza and pasta” vs. “we eat and love pasta”).`
+    : `With position the model picks <b>&ldquo;${topA}&rdquo;</b>; without it, <b>&ldquo;${topB}&rdquo;</b>. The word vector alone cannot distinguish the two contexts — the position row supplies the missing information.`;
+}
+
+function renderPlayground(){
+  $("pgWord").innerHTML = VOCAB.map((w,i)=>
+    `<option value="${i}"${i===state.pgWord?" selected":""}>${w}</option>`).join("");
+  const wIdx = state.pgWord;
+  let h = "";
+  for(let p=0;p<P;p++){
+    const probs = predict(wIdx, p, true);
+    const order = [...probs.keys()].sort((a,b)=>probs[b]-probs[a]).slice(0,3);
+    const seen = SEEN[wIdx+"_"+p];
+    const badge = seen
+      ? `<span class="seen" title="Next words observed here in training: ${[...seen].map(i=>VOCAB[i]).join(", ")}">seen in training</span>`
+      : `<span class="unseen">never seen here</span>`;
+    h += `<div class="pg-cell"><h4>position ${p}${badge}</h4>` +
+      order.map(i=>`<div class="pg-item"><div class="pw">${VOCAB[i]}</div>
+        <div class="pt"><div class="pf" style="width:${(probs[i]*100).toFixed(1)}%"></div></div>
+        <div class="pp">${(probs[i]*100).toFixed(1)}%</div></div>`).join("") +
+      `</div>`;
+  }
+  $("pgGrid").innerHTML = h;
+}
+
+function renderTraining(){
+  $("lossLog").textContent =
+    `# 34 triplets, vocab_size=11, n_embed=8, n_positions=4\n# Adam, lr=0.1\n` +
+    lossLines.join("\n");
+  $("vocabChips").innerHTML = VOCAB.map((w,i)=>`<span class="chip">${w} <b>= ${i}</b></span>`).join("");
+}
+
+function renderAll(){
+  renderTokens();
+  renderTables();
+  renderAdd();
+  renderPred();
+  renderPlayground();
+  renderTraining();
+}
+
+/* ---- wire up ---- */
+renderSentenceSelect();
+$("sentSel").addEventListener("change", e=>{
+  state.sent = +e.target.value;
+  const n = sentTokens().length;
+  if(state.pos > n-2) state.pos = n-2;
+  renderAll();
+});
+$("pgWord").addEventListener("change", e=>{ state.pgWord = +e.target.value; renderPlayground(); });
+$("retrainBtn").addEventListener("click", ()=>{
+  train((Math.random()*2**31)|0);
+  renderAll();
+});
+
+train(20240612);   // fixed seed: page loads reproducibly
+renderAll();
+</script>
+</body>
+</html>
