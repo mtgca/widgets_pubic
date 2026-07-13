@@ -75,6 +75,12 @@
   .codeline .cm{color:var(--muted);}
   .idx-note{font-size:.85rem;color:var(--muted);margin-top:6px;}
 
+  /* ---- architecture figure ---- */
+  .arch-wrap{border:1px solid var(--line);border-radius:10px;background:#fafbfe;
+    padding:12px 10px 4px;overflow-x:auto;}
+  .arch-wrap svg{display:block;min-width:980px;width:100%;height:auto;}
+  .arch-cap{font-size:.85rem;color:var(--muted);text-align:center;margin:10px 8px 0;}
+
   /* ---- sentence picker ---- */
   select,button{font:inherit;}
   select{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;
@@ -254,6 +260,126 @@
   </div>
   <div class="token-strip" id="tokStrip"></div>
   <p class="strip-legend" id="tripletLine"></p>
+</div>
+
+<!-- ============ BIG PICTURE: architecture ============ -->
+<div class="card">
+  <span class="step-tag">The big picture · model architecture</span>
+  <h2>One training triplet flowing through the whole model</h2>
+  <p class="h2-sub">Two parallel lookups — <span style="color:var(--word);font-weight:700">word branch</span> and
+    <span style="color:var(--pos);font-weight:700">position branch</span> — meet at an
+    <span style="color:var(--sum);font-weight:700">element-wise sum</span>, then a linear layer scores every
+    vocabulary word. The loss compares those scores against the word that actually came next, and the
+    <span style="color:#b45309;font-weight:700">backpropagated gradient</span> updates <em>both</em> tables the same way.</p>
+
+  <div class="arch-wrap">
+  <svg viewBox="0 0 1060 486" role="img" aria-label="Architecture: word embedding lookup and position embedding lookup are summed, passed through a linear layer and softmax, compared with the target next word by the cross-entropy loss, and backpropagation updates both tables">
+    <defs>
+      <marker id="paB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#2563eb"/></marker>
+      <marker id="paG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#059669"/></marker>
+      <marker id="paP" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#7c3aed"/></marker>
+      <marker id="paO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#d97706"/></marker>
+    </defs>
+
+    <!-- ===== WORD BRANCH (blue) ===== -->
+    <text x="90" y="16" font-size="10" font-weight="800" letter-spacing="0.6" fill="#2563eb" text-anchor="middle">WORD BRANCH</text>
+    <rect x="35" y="26" width="110" height="26" rx="8" fill="#eff4ff" stroke="#c7d7fe" stroke-width="1.3"/>
+    <text x="90" y="43.5" font-size="13" font-weight="700" fill="#2563eb" text-anchor="middle">&#8220;pizza&#8221;</text>
+    <text x="90" y="68" font-size="9.5" fill="#52514e" text-anchor="middle">index = stoi[&#8220;pizza&#8221;] = 7</text>
+    <g font-size="9" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">
+      <rect x="35" y="80"  width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="91.5"  fill="#3a4560" text-anchor="middle">and</text>
+      <rect x="35" y="96"  width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="107.5" fill="#3a4560" text-anchor="middle">eat</text>
+      <rect x="35" y="112" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="123.5" fill="#3a4560" text-anchor="middle">hate</text>
+      <rect x="35" y="128" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="139.5" fill="#3a4560" text-anchor="middle">i</text>
+      <rect x="35" y="144" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="155.5" fill="#3a4560" text-anchor="middle">like</text>
+      <rect x="35" y="160" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="171.5" fill="#3a4560" text-anchor="middle">love</text>
+      <rect x="35" y="176" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="187.5" fill="#3a4560" text-anchor="middle">pasta</text>
+      <rect x="35" y="192" width="110" height="15" rx="3" fill="#eff4ff" stroke="#2563eb" stroke-width="1.4"/><text x="90" y="203.5" fill="#2563eb" font-weight="700" text-anchor="middle">pizza&#160;&#160;&#8594;&#160;&#160;row 7</text>
+      <rect x="35" y="208" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="219.5" fill="#3a4560" text-anchor="middle">to</text>
+      <rect x="35" y="224" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="235.5" fill="#3a4560" text-anchor="middle">we</text>
+      <rect x="35" y="240" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="251.5" fill="#3a4560" text-anchor="middle">you</text>
+    </g>
+    <text x="90" y="268" font-size="8.5" fill="#898781" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">E</tspan><tspan dy="3" font-size="7">word</tspan><tspan dy="-3">&#160;&#8712; &#8477;</tspan><tspan dy="-4" font-size="7">11&#215;8</tspan></text>
+
+    <!-- ===== POSITION BRANCH (green) ===== -->
+    <text x="90" y="292" font-size="10" font-weight="800" letter-spacing="0.6" fill="#059669" text-anchor="middle">POSITION BRANCH</text>
+    <rect x="35" y="300" width="110" height="26" rx="8" fill="#ecfdf5" stroke="#a7e3cd" stroke-width="1.3"/>
+    <text x="90" y="317.5" font-size="13" font-weight="700" fill="#059669" text-anchor="middle">position 2</text>
+    <text x="90" y="342" font-size="9.5" fill="#52514e" text-anchor="middle">index = p = 2</text>
+    <g font-size="9" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">
+      <rect x="35" y="350" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="361.5" fill="#3a4560" text-anchor="middle">pos 0</text>
+      <rect x="35" y="366" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="377.5" fill="#3a4560" text-anchor="middle">pos 1</text>
+      <rect x="35" y="382" width="110" height="15" rx="3" fill="#ecfdf5" stroke="#059669" stroke-width="1.4"/><text x="90" y="393.5" fill="#059669" font-weight="700" text-anchor="middle">pos 2&#160;&#160;&#8594;&#160;&#160;row 2</text>
+      <rect x="35" y="398" width="110" height="15" rx="3" fill="#eef1f7"/><text x="90" y="409.5" fill="#3a4560" text-anchor="middle">pos 3</text>
+    </g>
+    <text x="90" y="430" font-size="8.5" fill="#898781" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">E</tspan><tspan dy="3" font-size="7">pos</tspan><tspan dy="-3">&#160;&#8712; &#8477;</tspan><tspan dy="-4" font-size="7">4&#215;8</tspan></text>
+
+    <!-- ===== lookups meet at + ===== -->
+    <line x1="148" y1="199.5" x2="224" y2="286" stroke="#2563eb" stroke-width="1.6" marker-end="url(#paB)"/>
+    <text x="196" y="232" font-size="9.5" fill="#2563eb" font-weight="600" text-anchor="middle">word_emb</text>
+    <line x1="148" y1="389.5" x2="224" y2="304" stroke="#059669" stroke-width="1.6" marker-end="url(#paG)"/>
+    <text x="196" y="362" font-size="9.5" fill="#059669" font-weight="600" text-anchor="middle">pos_emb</text>
+    <circle cx="240" cy="295" r="13" fill="#f5f0ff" stroke="#7c3aed" stroke-width="1.6"/>
+    <text x="240" y="300.5" font-size="16" font-weight="700" fill="#7c3aed" text-anchor="middle">+</text>
+    <text x="240" y="324" font-size="8.5" fill="#898781" text-anchor="middle">element-wise sum</text>
+
+    <!-- ===== emb vector ===== -->
+    <line x1="255" y1="295" x2="298" y2="295" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#paP)"/>
+    <text x="315" y="200" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">emb</tspan> &#8712; &#8477;<tspan dy="-4" font-size="7.5">8</tspan></text>
+    <g id="archFC" stroke="#dce3ee" stroke-width="0.6"></g>
+    <g fill="#f0e9fe" stroke="#7c3aed" stroke-width="1.3">
+      <circle cx="315" cy="218" r="8"/><circle cx="315" cy="240" r="8"/><circle cx="315" cy="262" r="8"/><circle cx="315" cy="284" r="8"/><circle cx="315" cy="306" r="8"/><circle cx="315" cy="328" r="8"/><circle cx="315" cy="350" r="8"/><circle cx="315" cy="372" r="8"/>
+    </g>
+
+    <!-- ===== linear layer outputs ===== -->
+    <text x="463" y="152" font-size="10" font-weight="800" letter-spacing="0.6" fill="#1f2937" text-anchor="middle">LINEAR LAYER</text>
+    <text x="463" y="168" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">z</tspan> = <tspan font-style="italic">W</tspan>&#183;<tspan font-style="italic">emb</tspan> + <tspan font-style="italic">b</tspan></text>
+    <g fill="#eef1f7" stroke="#55627a" stroke-width="1.1">
+      <circle cx="463" cy="185" r="8"/><circle cx="463" cy="207" r="8"/><circle cx="463" cy="229" r="8"/><circle cx="463" cy="251" r="8"/><circle cx="463" cy="273" r="8"/><circle cx="463" cy="295" r="8"/><circle cx="463" cy="317" r="8"/><circle cx="463" cy="339" r="8"/><circle cx="463" cy="361" r="8"/><circle cx="463" cy="383" r="8"/><circle cx="463" cy="405" r="8"/>
+    </g>
+
+    <!-- ===== softmax + probabilities ===== -->
+    <line x1="477" y1="295" x2="508" y2="295" stroke="#2563eb" stroke-width="1.6" marker-end="url(#paB)"/>
+    <text x="492" y="285" font-size="9" fill="#898781" text-anchor="middle">softmax</text>
+    <g font-size="9.5" fill="#3a4560" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">
+      <text x="560" y="188.5" font-weight="700">and</text><text x="560" y="210.5">eat</text><text x="560" y="232.5">hate</text><text x="560" y="254.5">i</text><text x="560" y="276.5">like</text><text x="560" y="298.5">love</text><text x="560" y="320.5">pasta</text><text x="560" y="342.5">pizza</text><text x="560" y="364.5">to</text><text x="560" y="386.5">we</text><text x="560" y="408.5">you</text>
+    </g>
+    <g fill="#2563eb">
+      <rect x="566" y="179.5" width="80"  height="11" rx="2"/>
+      <rect x="566" y="201.5" width="2"   height="11" rx="1"/>
+      <rect x="566" y="223.5" width="2"   height="11" rx="1"/>
+      <rect x="566" y="245.5" width="2"   height="11" rx="1"/>
+      <rect x="566" y="267.5" width="3"   height="11" rx="1"/>
+      <rect x="566" y="289.5" width="9"   height="11" rx="2"/>
+      <rect x="566" y="311.5" width="6"   height="11" rx="2"/>
+      <rect x="566" y="333.5" width="2"   height="11" rx="1"/>
+      <rect x="566" y="355.5" width="2"   height="11" rx="1"/>
+      <rect x="566" y="377.5" width="2"   height="11" rx="1"/>
+      <rect x="566" y="399.5" width="2"   height="11" rx="1"/>
+    </g>
+    <rect x="518" y="175" width="198" height="20" rx="6" fill="none" stroke="#1a7a4a" stroke-width="1.4"/>
+    <text x="712" y="189" font-size="9.5" font-weight="700" fill="#1a7a4a" text-anchor="end">&#10003; target</text>
+
+    <!-- ===== loss ===== -->
+    <path d="M 718 185 H 730 V 275 H 738" fill="none" stroke="#2563eb" stroke-width="1.6" marker-end="url(#paB)"/>
+    <rect x="745" y="210" width="288" height="150" rx="10" fill="#fffaf6" stroke="#f0c088" stroke-width="1.3"/>
+    <text x="889" y="234" font-size="10" font-weight="800" letter-spacing="0.5" fill="#b45309" text-anchor="middle">LOSS &#8212; NEXT-WORD PREDICTION</text>
+    <text x="889" y="256" font-size="9.5" fill="#52514e" text-anchor="middle">the target is the word that actually came next:</text>
+    <text x="889" y="272" font-size="10.5" fill="#52514e" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif">here <tspan font-style="italic">y</tspan> = <tspan font-weight="700" fill="#1a7a4a" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">&#8220;and&#8221;</tspan></text>
+    <text x="889" y="300" font-size="15" fill="#1f2937" text-anchor="middle" font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif"><tspan font-style="italic">L</tspan> = &#8722;log <tspan font-style="italic">p</tspan><tspan dy="3.5" font-size="10" font-style="italic">y</tspan></text>
+    <text x="889" y="326" font-size="9" fill="#898781" text-anchor="middle">&#8776; 0 when the model already expected &#8220;and&#8221;;</text>
+    <text x="889" y="338" font-size="9" fill="#898781" text-anchor="middle">large when it was surprised.</text>
+
+    <!-- ===== backpropagation ===== -->
+    <path d="M 889 360 V 452 H 12 V 199.5 H 27" fill="none" stroke="#d97706" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#paO)"/>
+    <path d="M 50 452 V 418" fill="none" stroke="#d97706" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#paO)"/>
+    <path d="M 463 452 V 418" fill="none" stroke="#d97706" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#paO)"/>
+    <text x="530" y="472" font-size="10" fill="#b45309" text-anchor="middle">backpropagation &#8212; one gradient step updates <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">W</tspan>, <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">b</tspan>, row 7 of <tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">E</tspan><tspan dy="3" font-size="7.5">word</tspan><tspan dy="-3"> and row 2 of </tspan><tspan font-family="STIX Two Math, Cambria Math, Times New Roman, Georgia, serif" font-style="italic">E</tspan><tspan dy="3" font-size="7.5">pos</tspan><tspan dy="-3"> &#8212; both lookup tables learn the same way</tspan></text>
+  </svg>
+  </div>
+  <p class="arch-cap">Schematic, drawn for one training triplet: input word <b>&ldquo;pizza&rdquo;</b> at <b>position 2</b>, target
+    <b>&ldquo;and&rdquo;</b> (from &ldquo;we like pizza <b>and</b> pasta&rdquo;). The steps below walk through these
+    same layers with the real, learned numbers.</p>
 </div>
 
 <!-- ============ STEP 2: two lookups ============ -->
@@ -660,6 +786,15 @@ function renderAll(){
   renderPlayground();
   renderTraining();
 }
+
+/* ---- architecture figure: generate the 8 -> 11 fully-connected lines ---- */
+(function(){
+  const g = document.getElementById("archFC");
+  let s = "";
+  for(let i=0;i<8;i++) for(let j=0;j<11;j++)
+    s += `<line x1="323" y1="${218+22*i}" x2="455" y2="${185+22*j}"/>`;
+  g.innerHTML = s;
+})();
 
 /* ---- wire up ---- */
 renderSentenceSelect();
