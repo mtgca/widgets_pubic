@@ -23,22 +23,25 @@
   FLOW (mirrors the reference diagram):
     1. QUERY   — pick a contextual need (chips).
     2. LIBRARY — four books, each with a visible KEY tag and hidden VALUE;
-                 per-book match score and softmax attention weight.
-    3. RETRIEVAL — weighted sum shown as a 100% stacked composition bar.
+                 per-book match strength (dots) and attention weight.
+    3. RETRIEVAL — weighted blend shown as a 100% stacked composition bar.
     4. RESULT  — blended color swatch + plain-language composition sentence.
-  A final section connects the analogy to softmax(QKᵀ/√dk)V with a mapping
-  table, a live numeric table, and a sharpness (temperature) slider.
+
+  IMPORTANT (per maintainer): the widget must stay a PURE ANALOGY — no
+  equations, no MathML, and no mathematical vocabulary in the visible text
+  (no "softmax", "vector", "dot product", "score", "gradient", …). The
+  equation of attention will be taught later in a SEPARATE widget.
+  Internally the weights ARE computed with a softmax over hand-designed
+  match constants (not real dot products), chosen so some queries are
+  sharp (one book dominates) and some are deliberately split — but that
+  machinery is never named on screen.
 
   DESIGN NOTES:
   - LIGHT academic theme, no looping animations (repo conventions).
-  - Math rendered with native MathML (no libraries), per CLAUDE.md.
-  - Match scores per query are hand-designed constants (not real dot
-    products) chosen to make the softmax behavior pedagogically clear:
-    some queries are sharp (one book dominates), some are split.
 
   HOW TO MODIFY:
   - BOOKS holds the four key/value cards; QUERIES holds the chips and their
-    raw match scores (one per book, same order as BOOKS).
+    raw match constants (one per book, same order as BOOKS).
   - render() is the single re-render entry point after state changes.
   ============================================================================
 -->
@@ -50,13 +53,11 @@
     --key:#166534;  --key-soft:#ecfdf5;
     --val:#7c2d92;  --val-soft:#faf0fd;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    --math:"STIX Two Math","Cambria Math","Latin Modern Math","Times New Roman",Georgia,serif;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:var(--bg);color:var(--ink);
     font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     padding:32px 16px 64px;}
-  math{font-family:var(--math);}
   .wrap{max-width:1100px;margin:0 auto;}
   h1{font-size:1.7rem;line-height:1.25;margin-bottom:6px;}
   .subtitle{color:var(--muted);max-width:840px;margin-bottom:26px;}
@@ -96,7 +97,7 @@
     text-transform:uppercase;margin-bottom:4px;}
   .book .cover .vtext{font-size:.86rem;color:var(--ink);line-height:1.45;}
   .book .matchrow{font-size:.8rem;color:var(--muted);display:flex;justify-content:space-between;align-items:baseline;}
-  .book .matchrow b{color:var(--ink);font-family:var(--mono);font-weight:600;}
+  .book .matchrow b{color:var(--book);letter-spacing:2px;font-weight:600;}
   .book .wbar{height:14px;border-radius:7px;background:var(--soft);overflow:hidden;}
   .book .wbar .fill{height:100%;background:var(--book);border-radius:7px;transition:width .25s ease;}
   .book .wpct{font-size:.95rem;font-weight:700;color:var(--book);font-family:var(--mono);}
@@ -121,33 +122,6 @@
     box-shadow:inset 0 -14px 22px rgba(0,0,0,.14), 0 2px 8px rgba(0,0,0,.10);flex:0 0 auto;}
   .result .sentence{flex:1 1 320px;font-size:.98rem;line-height:1.6;}
   .result .sentence b{font-weight:700;}
-
-  /* ---- Math section ---- */
-  details.mathbox{border:1px solid var(--line);border-radius:14px;background:var(--card);
-    margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
-  details.mathbox summary{cursor:pointer;padding:16px 22px;font-weight:700;font-size:1.05rem;
-    list-style:none;display:flex;align-items:center;gap:10px;}
-  details.mathbox summary::-webkit-details-marker{display:none;}
-  details.mathbox summary::after{content:"▸";margin-left:auto;color:var(--muted);transition:transform .15s;}
-  details.mathbox[open] summary::after{transform:rotate(90deg);}
-  details.mathbox .inner{padding:0 22px 22px;}
-  .eq{background:var(--soft);border:1px solid var(--line);border-radius:10px;
-    padding:14px 16px;margin:6px 0 16px;overflow-x:auto;font-size:1.12rem;}
-  table.map{border-collapse:collapse;width:100%;font-size:.88rem;margin:8px 0 20px;}
-  table.map th,table.map td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top;}
-  table.map th{background:var(--soft);font-size:.8rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);}
-  table.map td:first-child{background:#fffdf5;}
-  table.num{border-collapse:collapse;font-size:.88rem;margin:8px 0 4px;min-width:420px;}
-  table.num th,table.num td{border:1px solid var(--line);padding:7px 12px;text-align:right;font-family:var(--mono);}
-  table.num th{background:var(--soft);font-family:inherit;font-size:.78rem;text-transform:uppercase;
-    letter-spacing:.4px;color:var(--muted);text-align:right;}
-  table.num td:first-child,table.num th:first-child{text-align:left;font-family:inherit;font-weight:600;}
-  .tscroll{overflow-x:auto;}
-  .sliderrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:14px 0 6px;}
-  .sliderrow label{font-size:.9rem;font-weight:600;}
-  .sliderrow input[type=range]{width:220px;accent-color:var(--accent);}
-  .sliderrow .tval{font-family:var(--mono);font-size:.88rem;color:var(--muted);min-width:150px;}
-  .note{font-size:.86rem;color:var(--muted);max-width:840px;}
 
   footer{color:var(--muted);font-size:.85rem;margin-top:34px;text-align:center;}
 </style>
@@ -181,8 +155,8 @@
 <!-- ============ STEP 1 · QUERY ============ -->
 <section>
   <h2><span class="stepnum">1</span> The Query (Q) — what are you looking for?</h2>
-  <p class="h2-sub">Your contextual need. In a transformer this is a vector the current
-  token computes to ask: <i>“what information do I need from the others?”</i></p>
+  <p class="h2-sub">Your contextual need — the question you bring to the library. In attention,
+  every word brings its own question: <i>“what information do I need from the other words?”</i></p>
   <div class="chips" id="chips"></div>
   <p class="query-readout" id="queryReadout"></p>
 </section>
@@ -190,8 +164,8 @@
 <!-- ============ STEP 2 · LIBRARY ============ -->
 <section>
   <h2><span class="stepnum">2</span> The Library — Keys are matched, Values wait inside</h2>
-  <p class="h2-sub">The matching engine compares the query against <b>every</b> spine label
-  and softmax turns the match scores into <b>attention weights that always sum to 100%</b>.</p>
+  <p class="h2-sub">The librarian compares the query against <b>every</b> spine label and turns
+  the matches into <b>attention weights that always add up to 100%</b>.</p>
   <div class="legend">
     <span class="li"><span class="swatch-key">KEY</span> spine label · visible · used for matching</span>
     <span class="li"><span class="swatch-val">VALUE</span> content inside · retrieved, never matched</span>
@@ -199,14 +173,14 @@
   <div class="shelf" id="shelf"></div>
   <div class="callout">
     <b>The separation is the point:</b> the Key decides <i>how much</i> attention a book gets;
-    the Value is <i>what</i> actually flows out. A book can advertise one thing and contain another —
-    matching and content are two different jobs, so attention learns two different vectors for them.
+    the Value is <i>what</i> actually flows out. Matching and content are two different jobs,
+    so attention keeps a separate Key and Value for every book on purpose.
   </div>
 </section>
 
 <!-- ============ STEP 3 · RETRIEVAL ============ -->
 <section>
-  <h2><span class="stepnum">3</span> The Retrieval — a weighted sum of Values</h2>
+  <h2><span class="stepnum">3</span> The Retrieval — a weighted blend of Values</h2>
   <p class="h2-sub">No book is “selected” and none is discarded. Every Value flows into the
   result — each contributing exactly its attention weight.</p>
   <div class="stackwrap">
@@ -225,86 +199,14 @@
     <p class="sentence" id="resultSentence"></p>
   </div>
   <div class="callout">
-    <b>Attention is a weighted average, not an if/else.</b> The output is a <i>mixture</i> of
-    Values — mostly the best match, but with a little of everything else. That softness is what
-    lets gradients flow and lets the model hedge between several relevant sources.
+    <b>Attention blends — it does not pick a single winner.</b> The result is a <i>mixture</i> of
+    Values: mostly the best match, but with a little of everything else. Nothing is ever fully
+    ignored, so the model can draw on several relevant sources at once.
   </div>
 </section>
 
-<!-- ============ FROM ANALOGY TO EQUATION ============ -->
-<details class="mathbox">
-  <summary><span class="stepnum">+</span> From the analogy to the real equation (peek ahead)</summary>
-  <div class="inner">
-
-    <p class="note">Everything above is one formula. Each row of <math><mi>Q</mi></math> is a
-    query, each row of <math><mi>K</mi></math> a spine label, each row of
-    <math><mi>V</mi></math> a book’s content:</p>
-
-    <div class="eq">
-      <math display="block">
-        <mrow>
-          <mi>Attention</mi><mo stretchy="false">(</mo><mi>Q</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>V</mi><mo stretchy="false">)</mo>
-          <mo>=</mo>
-          <mi>softmax</mi>
-          <mrow>
-            <mo>(</mo>
-            <mfrac>
-              <mrow><mi>Q</mi><msup><mi>K</mi><mo>⊤</mo></msup></mrow>
-              <msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt>
-            </mfrac>
-            <mo>)</mo>
-          </mrow>
-          <mi>V</mi>
-        </mrow>
-      </math>
-    </div>
-
-    <table class="map">
-      <thead><tr><th>In the library</th><th>In attention</th></tr></thead>
-      <tbody>
-        <tr><td>You, with a question (“Physics”)</td>
-            <td>Query vector <math><mi>q</mi></math> computed by the current token</td></tr>
-        <tr><td>The spine label of book <math><mi>i</mi></math></td>
-            <td>Key vector <math><msub><mi>k</mi><mi>i</mi></msub></math> of token <math><mi>i</mi></math></td></tr>
-        <tr><td>The content inside book <math><mi>i</mi></math></td>
-            <td>Value vector <math><msub><mi>v</mi><mi>i</mi></msub></math> of token <math><mi>i</mi></math></td></tr>
-        <tr><td>How well a label matches your question</td>
-            <td>Score <math><mrow><mi>q</mi><mo>·</mo><msub><mi>k</mi><mi>i</mi></msub></mrow></math> (a dot product)</td></tr>
-        <tr><td>The librarian normalizing enthusiasm to 100%</td>
-            <td><math><mi>softmax</mi></math> over the scores → weights <math><msub><mi>w</mi><mi>i</mi></msub></math></td></tr>
-        <tr><td>Photocopying pages from several books, proportionally</td>
-            <td>Weighted sum
-                <math><mrow><munder><mo>∑</mo><mi>i</mi></munder><msub><mi>w</mi><mi>i</mi></msub><msub><mi>v</mi><mi>i</mi></msub></mrow></math></td></tr>
-        <tr><td>The notes you walk out with</td>
-            <td>The token’s new context-aware representation</td></tr>
-      </tbody>
-    </table>
-
-    <p class="note" style="margin-bottom:14px"><b>One thing the analogy hides:</b> in
-    <i>self</i>-attention there is no separate reader — <b>every token plays all three roles at
-    once</b>. It asks a question (Q), advertises a label (K), and offers content (V), all computed
-    from its own embedding by three learned matrices
-    <math><mrow><msub><mi>W</mi><mi>Q</mi></msub><mo>,</mo><msub><mi>W</mi><mi>K</mi></msub><mo>,</mo><msub><mi>W</mi><mi>V</mi></msub></mrow></math>.
-    Every token visits the library, and every token is also a book.</p>
-
-    <div class="sliderrow">
-      <label for="temp">Score sharpness</label>
-      <input type="range" id="temp" min="-1" max="1" step="0.05" value="0">
-      <span class="tval" id="tempReadout"></span>
-    </div>
-    <p class="note" style="margin-bottom:12px">This rescales the scores before softmax — the same
-    role the <math><mrow><mn>1</mn><mo>/</mo><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mrow></math>
-    factor plays in the formula. Sharper → the winner takes (almost) all; softer → weights spread
-    toward a uniform average. Watch the bars in steps 2–4 react.</p>
-
-    <div class="tscroll">
-      <table class="num" id="numTable"></table>
-    </div>
-  </div>
-</details>
-
 <footer>
-  Attention Q/K/V — library analogy · self-contained HTML · MathML rendered natively by your browser
+  Attention Q/K/V — library analogy · self-contained HTML, no dependencies
 </footer>
 
 </div>
@@ -315,7 +217,7 @@
 /* ---------- data ---------- */
 const BOOKS = [
   { name:'Science', color:'#0d9488',
-    value:'atoms, energy, experiments, E = mc²' },
+    value:'atoms, energy, experiments, relativity' },
   { name:'History', color:'#d97706',
     value:'dates, empires, revolutions, treaties' },
   { name:'Fiction', color:'#7c3aed',
@@ -324,7 +226,7 @@ const BOOKS = [
     value:'recipes, flavors, techniques' },
 ];
 
-/* raw match scores per query, one per book (Science, History, Fiction, Cooking).
+/* raw match constants per query, one per book (Science, History, Fiction, Cooking).
    Hand-designed for pedagogy: some sharp, some deliberately split. */
 const QUERIES = [
   { label:'Physics',                    scores:[3.2, 0.6, 0.3, 0.1],
@@ -339,13 +241,19 @@ const QUERIES = [
     blurb:'Cooking dominates; Fiction chips in ideas for the mood' },
 ];
 
-const state = { q: 0, sharp: 0 };   // sharp in [-1,1] → multiplier 4^sharp
+const state = { q: 0 };
 
 /* ---------- helpers ---------- */
-function softmax(scores, mult){
-  const exps = scores.map(s => Math.exp(s * mult));
+/* softmax under the hood — never named in the UI */
+function softmax(scores){
+  const exps = scores.map(s => Math.exp(s));
   const sum = exps.reduce((a,b)=>a+b,0);
   return exps.map(e => e/sum);
+}
+/* qualitative match dots: ●●●●● (strong) … ○○○○○ (barely) */
+function matchDots(score){
+  const filled = Math.min(5, Math.round(score * 1.5));
+  return '●'.repeat(filled) + '○'.repeat(5 - filled);
 }
 function hexToRgb(h){ return [1,3,5].map(i => parseInt(h.slice(i,i+2),16)); }
 function mixColor(weights){
@@ -377,7 +285,7 @@ BOOKS.forEach((book,i)=>{
       <div class="vlabel">Value (inside)</div>
       <div class="vtext">${book.value}</div>
     </div>
-    <div class="matchrow"><span>match score</span><b id="score-${i}"></b></div>
+    <div class="matchrow"><span>label match</span><b id="score-${i}"></b></div>
     <div class="wlabel">attention weight</div>
     <div class="wbar"><div class="fill" id="fill-${i}"></div></div>
     <div class="wpct" id="wpct-${i}" style="color:${book.color}"></div>`;
@@ -402,8 +310,7 @@ BOOKS.forEach((book,i)=>{
 /* ---------- render ---------- */
 function render(){
   const q = QUERIES[state.q];
-  const mult = Math.pow(4, state.sharp);          // sharpness multiplier
-  const w = softmax(q.scores, mult);
+  const w = softmax(q.scores);
   const top = w.indexOf(Math.max(...w));
 
   /* chips + readout */
@@ -414,7 +321,7 @@ function render(){
   /* books */
   BOOKS.forEach((book,i)=>{
     shelfEl.children[i].classList.toggle('top', i===top);
-    document.getElementById('score-'+i).textContent = q.scores[i].toFixed(1);
+    document.getElementById('score-'+i).textContent = matchDots(q.scores[i]);
     document.getElementById('fill-'+i).style.width = (w[i]*100).toFixed(1)+'%';
     document.getElementById('wpct-'+i).textContent = pct(w[i]);
   });
@@ -440,27 +347,7 @@ function render(){
     ).join(', ') +
     `. The final information is a mixture of <b>Values</b>, weighted by how well their ` +
     `<b>Keys</b> matched the <b>Query</b>.`;
-
-  /* sharpness readout */
-  document.getElementById('tempReadout').textContent =
-    'scores × ' + mult.toFixed(2) +
-    (state.sharp > 0.15 ? ' (sharper)' : state.sharp < -0.15 ? ' (softer)' : ' (default)');
-
-  /* numeric table */
-  const rows = BOOKS.map((book,i)=>{
-    const s = q.scores[i]*mult;
-    return `<tr><td style="color:${book.color}">${book.name}</td>` +
-      `<td>${q.scores[i].toFixed(1)}</td><td>${s.toFixed(2)}</td>` +
-      `<td>${Math.exp(s).toFixed(2)}</td><td>${pct(w[i])}</td></tr>`;
-  }).join('');
-  document.getElementById('numTable').innerHTML =
-    `<thead><tr><th>book</th><th>raw score</th><th>scaled</th>` +
-    `<th>exp(scaled)</th><th>weight <math><msub><mi>w</mi><mi>i</mi></msub></math></th></tr></thead><tbody>${rows}</tbody>`;
 }
-
-document.getElementById('temp').addEventListener('input', e=>{
-  state.sharp = parseFloat(e.target.value); render();
-});
 
 render();
 </script>
