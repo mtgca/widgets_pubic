@@ -25,7 +25,8 @@
     2. LIBRARY — four books, each with a visible KEY tag and hidden VALUE;
                  per-book match strength (dots) and attention weight.
     3. RETRIEVAL — weighted blend shown as a 100% stacked composition bar.
-    4. RESULT  — blended color swatch + plain-language composition sentence.
+    4. RESULT  — treemap of the mixture (tile area = each book's share)
+                 + plain-language composition sentence.
 
   IMPORTANT (per maintainer): the widget must stay a PURE ANALOGY — no
   equations, no MathML, and no mathematical vocabulary in the visible text
@@ -116,10 +117,14 @@
   .stacklegend .li{display:flex;align-items:center;gap:6px;}
   .dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
 
-  /* ---- Step 4: result ---- */
-  .result{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
-  .result .cube{width:92px;height:92px;border-radius:14px;border:1px solid var(--line);
-    box-shadow:inset 0 -14px 22px rgba(0,0,0,.14), 0 2px 8px rgba(0,0,0,.10);flex:0 0 auto;}
+  /* ---- Step 4: result (treemap) ---- */
+  .result{display:flex;gap:22px;align-items:center;flex-wrap:wrap;}
+  .treemap{position:relative;width:320px;height:190px;flex:0 0 auto;max-width:100%;}
+  .treemap .cell{position:absolute;border-radius:4px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:1px;color:#fff;overflow:hidden;}
+  .treemap .cell .cn{font-size:.76rem;font-weight:700;line-height:1.1;}
+  .treemap .cell .cp{font-size:.78rem;font-weight:700;font-family:var(--mono);line-height:1.1;}
+  .treemap-caption{font-size:.76rem;color:var(--muted);margin-top:6px;text-align:center;width:320px;max-width:100%;}
   .result .sentence{flex:1 1 320px;font-size:.98rem;line-height:1.6;}
   .result .sentence b{font-weight:700;}
 
@@ -195,7 +200,10 @@
   <p class="h2-sub">The blend depends entirely on the query: change the question and the
   same library returns a different mixture.</p>
   <div class="result">
-    <div class="cube" id="resultCube"></div>
+    <div>
+      <div class="treemap" id="treemap"></div>
+      <div class="treemap-caption">each tile’s area = that book’s share of the result</div>
+    </div>
     <p class="sentence" id="resultSentence"></p>
   </div>
   <div class="callout">
@@ -255,16 +263,45 @@ function matchDots(score){
   const filled = Math.min(5, Math.round(score * 1.5));
   return '●'.repeat(filled) + '○'.repeat(5 - filled);
 }
-function hexToRgb(h){ return [1,3,5].map(i => parseInt(h.slice(i,i+2),16)); }
-function mixColor(weights){
-  const rgb = [0,0,0];
-  BOOKS.forEach((b,i)=>{
-    const c = hexToRgb(b.color);
-    for (let j=0;j<3;j++) rgb[j] += weights[i]*c[j];
-  });
-  return `rgb(${rgb.map(v=>Math.round(v)).join(',')})`;
-}
 function pct(w){ return (w*100).toFixed(w*100 >= 9.95 ? 0 : 1) + '%'; }
+
+/* Treemap layout: recursive binary split of the rectangle, always along the
+   longer side, items pre-sorted by weight so big tiles sit top-left. */
+function treemapLayout(items, x, y, w, h, out){
+  if (items.length === 1){ out.push({ ...items[0], x, y, w, h }); return; }
+  const total = items.reduce((a,b)=>a+b.wi, 0);
+  let sumA = items[0].wi, cut = 1;
+  while (cut < items.length-1 && sumA + items[cut].wi/2 < total/2){
+    sumA += items[cut].wi; cut++;
+  }
+  const A = items.slice(0, cut), B = items.slice(cut), f = sumA/total;
+  if (w >= h){
+    treemapLayout(A, x, y, w*f, h, out);
+    treemapLayout(B, x + w*f, y, w*(1-f), h, out);
+  } else {
+    treemapLayout(A, x, y, w, h*f, out);
+    treemapLayout(B, x, y + h*f, w, h*(1-f), out);
+  }
+}
+
+function renderTreemap(w){
+  const box = document.getElementById('treemap');
+  const W = box.clientWidth, H = box.clientHeight;
+  const items = w.map((wi,i)=>({ wi, i })).sort((a,b)=>b.wi-a.wi);
+  const rects = [];
+  treemapLayout(items, 0, 0, W, H, rects);
+  box.innerHTML = rects.map(r => {
+    const book = BOOKS[r.i];
+    /* 1px inset per side → 2px gap between tiles */
+    const cw = r.w - 2, ch = r.h - 2;
+    const label =
+      (cw >= 62 && ch >= 36) ? `<span class="cn">${book.name}</span><span class="cp">${pct(r.wi)}</span>` :
+      (cw >= 40 && ch >= 17) ? `<span class="cp">${pct(r.wi)}</span>` : '';
+    return `<div class="cell" title="${book.name}: ${pct(r.wi)}" style="left:${(r.x+1).toFixed(1)}px;` +
+      `top:${(r.y+1).toFixed(1)}px;width:${cw.toFixed(1)}px;height:${ch.toFixed(1)}px;` +
+      `background:${book.color}">${label}</div>`;
+  }).join('');
+}
 
 /* ---------- static DOM ---------- */
 const chipsEl = document.getElementById('chips');
@@ -336,7 +373,7 @@ function render(){
   });
 
   /* result */
-  document.getElementById('resultCube').style.background = mixColor(w);
+  renderTreemap(w);
   const order = w.map((wi,i)=>({wi,i})).sort((a,b)=>b.wi-a.wi);
   const [first, ...rest] = order;
   document.getElementById('resultSentence').innerHTML =
@@ -350,6 +387,7 @@ function render(){
 }
 
 render();
+window.addEventListener('resize', render);   /* treemap uses pixel geometry */
 </script>
 
 </body>
