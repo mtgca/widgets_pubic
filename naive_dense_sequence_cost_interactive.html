@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Why Not Just Flatten the Sequence? · Interactive</title>
+<!--
+  ============================================================================
+  WHY NOT JUST FLATTEN THE SEQUENCE INTO ONE DENSE LAYER?
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget. Everything (HTML + CSS + JS) in this file.
+
+  PEDAGOGICAL GOAL (per maintainer):
+  Motivate the need for "something smarter than a plain Dense layer" to mix
+  information across a sequence — WITHOUT naming attention or transformers.
+  The "naive idea": flatten a sequence of N tokens (each a d-dim vector) into
+  one big (N*d)-length vector, and feed it through a single Dense layer that
+  maps that vector to an output of the same size. A fully-connected layer
+  needs a weight connecting every input feature to every output feature, so
+  the weight matrix is (N*d) x (N*d) => N^2 * d^2 parameters. Sliding N or d
+  up makes that count explode — that's the whole point of the slide.
+
+  DESIGN NOTES:
+  - LIGHT academic theme, matches repo conventions (see rnn_unrolling_interactive.html).
+  - NO looping animations. Sliders update a static diagram + counters instantly.
+  - Math rendered with native MathML per CLAUDE.md (no external libraries).
+
+  HOW TO MODIFY:
+  - N_RANGE / D_RANGE control the slider bounds.
+  - drawDiagram() builds the flatten -> weight-matrix -> output SVG.
+  - REFS array holds the "real world" comparison numbers for the blow-up card.
+  ============================================================================
+-->
+<style>
+  :root{
+    --bg:       #f5f8fd;
+    --bg-soft:  #eef3fa;
+    --panel:    #ffffff;
+    --panel-2:  #f2f6fc;
+    --line:     #d9e2ef;
+    --text:     #1f2937;
+    --text-dim: #64708a;
+    --accent:   #3b6fd4;
+    --tok-fill: #d7e7f7; --tok-line: #6f9cc4;   /* token vectors (blue)   */
+    --flat-fill:#dcefd2; --flat-line:#74a95f;   /* flattened vector (green) */
+    --w-fill:   #fbdde0; --w-line:  #d9777f;    /* weight matrix (pink/red) */
+    --out-fill: #e7ddf6; --out-line:#a08ad0;    /* output vector (purple) */
+    --radius: 14px;
+    --shadow: 0 6px 20px rgba(40,70,120,.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(1100px 520px at 82% -10%, #e9f0fb 0%, transparent 60%),
+      radial-gradient(900px 460px at -8% 6%, #eafaf6 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.55;
+  }
+  .wrap{ max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
+
+  math{ font-family: var(--math); }
+
+  .hero{ text-align:center; margin: 26px 0 20px; }
+  .hero h1{ font-size: 1.6rem; margin: 0 0 8px; letter-spacing:-.3px; }
+  .hero p{ color: var(--text-dim); max-width: 780px; margin: 0 auto; font-size:.95rem; }
+
+  .panel{ background: var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 20px 22px 18px; }
+  .panel + .panel{ margin-top: 22px; }
+  .panel h2{ margin:0 0 4px; font-size:1.12rem; }
+  .panel .hint{ color:var(--text-dim); font-size:.85rem; margin: 0 0 14px; }
+
+  /* ------------------------------- sliders -------------------------------- */
+  .sliders{ display:flex; flex-wrap:wrap; gap:24px; margin-bottom:16px; }
+  .slider-group{ flex:1; min-width:240px; background:var(--panel-2); border:1px solid var(--line);
+                 border-radius:12px; padding:12px 16px; }
+  .slider-group .sg-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .slider-group .sg-name{ font-size:.85rem; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; }
+  .slider-group .sg-val{ font-family:var(--mono); font-size:1.05rem; font-weight:700; }
+  .slider-group.n .sg-val{ color:var(--tok-line); }
+  .slider-group.d .sg-val{ color:var(--flat-line); }
+  .slider-group input[type="range"]{ width:100%; accent-color: var(--accent); }
+  .slider-group .sg-sub{ font-size:.78rem; color:var(--text-dim); margin-top:4px; }
+
+  /* -------------------------------- stage --------------------------------- */
+  .stage{ background: var(--bg-soft); border:1px solid var(--line); border-radius: 12px;
+          padding: 14px 6px; overflow-x:auto; }
+  .stage svg{ display:block; margin: 0 auto; }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:16px; justify-content:center; margin:12px 0 2px;
+           font-size:.8rem; color:var(--text-dim); }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .chip{ width:14px; height:10px; border-radius:3px; display:inline-block; border:1.5px solid; }
+  .chip.tok{ background:var(--tok-fill); border-color:var(--tok-line); }
+  .chip.flat{ background:var(--flat-fill); border-color:var(--flat-line); }
+  .chip.w{ background:var(--w-fill); border-color:var(--w-line); }
+  .chip.out{ background:var(--out-fill); border-color:var(--out-line); }
+
+  /* ------------------------------ blow-up card ----------------------------- */
+  .blowup{ display:grid; grid-template-columns: 1.1fr 1fr; gap: 18px; margin-top: 18px; align-items:stretch; }
+  @media (max-width: 780px){ .blowup{ grid-template-columns: 1fr; } }
+  .count-card{ background: linear-gradient(160deg,#fff, #fdf2f4); border:1.5px solid #f0c6cc; border-radius: 14px;
+               padding: 18px 20px; box-shadow: var(--shadow); }
+  .count-card .formula{ font-size:1.5rem; text-align:center; margin: 4px 0 10px; }
+  .count-card .count{ font-family: var(--mono); font-size: 2.1rem; font-weight:700; color:#b3364a;
+                       text-align:center; line-height:1.15; word-break:break-all; }
+  .count-card .count-sub{ text-align:center; color:var(--text-dim); font-size:.82rem; margin-top:4px; }
+  .compare-card{ background: var(--panel-2); border:1px dashed var(--line); border-radius:14px; padding: 16px 20px; }
+  .compare-card h3{ margin:0 0 8px; font-size:.9rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; }
+  .compare-row{ display:flex; justify-content:space-between; align-items:center; padding:6px 0;
+                border-bottom: 1px solid var(--line); font-size:.88rem; }
+  .compare-row:last-child{ border-bottom:none; }
+  .compare-row .cr-label{ color: var(--text); }
+  .compare-row .cr-bar-wrap{ flex:1; margin: 0 12px; height: 8px; background:#eef1f6; border-radius:99px; overflow:hidden; }
+  .compare-row .cr-bar{ height:100%; background: linear-gradient(90deg,var(--accent), #7aa6f0); border-radius:99px; }
+  .compare-row .cr-bar.over{ background: linear-gradient(90deg,#d9777f,#b3364a); }
+  .compare-row .cr-val{ font-family:var(--mono); font-size:.8rem; color:var(--text-dim); min-width:80px; text-align:right; }
+
+  .story{ background: #f4f8ff; border:1px solid #cfdcf5; border-left: 4px solid var(--accent);
+          border-radius: 10px; padding: 12px 16px; font-size:.95rem; margin: 16px 0 0; }
+  .story b{ color: var(--accent); }
+
+  .facts{ display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:22px; }
+  @media (max-width: 860px){ .facts{ grid-template-columns: 1fr; } }
+  .fact-card{ background: var(--panel); border:1px solid var(--line); border-radius: 12px;
+              padding: 14px 17px; box-shadow: var(--shadow); }
+  .fact-card h3{ margin:0 0 7px; font-size:.95rem; }
+  .fact-card p{ margin:0 0 6px; font-size:.88rem; color:var(--text); }
+  .fact-card p.sub{ color:var(--text-dim); font-size:.84rem; }
+
+  footer{ text-align:center; color:var(--text-dim); font-size:.78rem; margin-top: 34px; }
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>Why Not Just Flatten the Sequence into One Dense Layer?</h1>
+    <p>Suppose we want a layer that lets every token in a sequence mix information with every other token.
+       The simplest idea: <b>flatten</b> the whole sequence into one giant vector and feed it through a single
+       <b>fully-connected (Dense) layer</b>. Slide <math><mi>N</mi></math> (sequence length) and
+       <math><mi>d</mi></math> (features per token) below and watch what happens to the layer's size.</p>
+  </header>
+
+  <section class="panel">
+    <h2>The naive idea: flatten, then fully-connect</h2>
+    <p class="hint">Each token is a vector of <math><mi>d</mi></math> numbers. A sequence of
+       <math><mi>N</mi></math> tokens, flattened end-to-end, is one vector of length
+       <math><mi>N</mi><mo>·</mo><mi>d</mi></math>. A Dense layer connects <b>every</b> input number to
+       <b>every</b> output number — so its weight matrix must be
+       <math><mo stretchy="false">(</mo><mi>N</mi><mo>·</mo><mi>d</mi><mo stretchy="false">)</mo>
+       <mo>×</mo><mo stretchy="false">(</mo><mi>N</mi><mo>·</mo><mi>d</mi><mo stretchy="false">)</mo></math>.</p>
+
+    <div class="sliders">
+      <div class="slider-group n">
+        <div class="sg-head">
+          <span class="sg-name">Sequence length N</span>
+          <span class="sg-val" id="nVal">4</span>
+        </div>
+        <input type="range" id="nSlider" min="2" max="12" value="4" step="1">
+        <div class="sg-sub">tokens in the sequence (words, sub-words, …)</div>
+      </div>
+      <div class="slider-group d">
+        <div class="sg-head">
+          <span class="sg-name">Features per token d</span>
+          <span class="sg-val" id="dVal">4</span>
+        </div>
+        <input type="range" id="dSlider" min="2" max="12" value="4" step="1">
+        <div class="sg-sub">size of each token's vector representation</div>
+      </div>
+    </div>
+
+    <div class="stage" id="stage"><div id="svgHost"></div></div>
+    <div class="legend">
+      <span><span class="chip tok"></span> token vectors (N of them, d numbers each)</span>
+      <span><span class="chip flat"></span> flattened input, length N·d</span>
+      <span><span class="chip w"></span> Dense weight matrix, (N·d) × (N·d)</span>
+      <span><span class="chip out"></span> output, length N·d</span>
+    </div>
+
+    <div class="story" id="story"></div>
+  </section>
+
+  <section class="panel">
+    <h2>The parameter count explodes</h2>
+    <p class="hint">Doubling the sequence length doesn't double the cost — it roughly <b>quadruples</b> it.
+       The same is true for doubling <math><mi>d</mi></math>. That's what it means for a cost to scale as
+       <math><msup><mi>N</mi><mn>2</mn></msup><mo>·</mo><msup><mi>d</mi><mn>2</mn></msup></math>.</p>
+    <div class="blowup">
+      <div class="count-card">
+        <div class="formula">
+          <math>
+            <mtext>parameters</mtext><mo>=</mo>
+            <msup><mrow><mo stretchy="false">(</mo><mi>N</mi><mo>·</mo><mi>d</mi><mo stretchy="false">)</mo></mrow><mn>2</mn></msup>
+            <mo>=</mo>
+            <msup><mi>N</mi><mn>2</mn></msup><mo>·</mo><msup><mi>d</mi><mn>2</mn></msup>
+          </math>
+        </div>
+        <div class="count" id="countBig"></div>
+        <div class="count-sub" id="countSub"></div>
+      </div>
+      <div class="compare-card">
+        <h3>For scale, compare against…</h3>
+        <div id="compareRows"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="facts">
+    <div class="fact-card">
+      <h3>🧩 Flattening throws away structure</h3>
+      <p>Treating the sequence as one long vector forgets that it's made of <math><mi>N</mi></math> separate
+         tokens — position and token boundaries only survive because of <em>where a number happens to sit</em>
+         in the vector.</p>
+      <p class="sub">A layer built this way has no idea "these d numbers are token 3" — it just sees N·d numbers.</p>
+    </div>
+    <div class="fact-card">
+      <h3>📈 Two multiplicative culprits</h3>
+      <p>The cost has <b>two</b> independent sources of growth: more tokens
+         (<math><mi>N</mi></math>) and richer token representations (<math><mi>d</mi></math>).
+         Because the weight matrix is <em>squared</em> in the combined size, each one contributes its own
+         squared factor.</p>
+      <p class="sub">That's why the exponent lands on both: <math><msup><mi>N</mi><mn>2</mn></msup></math> and
+         <math><msup><mi>d</mi><mn>2</mn></msup></math>, not just one of them.</p>
+    </div>
+    <div class="fact-card">
+      <h3>🚧 This doesn't scale to real sequences</h3>
+      <p>Real sequences run into the hundreds or thousands of tokens, with hidden sizes in the hundreds.
+         Plug those into the counter above and the parameter count blows past anything trainable.</p>
+      <p class="sub">This is the problem that motivates looking for a fundamentally different kind of layer.</p>
+    </div>
+  </section>
+
+  <footer>Single-file teaching widget · math typeset with native MathML (no external libraries)</footer>
+</div>
+
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+
+/* ============================== APP STATE ================================ */
+const state = { N: 4, d: 4 };
+
+/* ============================ REFERENCE SCALE ============================= */
+/* "Real world" comparators for the blow-up card. Values are counts of
+   trainable numbers, used only to give students a visceral sense of scale. */
+const REFS = [
+  { label: "Params in this repo's tiny char-RNN demo", value: 5_000 },
+  { label: "A small MLP hidden layer (512 × 512)",     value: 262_144 },
+  { label: "LeNet-5 (a classic small CNN)",             value: 60_000 },
+  { label: "GPT-2 small (124M params)",                 value: 124_000_000 },
+];
+
+function fmt(n){
+  if (n >= 1e12) return (n/1e12).toFixed(2) + "T";
+  if (n >= 1e9)  return (n/1e9).toFixed(2)  + "B";
+  if (n >= 1e6)  return (n/1e6).toFixed(2)  + "M";
+  if (n >= 1e3)  return (n/1e3).toFixed(1)  + "K";
+  return String(n);
+}
+
+/* ============================ SVG RENDERING ================================ */
+/* Layout: N token blocks (each a column of d cells) -> flatten arrow ->
+   one tall vector of N*d cells -> weight matrix square (N*d)x(N*d) with a
+   capped visual grid -> output vector of N*d cells. */
+
+const GEO = {
+  cellPx: 16, cellGap: 2, maxCellsShown: 14, /* cap so huge N*d stays readable */
+  tokY: 30, tokGap: 10,
+  rowH: 300
+};
+
+function clampGrid(total, cellPx, gap, cap){
+  /* returns {shown, cellPx, gap} — shrinks cell size before capping count */
+  let shown = Math.min(total, cap);
+  return shown;
+}
+
+function vecSVG(x, y, count, cellPx, gap, fill, line, cap){
+  const shown = Math.min(count, cap);
+  let s = "";
+  for (let i=0;i<shown;i++){
+    s += `<rect x="${x}" y="${y+i*(cellPx+gap)}" width="${cellPx}" height="${cellPx}" rx="2"
+          fill="${fill}" stroke="${line}" stroke-width="1.2"/>`;
+  }
+  if (count > cap){
+    s += `<text x="${x+cellPx/2}" y="${y+shown*(cellPx+gap)+12}" text-anchor="middle"
+          font-family="var(--font)" font-size="15" fill="${line}">⋮</text>`;
+  }
+  const h = (Math.min(shown,cap)+ (count>cap?1:0)) * (cellPx+gap);
+  return { svg: s, height: h };
+}
+
+function drawDiagram(N, d){
+  const g = GEO;
+  const cap = g.maxCellsShown;
+  const total = N * d;
+
+  /* --- token vectors: N columns of d cells --- */
+  const tokColW = g.cellPx + 6;
+  const tokBlockW = N * tokColW + (N-1)*4;
+  let tokX = 20;
+  let s = "";
+  const dShown = Math.min(d, cap);
+  for (let t=0; t<N; t++){
+    const cx = tokX + t*(tokColW+4);
+    for (let i=0;i<dShown;i++){
+      s += `<rect x="${cx}" y="${g.tokY+i*(g.cellPx+g.cellGap)}" width="${g.cellPx}" height="${g.cellPx}" rx="2"
+            fill="var(--tok-fill)" stroke="var(--tok-line)" stroke-width="1.2"/>`;
+    }
+    if (d > cap){
+      s += `<text x="${cx+g.cellPx/2}" y="${g.tokY+dShown*(g.cellPx+g.cellGap)+12}" text-anchor="middle"
+            font-family="var(--font)" font-size="14" fill="var(--tok-line)">⋮</text>`;
+    }
+    if (N <= 8){
+      s += `<text x="${cx+g.cellPx/2}" y="${g.tokY - 10}" text-anchor="middle" font-family="var(--font)"
+            font-size="11" fill="var(--text-dim)">tok ${t+1}</text>`;
+    }
+  }
+  const tokVisH = Math.min(dShown,cap)*(g.cellPx+g.cellGap) + (d>cap?16:0);
+  s += `<text x="${tokX + tokBlockW/2}" y="${g.tokY + tokVisH + 34}" text-anchor="middle"
+        font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--text-dim)">N = ${N} tokens × d = ${d} features</text>`;
+
+  /* --- arrow: flatten --- */
+  const arrowY = g.tokY + tokVisH/2;
+  const flatX = tokX + tokBlockW + 46;
+  s += `<line x1="${tokX+tokBlockW+6}" y1="${arrowY}" x2="${flatX-8}" y2="${arrowY}"
+        stroke="#41506a" stroke-width="1.9" marker-end="url(#mA)"/>`;
+  s += `<text x="${(tokX+tokBlockW+flatX)/2}" y="${arrowY-10}" text-anchor="middle"
+        font-family="var(--font)" font-size="11.5" fill="var(--text-dim)">flatten</text>`;
+
+  /* --- flattened vector: N*d cells in one column --- */
+  const flatV = vecSVG(flatX, g.tokY, total, g.cellPx, g.cellGap, "var(--flat-fill)", "var(--flat-line)", cap);
+  s += flatV.svg;
+  s += `<text x="${flatX+g.cellPx/2}" y="${g.tokY + flatV.height + 20}" text-anchor="middle"
+        font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--flat-line)">length N·d = ${total}</text>`;
+
+  /* --- arrow: dense --- */
+  const wX = flatX + 70;
+  s += `<line x1="${flatX+g.cellPx+6}" y1="${arrowY}" x2="${wX-8}" y2="${arrowY}"
+        stroke="#41506a" stroke-width="1.9" marker-end="url(#mA)"/>`;
+  s += `<text x="${(flatX+g.cellPx+wX)/2}" y="${arrowY-10}" text-anchor="middle"
+        font-family="var(--font)" font-size="11.5" fill="var(--text-dim)">Dense layer</text>`;
+
+  /* --- weight matrix: square grid, side = min(N*d, cap) cells, scaled if huge --- */
+  const side = Math.min(total, cap);
+  const wCell = total > cap ? Math.max(6, g.cellPx * (cap/Math.min(total,cap*3))) : g.cellPx;
+  const wSize = side * (wCell+1.4);
+  let wS = "";
+  for (let r=0;r<side;r++){
+    for (let cIdx=0;cIdx<side;cIdx++){
+      wS += `<rect x="${wX+cIdx*(wCell+1.4)}" y="${g.tokY+r*(wCell+1.4)}" width="${wCell}" height="${wCell}"
+             fill="var(--w-fill)" stroke="var(--w-line)" stroke-width="0.6"/>`;
+    }
+  }
+  s += wS;
+  const wRectX0 = wX, wRectY0 = g.tokY;
+  s += `<rect x="${wRectX0}" y="${wRectY0}" width="${wSize}" height="${wSize}" fill="none"
+        stroke="var(--w-line)" stroke-width="2"/>`;
+  if (total > cap){
+    s += `<text x="${wX+wSize/2}" y="${g.tokY+wSize/2+5}" text-anchor="middle"
+          font-family="var(--font)" font-size="${Math.min(15,wSize/8)}" font-weight="700"
+          fill="#b3364a" opacity=".85">${total}×${total}</text>`;
+  }
+  const wLabel = `(N·d) × (N·d) = ${total}×${total} = ${fmt(total*total)} weights`;
+  s += `<text x="${wX+wSize/2}" y="${g.tokY + wSize + 20}" text-anchor="middle"
+        font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--w-line)">${wLabel}</text>`;
+  const wLabelW = wLabel.length * 7.2;
+  const wColW = Math.max(wSize, wLabelW);
+
+  /* --- arrow: output --- */
+  const outX = wX + wColW/2 + wSize/2 + 46;
+  const wMidY = g.tokY + wSize/2;
+  s += `<line x1="${wX+wSize+6}" y1="${wMidY}" x2="${outX-8}" y2="${wMidY}"
+        stroke="#41506a" stroke-width="1.9" marker-end="url(#mA)"/>`;
+
+  /* --- output vector --- */
+  const outY = wMidY - Math.min(total,cap)*(g.cellPx+g.cellGap)/2;
+  const outV = vecSVG(outX, Math.max(outY, g.tokY), total, g.cellPx, g.cellGap, "var(--out-fill)", "var(--out-line)", cap);
+  s += outV.svg;
+  s += `<text x="${outX+g.cellPx/2}" y="${Math.max(outY, g.tokY) + outV.height + 20}" text-anchor="middle"
+        font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--out-line)">length N·d = ${total}</text>`;
+
+  const outLabelW = `length N·d = ${total}`.length * 7;
+  const totalW = outX + Math.max(g.cellPx, outLabelW) / 2 + 30;
+  const totalH = Math.max(g.tokY + wSize + 48, g.tokY + flatV.height + 48, 260);
+
+  const defs = `<defs><marker id="mA" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7"
+    orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#41506a"/></marker></defs>`;
+
+  return `<svg viewBox="0 0 ${totalW} ${totalH}" width="${totalW}" height="${totalH}" role="img"
+          aria-label="Flattening a sequence into a Dense layer's weight matrix">${defs}${s}</svg>`;
+}
+
+/* ================================ NARRATION ================================ */
+function narration(N, d){
+  const total = N*d;
+  return `Flatten <b>${N}</b> tokens of <b>${d}</b> numbers each into one vector of length
+    <b>${total}</b>. A fully-connected layer mapping that vector to an output of the same size needs a
+    weight for <em>every</em> pair of (input number, output number) — a
+    <b>${total} × ${total}</b> matrix, i.e. <b>${fmt(total*total)}</b> weights just for this one layer.`;
+}
+
+/* ================================ RENDER ==================================== */
+function render(){
+  const { N, d } = state;
+  $('nVal').textContent = N;
+  $('dVal').textContent = d;
+  $('svgHost').innerHTML = drawDiagram(N, d);
+  $('story').innerHTML = narration(N, d);
+
+  const total = N*d;
+  const paramCount = total*total;
+  $('countBig').textContent = paramCount.toLocaleString('en-US');
+  $('countSub').textContent = `weights, for N=${N}, d=${d} — this is one layer, before the model has learned anything`;
+
+  const rows = REFS.map(r => ({...r})).concat([{label:"This layer, right now", value: paramCount, self:true}])
+    .sort((a,b)=>a.value-b.value);
+  const maxV = Math.max(...rows.map(r=>r.value), 1);
+  $('compareRows').innerHTML = rows.map(r => {
+    const pct = Math.max(2, Math.min(100, (r.value/maxV)*100));
+    const barClass = r.self ? "cr-bar over" : "cr-bar";
+    const label = r.self ? `<b>${r.label}</b>` : r.label;
+    return `<div class="compare-row">
+      <span class="cr-label">${label}</span>
+      <span class="cr-bar-wrap"><span class="${barClass}" style="width:${pct}%"></span></span>
+      <span class="cr-val">${fmt(r.value)}</span>
+    </div>`;
+  }).join("");
+}
+
+/* ================================= WIRING ==================================== */
+$('nSlider').oninput = e => { state.N = +e.target.value; render(); };
+$('dSlider').oninput = e => { state.d = +e.target.value; render(); };
+
+render();
+</script>
+
+</body>
+</html>
