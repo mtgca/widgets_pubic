@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A Self-Attention Head, Step by Step · Interactive</title>
+<!--
+  ============================================================================
+  A SELF-ATTENTION HEAD, STEP BY STEP — AND MULTI-HEAD ATTENTION
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget. Everything (HTML + CSS + JS) in this file.
+  Mirrors the lecture deck "A Self-Attention head" in slide order:
+
+    1. Projecting Queries, Keys, and Values      (x·W_Q, x·W_K, x·W_V)
+    2. Quantifying affinities: scaled dot-product (Q·Kᵀ / √dk)
+    3. From affinities to attention weights       (row-wise softmax)
+    4. Aggregating Value through attention weights (A·V = Z)
+    5. Summary                                     (full formula + pipeline)
+    6. Multi-Head Self-Attention                   (h heads, concat, W_O)
+
+  DESIGN NOTES:
+  - LIGHT academic theme, no looping animations (repo conventions).
+  - Math rendered with native MathML (no libraries). SVG labels use
+    italic math-font <tspan> subscripts (MathML cannot live inside <svg>).
+  - MATRIX COLORS follow the lecture slides exactly:
+      input x  = green,  Q = light blue,  K = orange,  V = violet/magenta,
+      affinity / attention matrices = white→red heat scale.
+  - The running example is the 4-token sentence "the heavy metal door"
+    (n = 4, d = 4, dk = 3). The embeddings X and weights W_Q, W_K, W_V are
+    hand-designed constants, but EVERYTHING downstream (Q, K, V, scores,
+    softmax, output Z) is genuinely computed in JS. The constants were
+    tuned so the resulting attention matrix tells the slide's story:
+    "heavy"→"door" is high while "door"→"heavy" is low (asymmetry), and
+    "door" has a high diagonal while "the" has a low one (self-reliance).
+
+  HOW TO MODIFY:
+  - Tokens / numbers: see TOKENS, X, WQ, WK, WV near the top of the script.
+  - Multi-head diagram: see drawMultiHead() (d = 6, h selectable).
+  ============================================================================
+-->
+<style>
+  :root{
+    --bg:       #f5f8fd;
+    --panel:    #ffffff;
+    --panel-2:  #f2f6fc;
+    --line:     #d9e2ef;
+    --text:     #1f2937;
+    --text-dim: #64708a;
+    --accent:   #3b6fd4;
+
+    /* slide colors */
+    --x-fill:#def0d5; --x-line:#6da457; --x-deep:#3f7331;   /* input x  green  */
+    --q-fill:#d9edfa; --q-line:#4a9fd8; --q-deep:#1d78b5;   /* Q light blue    */
+    --k-fill:#fbe3cd; --k-line:#e0812f; --k-deep:#b45d0a;   /* K orange        */
+    --v-fill:#ead9f7; --v-line:#9155c8; --v-deep:#6d2fa8;   /* V violet-magenta*/
+    --z-fill:#fbe6ef; --z-line:#d67ba4;                     /* output Z pink   */
+
+    --radius: 14px;
+    --shadow: 0 6px 20px rgba(40,70,120,.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  html{ scroll-behavior:smooth; }
+  body{
+    background:
+      radial-gradient(1100px 520px at 82% -10%, #e9f0fb 0%, transparent 60%),
+      radial-gradient(900px 460px at -8% 6%, #eafaf6 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.55;
+  }
+  math{ font-family: var(--math); }
+  .wrap{ max-width: 1120px; margin: 0 auto; padding: 26px 20px 70px; }
+
+  .hero h1{ font-size: 27px; margin: 6px 0 6px; letter-spacing:-.02em; }
+  .hero p{ margin: 0 0 6px; color: var(--text-dim); max-width: 65em; }
+  .hero .sentence{
+    display:inline-block; margin-top:8px; padding:6px 14px; border-radius:10px;
+    background:var(--panel); border:1px solid var(--line); box-shadow:var(--shadow);
+    font-size:15px;
+  }
+  .hero .sentence b{ color:var(--accent); }
+
+  /* ---- step navigation ---- */
+  nav.steps{
+    position:sticky; top:0; z-index:50; margin:16px -20px 22px; padding:10px 20px;
+    background:rgba(245,248,253,.92); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; gap:8px;
+  }
+  nav.steps a{
+    text-decoration:none; color:var(--text-dim); font-size:13px; font-weight:600;
+    padding:6px 12px; border-radius:999px; border:1px solid var(--line); background:var(--panel);
+  }
+  nav.steps a:hover{ color:var(--accent); border-color:var(--accent); }
+  nav.steps a .num{
+    display:inline-block; width:17px; height:17px; border-radius:50%;
+    background:var(--accent); color:#fff; font-size:11px; line-height:17px;
+    text-align:center; margin-right:6px;
+  }
+
+  section.step{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:22px 24px 24px; margin-bottom:26px;
+    scroll-margin-top:64px;
+  }
+  section.step h2{ font-size:20px; margin:0 0 2px; letter-spacing:-.01em; }
+  section.step h2 .stepno{
+    display:inline-block; background:var(--accent); color:#fff; border-radius:8px;
+    font-size:13px; padding:2px 9px; margin-right:9px; vertical-align:2px;
+  }
+  section.step .sub{ color:var(--text-dim); margin:0 0 14px; font-size:14.5px; }
+  section.step p{ max-width:72em; }
+
+  /* ---- matrices as tables ---- */
+  .matwrap{ display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin:14px 0; overflow-x:auto; padding-bottom:4px; }
+  .matblock{ text-align:center; }
+  .matblock .dim{ margin-top:6px; font-size:14px; color:var(--text-dim); }
+  table.mat{ border-collapse:collapse; margin:0 auto; }
+  table.mat td, table.mat th{
+    border:1px solid var(--line); min-width:46px; padding:5px 7px; text-align:center;
+    font-size:13.5px; font-variant-numeric:tabular-nums;
+  }
+  table.mat th{ border:none; background:transparent; font-weight:600; font-size:12.5px; color:var(--text-dim); }
+  table.mat th.tok{ text-align:right; padding-right:9px; font-family:var(--math); font-style:italic; font-size:13.5px; color:var(--text); }
+  table.mat caption{ caption-side:top; font-weight:700; font-size:14px; padding-bottom:5px; }
+
+  .mat-x  td{ background:var(--x-fill); border-color:#b9d6ab; }
+  .mat-q  td{ background:var(--q-fill); border-color:#a8cfe9; }
+  .mat-k  td{ background:var(--k-fill); border-color:#efc79c; }
+  .mat-v  td{ background:var(--v-fill); border-color:#d0b3ea; }
+  .mat-z  td{ background:var(--z-fill); border-color:#eab5cd; }
+  .cap-x{ color:var(--x-deep); } .cap-q{ color:var(--q-deep); }
+  .cap-k{ color:var(--k-deep); } .cap-v{ color:var(--v-deep); }
+
+  td.hl{ outline:2.5px solid #334155; outline-offset:-2px; font-weight:700; }
+  td.hl-soft{ box-shadow: inset 0 0 0 100px rgba(51,65,85,.14); }
+  td.hl-mirror{ outline:2.5px dashed #b91c1c; outline-offset:-2px; }
+
+  .op{ font-size:26px; color:var(--text-dim); font-family:var(--math); padding:0 2px; align-self:center; }
+
+  /* ---- tabs / toggles / chips ---- */
+  .tabs{ display:flex; gap:8px; margin:4px 0 10px; flex-wrap:wrap; }
+  .tabs button, .chips button{
+    font:600 13.5px var(--font); padding:7px 14px; border-radius:999px; cursor:pointer;
+    border:1.5px solid var(--line); background:var(--panel-2); color:var(--text-dim);
+  }
+  .tabs button:hover, .chips button:hover{ border-color:var(--accent); color:var(--accent); }
+  .tabs button.on-q{ background:var(--q-fill); border-color:var(--q-line); color:var(--q-deep); }
+  .tabs button.on-k{ background:var(--k-fill); border-color:var(--k-line); color:var(--k-deep); }
+  .tabs button.on-v{ background:var(--v-fill); border-color:var(--v-line); color:var(--v-deep); }
+  .chips button.on{ background:#e8effc; border-color:var(--accent); color:var(--accent); }
+
+  /* ---- callout / explain boxes ---- */
+  .explain{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 14px; margin:10px 0; font-size:14.5px; min-height:44px;
+  }
+  .explain .muted{ color:var(--text-dim); }
+
+  .cards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(255px,1fr)); gap:12px; margin-top:14px; }
+  .card{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:11px 14px; font-size:14px;
+  }
+  .card h4{ margin:0 0 4px; font-size:13.5px; }
+  .card p{ margin:0; color:var(--text-dim); }
+  .card.note{ background:#fff8fb; border-color:#ecc7d8; }
+  .card.note h4{ color:#a3376b; }
+  .card.warn{ background:#fdf6ec; border-color:#eed3a8; }
+  .card.warn h4{ color:#93611a; }
+
+  .flag{
+    display:inline-block; font-size:12.5px; font-weight:700; padding:3px 10px; border-radius:7px; margin:2px 6px 2px 0;
+  }
+  .flag.red{ background:#fdecec; color:#b32020; border:1px solid #f0b9b9; }
+
+  /* ---- attention bars (step 3) ---- */
+  .rowbars .bar{ display:flex; align-items:center; gap:9px; margin:7px 0; }
+  .rowbars .lbl{ width:56px; text-align:right; font-family:var(--math); font-style:italic; font-size:14.5px; }
+  .rowbars .track{ flex:1; height:20px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .rowbars .fill{ height:100%; border-radius:5px 0 0 5px; }
+  .rowbars .pct{ width:48px; font-size:13px; font-variant-numeric:tabular-nums; color:var(--text-dim); }
+
+  .split{ display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start; }
+  .split > div{ flex:1 1 380px; min-width:320px; }
+
+  /* ---- weighted-sum visual (step 4) ---- */
+  .wsum{ display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+  .wsum .term{ display:flex; align-items:center; gap:10px; }
+  .wsum .alpha{
+    min-width:88px; text-align:center; font-size:13.5px; padding:5px 8px; border-radius:8px;
+    border:1px solid #eab5cd; font-variant-numeric:tabular-nums;
+  }
+  .wsum .vrow{ display:flex; gap:4px; }
+  .wsum .vcell{
+    min-width:52px; text-align:center; padding:5px 6px; font-size:13.5px; border-radius:6px;
+    background:var(--v-fill); border:1px solid #d0b3ea; font-variant-numeric:tabular-nums;
+  }
+  .wsum .who{ width:56px; font-family:var(--math); font-style:italic; text-align:right; }
+  .wsum .zres .vcell{ background:var(--z-fill); border-color:#eab5cd; font-weight:700; }
+
+  /* ---- centered equations & svg ---- */
+  .eq{ text-align:center; margin:14px 0; font-size:19px; overflow-x:auto; padding-bottom:2px; }
+  .wsum{ overflow-x:auto; }
+  .svgbox{ text-align:center; margin:8px 0; overflow-x:auto; }
+  .svgbox svg{ max-width:100%; height:auto; }
+
+  footer.pagefoot{ color:var(--text-dim); font-size:13px; text-align:center; margin-top:8px; }
+  footer.pagefoot a{ color:var(--accent); }
+  @media (max-width:700px){ .op{ display:none; } }
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <h1>A Self-Attention Head, Step by Step</h1>
+  <p>Follow one attention head end to end on a real example — every number below is genuinely computed.
+     Then see how several heads run in parallel as <b>Multi-Head Self-Attention</b>.</p>
+  <span class="sentence">Running example: <b>“the&nbsp;heavy&nbsp;metal&nbsp;door”</b> &nbsp;·&nbsp;
+    <math><mi>n</mi><mo>=</mo><mn>4</mn></math> tokens,&nbsp;
+    <math><mi>d</mi><mo>=</mo><mn>4</mn></math>,&nbsp;
+    <math><msub><mi>d</mi><mi>k</mi></msub><mo>=</mo><mn>3</mn></math></span>
+</header>
+
+<nav class="steps">
+  <a href="#s1"><span class="num">1</span>Project Q, K, V</a>
+  <a href="#s2"><span class="num">2</span>Scaled dot-product</a>
+  <a href="#s3"><span class="num">3</span>Softmax → weights</a>
+  <a href="#s4"><span class="num">4</span>Aggregate Values</a>
+  <a href="#s5"><span class="num">5</span>Summary</a>
+  <a href="#s6"><span class="num">6</span>Multi-Head</a>
+</nav>
+
+<!-- ================================================================ -->
+<!-- STEP 1 — PROJECTING Q, K, V                                      -->
+<!-- ================================================================ -->
+<section class="step" id="s1">
+  <h2><span class="stepno">Step 1</span>Projecting Queries, Keys, and Values</h2>
+  <p class="sub">Each token is transformed into three distinct functional roles: Query, Key, and Value.</p>
+
+  <p>The input <math><mi>x</mi><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>n</mi><mo>×</mo><mi>d</mi></mrow></msup></math>
+     holds one embedding row per token (semantic <em>+ positional</em> information).
+     We multiply it by three <b>learned weight matrices</b>
+     <math><msub><mi>W</mi><mi>Q</mi></msub><mo>,</mo><msub><mi>W</mi><mi>K</mi></msub><mo>,</mo><msub><mi>W</mi><mi>V</mi></msub></math>
+     to project every token into a new feature space. This lets the model learn
+     <b>what to “look for” (Query)</b> and <b>what to “show” (Key)</b> independently.</p>
+
+  <div class="tabs" id="projTabs">
+    <button data-role="q" class="on-q">Q — Query</button>
+    <button data-role="k">K — Key</button>
+    <button data-role="v">V — Value</button>
+  </div>
+
+  <div class="matwrap" id="projRow"></div>
+
+  <div class="explain" id="projExplain">
+    <span class="muted">Hover any cell of the result to see the dot product that produces it —
+    one <b>row of x</b> (a token) against one <b>column of the weight matrix</b>.</span>
+  </div>
+
+  <div class="cards">
+    <div class="card"><h4>Sequence length <math><mi>n</mi></math></h4>
+      <p>The number of tokens in the current <b>context window</b>. Here <math><mi>n</mi><mo>=</mo><mn>4</mn></math>.</p></div>
+    <div class="card"><h4>Model dimension <math><mi>d</mi></math> (embedding dim)</h4>
+      <p>The width of the hidden representation (e.g. 512 in real models). Here <math><mi>d</mi><mo>=</mo><mn>4</mn></math>.</p></div>
+    <div class="card"><h4>Projection dimension <math><msub><mi>d</mi><mi>k</mi></msub></math> (head dim)</h4>
+      <p>The width of the resulting <math><mi>Q</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>V</mi></math> vectors —
+      usually smaller than <math><mi>d</mi></math> (Step 6: <math><msub><mi>d</mi><mi>k</mi></msub><mo>=</mo><mi>d</mi><mo>/</mo><mi>h</mi></math>). Here <math><msub><mi>d</mi><mi>k</mi></msub><mo>=</mo><mn>3</mn></math>.</p></div>
+    <div class="card note"><h4>Technical note</h4>
+      <p>In general <math><msub><mi>W</mi><mi>V</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>d</mi><mo>×</mo><msub><mi>d</mi><mi>v</mi></msub></mrow></msup></math>
+      while <math><msub><mi>W</mi><mi>Q</mi></msub><mo>,</mo><msub><mi>W</mi><mi>K</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>d</mi><mo>×</mo><msub><mi>d</mi><mi>k</mi></msub></mrow></msup></math>;
+      although <math><msub><mi>d</mi><mi>k</mi></msub></math> and <math><msub><mi>d</mi><mi>v</mi></msub></math> can differ,
+      in practice it is common to set <math><msub><mi>d</mi><mi>k</mi></msub><mo>=</mo><msub><mi>d</mi><mi>v</mi></msub></math> (we do here).</p></div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- STEP 2 — SCALED DOT-PRODUCT                                      -->
+<!-- ================================================================ -->
+<section class="step" id="s2">
+  <h2><span class="stepno">Step 2</span>Quantifying Affinities: the Scaled Dot-Product</h2>
+  <p class="sub">How similar is each Key to each Query?</p>
+
+  <p>The <b>dot product</b> <math><mi>Q</mi><mo>·</mo><msup><mi>K</mi><mi>T</mi></msup></math> measures the affinity between a
+     <b>Query (what a token is looking for)</b> and every <b>Key (what other tokens are offering)</b>.
+     Aligned vectors give a large positive product (<b>high affinity</b>); near-orthogonal or opposite vectors give a
+     small or negative one (<b>low affinity</b>).</p>
+
+  <div class="tabs" id="scaleTabs">
+    <button data-scaled="0">Raw <math><mi>Q</mi><mo>·</mo><msup><mi>K</mi><mi>T</mi></msup></math></button>
+    <button data-scaled="1" class="on-q">Scaled <math><mi>Q</mi><mo>·</mo><msup><mi>K</mi><mi>T</mi></msup><mo>/</mo><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></math></button>
+  </div>
+
+  <div class="matwrap" id="scoreRow"></div>
+
+  <div class="explain" id="scoreExplain">
+    <span class="muted">Hover any cell of the affinity matrix: it highlights the <b>Query row</b> and <b>Key column</b> it comes from —
+    and its mirror cell across the diagonal, to show the matrix is <b>not symmetric</b>.</span>
+  </div>
+
+  <div class="cards">
+    <div class="card"><h4>Why scale by <math><mn>1</mn><mo>/</mo><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></math>? Variance control</h4>
+      <p>As <math><msub><mi>d</mi><mi>k</mi></msub></math> grows, dot products grow too. If <math><mi>Q</mi></math> and
+      <math><mi>K</mi></math> entries are independent with mean 0 and variance 1, their dot product has variance
+      <math><msub><mi>d</mi><mi>k</mi></msub></math>. Dividing by <math><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></math>
+      pushes the variance back to 1 — <b>numerical stability</b> for the softmax that comes next.</p></div>
+    <div class="card"><h4>The result is <math><mi>n</mi><mo>×</mo><mi>n</mi></math></h4>
+      <p>One affinity score for every (query&nbsp;token, key&nbsp;token) pair —
+      <math><mi>Q</mi><msup><mi>K</mi><mi>T</mi></msup><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>n</mi><mo>×</mo><mi>n</mi></mrow></msup></math>.
+      Row <math><mi>i</mi></math> = token <math><mi>i</mi></math> asking; column <math><mi>j</mi></math> = token <math><mi>j</mi></math> answering.</p></div>
+    <div class="card note"><h4>Technical note: dot product vs. cosine similarity</h4>
+      <p><math><mi>Q</mi><mo>·</mo><msup><mi>K</mi><mi>T</mi></msup></math> is related to cosine similarity, but we omit the
+      magnitude normalization (dividing by <math><mrow><mo>∥</mo><mi>Q</mi><mo>∥</mo><mo>∥</mo><mi>K</mi><mo>∥</mo></mrow></math>).
+      The scaled dot-product is computationally cheaper and, with the <math><mn>1</mn><mo>/</mo><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></math>
+      scaling, numerically stable for deep networks.</p></div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- STEP 3 — SOFTMAX → ATTENTION WEIGHTS                             -->
+<!-- ================================================================ -->
+<section class="step" id="s3">
+  <h2><span class="stepno">Step 3</span>From Affinities to Attention Weights: Where to Attend</h2>
+  <p class="sub">Softmax turns raw, unbounded scores into a probability distribution per row — the “filter”.</p>
+
+  <div class="eq"><math display="block">
+    <msub><mi>α</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow></msub><mo>=</mo>
+    <mi>softmax</mi>
+    <mrow><mo>(</mo><mfrac><mrow><mi>Q</mi><msup><mi>K</mi><mi>T</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac><mo>)</mo></mrow>
+    <mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>n</mi><mo>×</mo><mi>n</mi></mrow></msup>
+    <mspace width="1.6em"></mspace>
+    <munder><mo>∑</mo><mi>j</mi></munder><msub><mi>α</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow></msub><mo>=</mo><mn>1</mn>
+  </math></div>
+
+  <p>Softmax makes the highest affinities <b>stand out</b> and pushes low scores toward zero. Each row is now a set of
+     <b>attention weights</b>: a weight of 0.64 means the token is “paying 64% attention” to that word.
+     <b>Click a row</b> of the matrix to read it as a distribution.</p>
+
+  <div class="split">
+    <div>
+      <div class="matwrap" id="attnRow"></div>
+      <p style="font-size:13.5px;color:var(--text-dim);margin-top:2px;">
+        Every row sums to <b>1.00</b> — each token has an attention “budget” of exactly 1 to spend.</p>
+    </div>
+    <div>
+      <div class="explain" style="min-height:0" id="attnTitle"></div>
+      <div class="rowbars" id="attnBars"></div>
+      <div class="explain" id="attnStory"></div>
+    </div>
+  </div>
+
+  <p style="margin-top:14px">
+    <span class="flag red">It’s NOT symmetric!</span>
+    <span class="flag red">Non-constant diagonal</span>
+    The attention matrix is a <b>directed, asymmetric graph</b> — not a correlation table.</p>
+
+  <div class="cards">
+    <div class="card"><h4>Asymmetry: directional need</h4>
+      <p>Attention models <b>who needs whom</b>, not mutual similarity —
+      <math><msub><mi>W</mi><mi>Q</mi></msub></math> and <math><msub><mi>W</mi><mi>K</mi></msub></math> build different
+      subspaces for <b>asking vs. answering</b>. In our sentence: <span id="asymLive"></span></p></div>
+    <div class="card"><h4>Non-constant diagonal: self-reliance</h4>
+      <p>The diagonal measures how much of its budget a token keeps for itself. In our sentence: <span id="diagLive"></span></p></div>
+    <div class="card warn"><h4>Intuition: “Guatemala” vs. “bank”</h4>
+      <p>A highly specific token (<i>Guatemala</i>) already carries rich, unambiguous meaning — it tends to keep a
+      <b>high self-attention</b> score. An ambiguous token (<i>bank</i>) is useless alone: it must look outward
+      (to <i>river</i> or <i>money</i>) to resolve its identity — <b>low diagonal</b>.</p></div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- STEP 4 — AGGREGATING VALUES                                      -->
+<!-- ================================================================ -->
+<section class="step" id="s4">
+  <h2><span class="stepno">Step 4</span>Aggregating Value through Attention Weights</h2>
+  <p class="sub">Each output row is a weighted sum of all Value vectors — a context-aware representation.</p>
+
+  <p>Pick a token: its new representation <math><msub><mi>z</mi><mi>i</mi></msub></math> blends <b>every</b> Value row,
+     each contributing in proportion to its attention weight
+     <math><msub><mi>α</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow></msub></math>.
+     Tokens with near-zero weights are effectively <b>filtered out</b>.</p>
+
+  <div class="chips" id="tokChips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+
+  <div class="eq" id="wsumEq"></div>
+  <div class="wsum" id="wsumBox"></div>
+
+  <div class="matwrap" id="aggRow"></div>
+
+  <div class="cards">
+    <div class="card"><h4>The “weighted average” effect</h4>
+      <p>High-weight tokens contribute more of their <b>Value</b> to the result; irrelevant tokens
+      (near-zero weights) barely register.</p></div>
+    <div class="card"><h4>Final output <math><mi>Z</mi><mo>=</mo><mi>A</mi><mo stretchy="false">(</mo><mi>Q</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>V</mi><mo stretchy="false">)</mo></math></h4>
+      <p>Same number of rows as the input (<math><mi>n</mi></math>), but now every token <b>“knows” its relationship</b>
+      to the rest of the sentence — one context-aware feature vector per token.</p></div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- STEP 5 — SUMMARY                                                 -->
+<!-- ================================================================ -->
+<section class="step" id="s5">
+  <h2><span class="stepno">Step 5</span>Summary: One Self-Attention Head</h2>
+  <p class="sub">Attention is the foundational building block of the Transformer architecture.</p>
+
+  <div class="eq"><math display="block">
+    <mi>Z</mi><mo>=</mo>
+    <mi>A</mi><mo stretchy="false">(</mo><mi>Q</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>V</mi><mo stretchy="false">)</mo>
+    <mo>=</mo><mi>softmax</mi>
+    <mrow><mo>(</mo><mfrac><mrow><mi>Q</mi><msup><mi>K</mi><mi>T</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac><mo>)</mo></mrow>
+    <mi>V</mi>
+    <mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>n</mi><mo>×</mo><msub><mi>d</mi><mi>k</mi></msub></mrow></msup>
+  </math></div>
+
+  <div class="split">
+    <div>
+      <ol style="font-size:15px; line-height:1.9; max-width:34em;">
+        <li><b>Encode</b> position and semantic information into embeddings
+            <span style="color:var(--text-dim)">(see the
+            <a href="https://mtgca.github.io/interactive-widgets/positional_embeddings_interactive.html">positional-embeddings widget</a>)</span>.</li>
+        <li><b>Project</b> tokens into three specialized roles:
+            <b style="color:var(--q-deep)">Query</b>, <b style="color:var(--k-deep)">Key</b>, and <b style="color:var(--v-deep)">Value</b>.</li>
+        <li><b>Compute attention weights</b> by matching Queries to Keys (scaled dot-product + softmax).</li>
+        <li><b>Extract context-aware features</b> by applying those weights to the Values.</li>
+      </ol>
+    </div>
+    <div class="svgbox" id="pipelineBox"></div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- STEP 6 — MULTI-HEAD                                              -->
+<!-- ================================================================ -->
+<section class="step" id="s6">
+  <h2><span class="stepno">Step 6</span>Multi-Head Self-Attention</h2>
+  <p class="sub">Learning multiple relationships simultaneously.</p>
+
+  <p><b>The limitation of a single head:</b> one attention head can only focus on one type of relationship at a time
+     (say, subject–verb agreement). <b>The multi-head solution:</b> run <math><mi>h</mi></math> heads in
+     <b>parallel</b>, each attending to information from a <b>different representation subspace</b>.
+     Each head gets a slice of the model width: <math><msub><mi>d</mi><mi>k</mi></msub><mo>=</mo><mi>d</mi><mo>/</mo><mi>h</mi></math>.</p>
+
+  <div class="tabs" id="headTabs">
+    <span style="align-self:center;font-size:14px;color:var(--text-dim);margin-right:2px;">Number of heads <math><mi>h</mi></math> (with <math><mi>d</mi><mo>=</mo><mn>6</mn></math>):</span>
+    <button data-h="1">1</button>
+    <button data-h="2">2</button>
+    <button data-h="3" class="on-q">3</button>
+    <button data-h="6">6</button>
+  </div>
+
+  <div class="svgbox" id="mhBox"></div>
+  <div class="explain" id="mhExplain"></div>
+
+  <div class="cards">
+    <div class="card"><h4>Feature diversity</h4>
+      <p><b style="color:#2e77c9">Head 1</b> might focus on <b>syntax</b> (grammar rules);
+         <b style="color:#d64541">Head 2</b> on <b>semantics</b> (meaning, synonyms);
+         <b style="color:#3f9d4e">Head 3</b> on <b>long-range dependencies</b> (a word mentioned paragraphs ago).</p></div>
+    <div class="card"><h4>Why <math><msub><mi>d</mi><mi>k</mi></msub><mo>=</mo><mi>d</mi><mo>/</mo><mi>h</mi></math>?</h4>
+      <p>Concatenating <math><mi>h</mi></math> heads of width <math><mi>d</mi><mo>/</mo><mi>h</mi></math> restores width
+      <math><mi>d</mi></math>: the output shape matches the input shape — <b>strictly necessary for residual
+      connections</b> (which help with vanishing gradients) — and keeps the model <b>fast and cheap</b>
+      (no parameter blow-up as heads are added).</p></div>
+    <div class="card"><h4>The “ensemble” intuition</h4>
+      <p>Like an ensemble in classical ML: instead of one “expert”, 8 or 16 parallel heads each look for different
+      clues (syntax, semantics, long-range links) — and all of it runs <b>in parallel</b>.</p></div>
+    <div class="card"><h4>The role of <math><msup><mi>W</mi><mi>O</mi></msup></math></h4>
+      <p>If the heads are individual experts examining different parts of the problem,
+      <math><msup><mi>W</mi><mi>O</mi></msup><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>d</mi><mo>×</mo><mi>d</mi></mrow></msup></math>
+      is the <b>project manager</b>: it gathers their raw reports and synthesizes them into one unified representation
+      the rest of the network can act on.</p></div>
+  </div>
+</section>
+
+<footer class="pagefoot">
+  Part of the <a href="https://mtgca.github.io/interactive-widgets/">interactive-widgets</a> collection ·
+  companion to <a href="https://mtgca.github.io/interactive-widgets/attention_qkv_library_interactive.html">Attention Q,&nbsp;K,&nbsp;V: The Library Analogy</a>
+</footer>
+
+</div><!-- /wrap -->
+
+<script>
+"use strict";
+/* ==================================================================
+   DATA — hand-designed constants; everything below them is computed.
+   ================================================================== */
+const TOKENS = ["the","heavy","metal","door"];
+const N = 4, D = 4, DK = 3;
+
+const X = [                       // token + positional embeddings (n×d)
+  [1.0, 0.1, 0.0, 0.1],
+  [0.1, 1.0, 0.1, 0.0],
+  [0.0, 0.1, 1.0, 0.1],
+  [0.1, 0.0, 0.1, 1.0],
+];
+const WQ = [                      // learned projection (d×dk)
+  [0.2, 0.2, 0.8],
+  [0.4, 0.6, 2.8],
+  [0.4, 1.0, 2.0],
+  [0.0, 0.2, 2.6],
+];
+const WK = [
+  [0.2, 0.1, 0.0],
+  [1.0, 0.2, 0.1],
+  [0.2, 1.0, 0.1],
+  [0.1, 0.2, 1.2],
+];
+const WV = [
+  [0.5, 0.2, 0.1],
+  [1.2, 0.3, 0.2],
+  [0.2, 1.1, 0.3],
+  [0.3, 0.4, 1.3],
+];
+
+/* ---------------- linear algebra ---------------- */
+const matmul = (A,B) => A.map(r => B[0].map((_,j) => r.reduce((s,v,k)=> s + v*B[k][j], 0)));
+const transpose = M => M[0].map((_,j)=> M.map(r=> r[j]));
+const SCALE = Math.sqrt(DK);
+
+const Q = matmul(X, WQ);
+const K = matmul(X, WK);
+const V = matmul(X, WV);
+const KT = transpose(K);
+const S_RAW    = matmul(Q, KT);                       // raw affinities
+const S_SCALED = S_RAW.map(r => r.map(v => v/SCALE)); // scaled affinities
+const ATTN = S_SCALED.map(r => {                      // row-wise softmax
+  const m = Math.max(...r);
+  const e = r.map(v => Math.exp(v - m));
+  const s = e.reduce((a,b)=>a+b, 0);
+  return e.map(v => v/s);
+});
+const Z = matmul(ATTN, V);
+
+const fmt = v => (Math.round(v*100)/100).toFixed(2);
+const pct = v => (100*v).toFixed(0) + "%";
+
+/* ---------------- MathML string helpers ---------------- */
+const mi  = s => `<mi>${s}</mi>`;
+const mn  = s => `<mn>${s}</mn>`;
+const mo  = s => `<mo>${s}</mo>`;
+const msub = (a,b) => `<msub>${a}<mrow>${b}</mrow></msub>`;
+const math = inner => `<math>${inner}</math>`;
+const subIJ = (v,i,j) => msub(mi(v), mn(i+1)+mo(",")+mn(j+1));
+
+/* ---------------- matrix → HTML table ---------------- */
+/* opts: cls, cap, capCls, rowLabels, colLabels, id, heat(true→red scale), pctMode */
+function matTable(M, opts){
+  const o = opts || {};
+  let maxAbs = 1;
+  if (o.heat){ maxAbs = Math.max(...M.flat().map(Math.abs)); }
+  let h = `<table class="mat ${o.cls||""}" ${o.id?`id="${o.id}"`:""}>`;
+  if (o.cap) h += `<caption class="${o.capCls||""}">${o.cap}</caption>`;
+  if (o.colLabels){
+    h += `<tr>${o.rowLabels?"<th></th>":""}` +
+         o.colLabels.map(c=>`<th>${c}</th>`).join("") + `</tr>`;
+  }
+  M.forEach((row,i)=>{
+    h += "<tr>";
+    if (o.rowLabels) h += `<th class="tok">${o.rowLabels[i]}</th>`;
+    row.forEach((v,j)=>{
+      let style = "";
+      if (o.heat){
+        const t = Math.max(0, Math.min(1, Math.abs(v)/maxAbs));
+        // white → deep red, matching the slides' affinity heatmaps
+        const rC = 252 - 60*t, gC = 244 - 178*t, bC = 240 - 174*t;
+        style = `style="background:rgb(${rC|0},${gC|0},${bC|0});border-color:#e8c4bd;${t>0.72?"color:#fff;":""}"`;
+      }
+      h += `<td data-i="${i}" data-j="${j}" ${style}>${fmt(v)}</td>`;
+    });
+    if (o.rowSum) h += `<th style="padding-left:9px;">Σ = ${fmt(row.reduce((a,b)=>a+b,0))}</th>`;
+    h += "</tr>";
+  });
+  return h + "</table>";
+}
+const dimLabel = (nameML, rows, cols) =>
+  `<div class="dim">${math( nameML+mo("∈")+`<msup><mi>ℝ</mi><mrow>${rows}<mo>×</mo>${cols}</mrow></msup>` )}</div>`;
+
+/* ==================================================================
+   STEP 1 — projections with hover-to-expand dot product
+   ================================================================== */
+const ROLES = {
+  q: { W:WQ, R:Q, name:"Q", wName:"W", wSub:"Q", cls:"mat-q", cap:"Q — Query",  capCls:"cap-q", what:"what this token is <b>looking for</b>" },
+  k: { W:WK, R:K, name:"K", wName:"W", wSub:"K", cls:"mat-k", cap:"K — Key",    capCls:"cap-k", what:"what this token is <b>offering</b>" },
+  v: { W:WV, R:V, name:"V", wName:"W", wSub:"V", cls:"mat-v", cap:"V — Value",  capCls:"cap-v", what:"the <b>content</b> this token will hand over if attended to" },
+};
+let curRole = "q";
+
+function renderProjection(){
+  const r = ROLES[curRole];
+  const box = document.getElementById("projRow");
+  box.innerHTML =
+    `<div class="matblock">${matTable(X,{cls:"mat-x",cap:"x — input embeddings",capCls:"cap-x",rowLabels:TOKENS,id:"projX"})}${dimLabel(mi("x"),mi("n"),mi("d"))}</div>` +
+    `<span class="op">×</span>` +
+    `<div class="matblock">${matTable(r.W,{cls:r.cls,cap:math(msub(mi("W"),mi(r.wSub))) + " — learned",capCls:r.capCls,id:"projW"})}${dimLabel(msub(mi("W"),mi(r.wSub)),mi("d"),msub(mi("d"),mi("k")))}</div>` +
+    `<span class="op">=</span>` +
+    `<div class="matblock">${matTable(r.R,{cls:r.cls,cap:r.cap,capCls:r.capCls,rowLabels:TOKENS,id:"projR"})}${dimLabel(mi(r.name),mi("n"),msub(mi("d"),mi("k")))}</div>`;
+
+  const exp = document.getElementById("projExplain");
+  exp.innerHTML = `<span class="muted">Hover any cell of <b>${r.name}</b> to see the dot product that produces it. ${r.name} encodes ${r.what}.</span>`;
+
+  const xT = document.getElementById("projX"), wT = document.getElementById("projW"), rT = document.getElementById("projR");
+  rT.querySelectorAll("td").forEach(td=>{
+    td.addEventListener("mouseenter", ()=>{
+      const i = +td.dataset.i, j = +td.dataset.j;
+      clearHl([xT,wT,rT]);
+      td.classList.add("hl");
+      xT.querySelectorAll(`td[data-i="${i}"]`).forEach(c=>c.classList.add("hl-soft"));
+      wT.querySelectorAll(`td[data-j="${j}"]`).forEach(c=>c.classList.add("hl-soft"));
+      const terms = X[i].map((xv,kk)=> mn(fmt(xv)) + mo("·") + mn(fmt(r.W[kk][j])) ).join(mo("+"));
+      exp.innerHTML = `Row <i>${TOKENS[i]}</i> of <b>x</b> · column ${j+1} of ${math(msub(mi("W"),mi(r.wSub)))}: &nbsp;` +
+        math( subIJ(r.name,i,j) + mo("=") + terms + mo("=") + mn(fmt(r.R[i][j])) );
+    });
+  });
+  rT.addEventListener("mouseleave", ()=>{
+    clearHl([xT,wT,rT]);
+    exp.innerHTML = `<span class="muted">Hover any cell of <b>${r.name}</b> to see the dot product that produces it. ${r.name} encodes ${r.what}.</span>`;
+  });
+}
+function clearHl(tables){
+  tables.forEach(t=> t && t.querySelectorAll("td").forEach(c=> c.classList.remove("hl","hl-soft","hl-mirror")));
+}
+document.getElementById("projTabs").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  curRole = b.dataset.role;
+  document.querySelectorAll("#projTabs button").forEach(x=> x.className = "");
+  b.className = "on-" + curRole;
+  renderProjection();
+});
+
+/* ==================================================================
+   STEP 2 — affinity matrix with scaling toggle + asymmetry hover
+   ================================================================== */
+let scaled = true;
+function renderScores(){
+  const S = scaled ? S_SCALED : S_RAW;
+  const box = document.getElementById("scoreRow");
+  box.innerHTML =
+    `<div class="matblock">${matTable(Q,{cls:"mat-q",cap:"Q — Query",capCls:"cap-q",rowLabels:TOKENS,id:"sQ"})}${dimLabel(mi("Q"),mi("n"),msub(mi("d"),mi("k")))}</div>` +
+    `<span class="op">×</span>` +
+    `<div class="matblock">${matTable(KT,{cls:"mat-k",cap:math(`<msup><mi>K</mi><mi>T</mi></msup>`)+" — Keys transposed",capCls:"cap-k",colLabels:TOKENS,id:"sKT"})}${""}<div class="dim"><math><msup><mi>K</mi><mi>T</mi></msup><mo>∈</mo><msup><mi>ℝ</mi><mrow><msub><mi>d</mi><mi>k</mi></msub><mo>×</mo><mi>n</mi></mrow></msup></math></div></div>` +
+    `<span class="op">=</span>` +
+    `<div class="matblock">${matTable(S,{heat:true,cap:(scaled?"Affinity matrix (scaled)":"Affinity matrix (raw scores)"),rowLabels:TOKENS,colLabels:TOKENS,id:"sS"})}${""}<div class="dim"><math><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>n</mi><mo>×</mo><mi>n</mi></mrow></msup></math> ${scaled ? "· divided by "+"<math><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt><mo>=</mo><mn>"+fmt(SCALE)+"</mn></math>" : "· unbounded"}</div></div>`;
+
+  const exp = document.getElementById("scoreExplain");
+  const qT = document.getElementById("sQ"), kT = document.getElementById("sKT"), sT = document.getElementById("sS");
+  sT.querySelectorAll("td").forEach(td=>{
+    td.addEventListener("mouseenter", ()=>{
+      const i = +td.dataset.i, j = +td.dataset.j;
+      clearHl([qT,kT,sT]);
+      td.classList.add("hl");
+      qT.querySelectorAll(`td[data-i="${i}"]`).forEach(c=>c.classList.add("hl-soft"));
+      kT.querySelectorAll(`td[data-j="${j}"]`).forEach(c=>c.classList.add("hl-soft"));
+      let msg = `Query <i>${TOKENS[i]}</i> · Key <i>${TOKENS[j]}</i>: &nbsp;` +
+        math( subIJ("s",i,j) + mo("=") + msub(mi("q"),mi(TOKENS[i])) + mo("·") + msub(mi("k"),mi(TOKENS[j])) +
+              (scaled? mo("/")+`<msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt>` : "") + mo("=") + mn(fmt(S[i][j])) );
+      if (i !== j){
+        sT.querySelector(`td[data-i="${j}"][data-j="${i}"]`).classList.add("hl-mirror");
+        msg += ` &nbsp;—&nbsp; but the mirror cell <span style="color:#b91c1c">${TOKENS[j]} → ${TOKENS[i]}</span> is ` +
+               math(mn(fmt(S[j][i]))) + `: <b>not symmetric</b>.`;
+      } else {
+        msg += ` &nbsp;—&nbsp; a <b>diagonal</b> cell: <i>${TOKENS[i]}</i> matching its own key.`;
+      }
+      exp.innerHTML = msg;
+    });
+  });
+  sT.addEventListener("mouseleave", ()=>{
+    clearHl([qT,kT,sT]);
+    exp.innerHTML = `<span class="muted">Hover any cell of the affinity matrix: it highlights the <b>Query row</b> and <b>Key column</b> it comes from — and its mirror cell across the diagonal, to show the matrix is <b>not symmetric</b>.</span>`;
+  });
+}
+document.getElementById("scaleTabs").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  scaled = b.dataset.scaled === "1";
+  document.querySelectorAll("#scaleTabs button").forEach(x=> x.className = "");
+  b.className = "on-q";
+  renderScores();
+});
+
+/* ==================================================================
+   STEP 3 — softmax attention weights, clickable rows
+   ================================================================== */
+const BARCOLS = ["#94a3b8", "#e0812f", "#4a9fd8", "#c0392b"]; // per-column bar colors (the/heavy/metal/door)
+let selRow = 1; // start on "heavy" — the slide's example
+
+function renderAttn(){
+  const box = document.getElementById("attnRow");
+  box.innerHTML =
+    `<div class="matblock">${matTable(ATTN,{heat:true,cap:"Attention weights — the “filter”",rowLabels:TOKENS,colLabels:TOKENS,rowSum:true,id:"aA"})}` +
+    `<div class="dim"><math><mi>α</mi><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>n</mi><mo>×</mo><mi>n</mi></mrow></msup></math> · click a row</div></div>`;
+  const aT = document.getElementById("aA");
+  aT.querySelectorAll("td").forEach(td=>{
+    td.style.cursor = "pointer";
+    td.addEventListener("click", ()=>{ selRow = +td.dataset.i; renderAttnRow(); });
+  });
+  renderAttnRow();
+
+  // live callout numbers (computed, not hardcoded)
+  document.getElementById("asymLive").innerHTML =
+    `<i>heavy</i> → <i>door</i> is <b>${pct(ATTN[1][3])}</b> (the adjective needs its noun), but ` +
+    `<i>door</i> → <i>heavy</i> is only <b>${pct(ATTN[3][1])}</b> — the noun is already semantically complete.`;
+  document.getElementById("diagLive").innerHTML =
+    `<i>door</i> keeps <b>${pct(ATTN[3][3])}</b> of its budget (confident in its own meaning), while ` +
+    `<i>the</i> keeps only <b>${pct(ATTN[0][0])}</b> — an ambiguous function word spends its budget on neighbors.`;
+}
+function renderAttnRow(){
+  const aT = document.getElementById("aA");
+  aT.querySelectorAll("td").forEach(td=>{
+    td.classList.toggle("hl", +td.dataset.i === selRow);
+  });
+  document.getElementById("attnTitle").innerHTML =
+    `Row <b>“${TOKENS[selRow]}”</b> — where this token attends: &nbsp;` +
+    math( msub(mi("α"),mn(selRow+1)+mo(",")+mi("j")) ) + ` for every <math><mi>j</mi></math>`;
+  const bars = document.getElementById("attnBars");
+  bars.innerHTML = ATTN[selRow].map((v,j)=>
+    `<div class="bar"><div class="lbl">${TOKENS[j]}</div>` +
+    `<div class="track"><div class="fill" style="width:${(100*v).toFixed(1)}%;background:${BARCOLS[j]};"></div></div>` +
+    `<div class="pct">${pct(v)}</div></div>`).join("");
+  const sorted = ATTN[selRow].map((v,j)=>({v,j})).sort((a,b)=>b.v-a.v);
+  const top = sorted[0], self = ATTN[selRow][selRow];
+  document.getElementById("attnStory").innerHTML =
+    `<b>“${TOKENS[selRow]}”</b> pays <b>${pct(top.v)}</b> of its attention to <b>“${TOKENS[top.j]}”</b>` +
+    (top.j === selRow ? " — itself (high self-reliance)." :
+      `, and keeps ${pct(self)} for itself.`) +
+    ` The four weights sum to exactly 1.`;
+}
+
+/* ==================================================================
+   STEP 4 — weighted sum of Values
+   ================================================================== */
+let selTok = 1;
+function renderAgg(){
+  const chips = document.getElementById("tokChips");
+  chips.innerHTML = TOKENS.map((t,i)=>
+    `<button data-i="${i}" class="${i===selTok?"on":""}">${t}</button>`).join("");
+  chips.querySelectorAll("button").forEach(b=>
+    b.addEventListener("click", ()=>{ selTok = +b.dataset.i; renderAgg(); }));
+
+  document.getElementById("wsumEq").innerHTML = math(
+    msub(mi("z"),mi(TOKENS[selTok])) + mo("=") +
+    `<munder><mo>∑</mo><mi>j</mi></munder>` +
+    msub(mi("α"),mn(selTok+1)+mo(",")+mi("j")) + msub(mi("v"),mi("j"))
+  );
+
+  const box = document.getElementById("wsumBox");
+  const maxA = Math.max(...ATTN[selTok]);
+  box.innerHTML = ATTN[selTok].map((a,j)=>{
+    const t = a/maxA;
+    return `<div class="term">` +
+      `<div class="who">${TOKENS[j]}</div>` +
+      `<div class="alpha" style="background:rgba(214,123,164,${(0.12+0.55*t).toFixed(2)});">α = ${fmt(a)}</div>` +
+      `<span class="op" style="font-size:18px">×</span>` +
+      `<div class="vrow" style="opacity:${(0.35+0.65*t).toFixed(2)}">` +
+        V[j].map(v=>`<div class="vcell">${fmt(v)}</div>`).join("") + `</div>` +
+      (j < N-1 ? `<span class="op" style="font-size:18px">+</span>` : "") +
+      `</div>`;
+  }).join("") +
+  `<div class="term zres"><div class="who"></div>` +
+    `<div class="alpha" style="background:transparent;border:none;font-weight:700;">= &nbsp;${math(msub(mi("z"),mi(TOKENS[selTok])))}</div>` +
+    `<span class="op" style="font-size:18px;visibility:hidden">×</span>` +
+    `<div class="vrow">` + Z[selTok].map(v=>`<div class="vcell">${fmt(v)}</div>`).join("") + `</div></div>`;
+
+  const agg = document.getElementById("aggRow");
+  agg.innerHTML =
+    `<div class="matblock">${matTable(ATTN,{heat:true,cap:"Attention weighting",rowLabels:TOKENS,colLabels:TOKENS,id:"gA"})}</div>` +
+    `<span class="op">×</span>` +
+    `<div class="matblock">${matTable(V,{cls:"mat-v",cap:"V — Value",capCls:"cap-v",rowLabels:TOKENS,id:"gV"})}${dimLabel(mi("V"),mi("n"),msub(mi("d"),mi("k")))}</div>` +
+    `<span class="op">=</span>` +
+    `<div class="matblock">${matTable(Z,{cls:"mat-z",cap:"Z — context-aware features",rowLabels:TOKENS,id:"gZ"})}${dimLabel(mi("Z"),mi("n"),msub(mi("d"),mi("k")))}</div>`;
+  ["gA","gZ"].forEach(id=>{
+    document.getElementById(id).querySelectorAll(`td[data-i="${selTok}"]`).forEach(c=>c.classList.add("hl-soft"));
+  });
+}
+
+/* ==================================================================
+   STEP 5 — static pipeline SVG (one head, mirrors the summary slide)
+   ================================================================== */
+function gridRect(x,y,w,h,cols,rows,fill,stroke){
+  let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" stroke="${stroke}" stroke-width="1.4" rx="2"/>`;
+  for(let c=1;c<cols;c++){ const gx=x+w*c/cols; s+=`<line x1="${gx}" y1="${y}" x2="${gx}" y2="${y+h}" stroke="${stroke}" stroke-width="0.7" opacity="0.55"/>`; }
+  for(let r=1;r<rows;r++){ const gy=y+h*r/rows; s+=`<line x1="${x}" y1="${gy}" x2="${x+w}" y2="${gy}" stroke="${stroke}" stroke-width="0.7" opacity="0.55"/>`; }
+  return s;
+}
+function box(x,y,w,h,fill,stroke,label,textFill){
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="1.4"/>` +
+         `<text x="${x+w/2}" y="${y+h/2+4.5}" text-anchor="middle" font-size="13" font-weight="600" fill="${textFill||"#1f2937"}">${label}</text>`;
+}
+const arrow = (x1,y1,x2,y2) =>
+  `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#64708a" stroke-width="1.5" marker-end="url(#ah)"/>`;
+
+function drawPipeline(){
+  const W = 560, H = 610;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">`;
+  s += `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64708a"/></marker></defs>`;
+
+  const mathFont = `font-family="STIX Two Math,Cambria Math,Times New Roman,serif"`;
+
+  // --- inputs (three green matrices) ---
+  const xs = [90, 265, 440], gw = 52, gh = 74, gy = 505;
+  xs.forEach(cx => { s += gridRect(cx-gw/2, gy, gw, gh, 4, 5, "#def0d5", "#6da457"); });
+  s += `<text x="${xs[1]}" y="${gy+gh+22}" text-anchor="middle" font-size="12.5" fill="#3f7331" font-weight="600">input <tspan ${mathFont} font-style="italic">x</tspan> — token + positional embeddings</text>`;
+  // n / d annotations on first matrix
+  s += `<text x="${xs[0]-gw/2-12}" y="${gy+gh/2+4}" text-anchor="middle" font-size="12" fill="#c0392b" ${mathFont} font-style="italic">n</text>`;
+  s += `<text x="${xs[0]+gw/2-6}" y="${gy-6}" text-anchor="middle" font-size="12" fill="#e0812f" ${mathFont} font-style="italic">d</text>`;
+
+  // --- linear projections ---
+  const ly = 440;
+  s += arrow(xs[0], gy, xs[0], ly+34);
+  s += arrow(xs[1], gy, xs[1], ly+34);
+  s += arrow(xs[2], gy, xs[2], ly+34);
+  s += box(xs[0]-44, ly, 88, 32, "#d9edfa", "#4a9fd8", "Linear · W", "#1d78b5");
+  s += box(xs[1]-44, ly, 88, 32, "#fbe3cd", "#e0812f", "Linear · W", "#b45d0a");
+  s += box(xs[2]-44, ly, 88, 32, "#ead9f7", "#9155c8", "Linear · W", "#6d2fa8");
+  // subscripts on the W labels
+  s += `<text x="${xs[0]+31}" y="${ly+22}" font-size="10" font-weight="600" fill="#1d78b5" ${mathFont} font-style="italic">Q</text>`;
+  s += `<text x="${xs[1]+31}" y="${ly+22}" font-size="10" font-weight="600" fill="#b45d0a" ${mathFont} font-style="italic">K</text>`;
+  s += `<text x="${xs[2]+31}" y="${ly+22}" font-size="10" font-weight="600" fill="#6d2fa8" ${mathFont} font-style="italic">V</text>`;
+  s += `<text x="${xs[0]}" y="${ly-10}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1d78b5">Query</text>`;
+  s += `<text x="${xs[1]}" y="${ly-10}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#b45d0a">Key</text>`;
+  s += `<text x="${xs[2]}" y="${ly-10}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#6d2fa8">Value</text>`;
+
+  // --- Q,K → MatMul → Scale → Softmax ---
+  const mmx = 177, mmy = 365;
+  s += arrow(xs[0], ly, xs[0], mmy+32);        // Q up
+  s += `<path d="M ${xs[1]} ${ly} L ${xs[1]} ${mmy+50} L ${mmx+52} ${mmy+16}" fill="none" stroke="#64708a" stroke-width="1.5" marker-end="url(#ah)"/>`;
+  s += box(mmx-52, mmy, 104, 32, "#eef2f7", "#94a3b8",
+           `MatMul  <tspan ${mathFont} font-style="italic">Q·K<tspan dy="-4" font-size="9">T</tspan></tspan>`);
+  const scy = 305;
+  s += arrow(mmx, mmy, mmx, scy+32);
+  s += box(mmx-52, scy, 104, 32, "#eef2f7", "#94a3b8",
+           `Scale · <tspan ${mathFont} font-style="italic">1/√d<tspan dy="3" font-size="9">k</tspan></tspan>`);
+  const smy = 245;
+  s += arrow(mmx, scy, mmx, smy+32);
+  s += box(mmx-52, smy, 104, 32, "#fdecec", "#c86a6a", "Softmax", "#b32020");
+  s += `<text x="${mmx+62}" y="${smy+20}" font-size="11.5" fill="#c0392b" font-weight="600">attention weights ∈ ℝ<tspan dy="-4" font-size="9" ${mathFont} font-style="italic">n×n</tspan></text>`;
+
+  // --- weights + V → MatMul → Z ---
+  const fmx = 280, fmy = 165;
+  s += `<path d="M ${mmx} ${smy} L ${mmx} ${fmy+50} L ${fmx-54} ${fmy+18}" fill="none" stroke="#64708a" stroke-width="1.5" marker-end="url(#ah)"/>`;
+  s += `<path d="M ${xs[2]} ${ly} L ${xs[2]} ${fmy+50} L ${fmx+54} ${fmy+18}" fill="none" stroke="#64708a" stroke-width="1.5" marker-end="url(#ah)"/>`;
+  s += box(fmx-52, fmy, 104, 32, "#eef2f7", "#94a3b8", "MatMul  ·V");
+
+  // --- output matrix ---
+  const oy = 42, ow = 46, oh = 84, ox = fmx - ow/2;
+  s += arrow(fmx, fmy, fmx, oy+oh+8);
+  const rowCols = ["#c9a86a","#7fc4b8","#9aa2ad","#9aa2ad","#93b56f"];
+  for(let r=0;r<5;r++){
+    s += `<rect x="${ox}" y="${oy + r*oh/5}" width="${ow}" height="${oh/5}" fill="${rowCols[r]}" stroke="#6b7280" stroke-width="0.8"/>`;
+  }
+  for(let c=1;c<3;c++){ const gx=ox+ow*c/3; s+=`<line x1="${gx}" y1="${oy}" x2="${gx}" y2="${oy+oh}" stroke="#6b7280" stroke-width="0.6" opacity="0.6"/>`; }
+  s += `<text x="${ox-12}" y="${oy+oh/2+4}" text-anchor="middle" font-size="12" fill="#c0392b" ${mathFont} font-style="italic">n</text>`;
+  s += `<text x="${fmx}" y="${oy-10}" text-anchor="middle" font-size="12" fill="#c0392b" ${mathFont} font-style="italic">d<tspan dy="3" font-size="9">k</tspan></text>`;
+  s += `<text x="${ox+ow+12}" y="${oy+10}" font-size="11.5" fill="#64708a">← token 1: context-aware features</text>`;
+  s += `<text x="${ox+ow+12}" y="${oy+27}" font-size="11.5" fill="#64708a">← token 2: …</text>`;
+  s += `<text x="${ox+ow+12}" y="${oy+oh-3}" font-size="11.5" fill="#64708a">← token n: context-aware features</text>`;
+  s += `<text x="${ox+ow+12}" y="${oy+oh/2+2}" font-size="11.5" fill="#94a3b8">⋮</text>`;
+  s += `</svg>`;
+  document.getElementById("pipelineBox").innerHTML = s;
+}
+
+/* ==================================================================
+   STEP 6 — multi-head diagram (h selectable, d = 6)
+   ================================================================== */
+const HEADCOLS = ["#2e77c9","#d64541","#3f9d4e","#8a4bbf","#e0812f","#118a8a"];
+const HEADROLE = ["syntax","semantics","long-range","coreference","rare words","punctuation"];
+let curH = 3;
+
+function drawMultiHead(){
+  const d = 6, h = curH, dk = d/h;
+  const unit = 26, n = 5;
+  const headW = dk*unit, headH = n*17 + 24;
+  const gap = 12;
+  const concatW = h*headW + (h-1)*gap;
+  const top = 66;
+  const mathFont = `font-family="STIX Two Math,Cambria Math,Times New Roman,serif"`;
+  let s = "";
+
+  const x0 = 96;
+  // "Concat(" label
+  s += `<text x="${x0-10}" y="${top+headH/2+5}" text-anchor="end" font-size="16" font-weight="700" fill="#1f2937">Concat (</text>`;
+
+  // heads
+  for(let i=0;i<h;i++){
+    const hx = x0 + i*(headW+gap);
+    const col = HEADCOLS[i%6];
+    s += `<rect x="${hx}" y="${top}" width="${headW}" height="${headH}" rx="5" fill="#3d4451" stroke="${col}" stroke-width="2.5"/>`;
+    for(let r=1;r<n;r++){ const gy=top+24+(headH-24)*(r/n); s+=`<line x1="${hx}" y1="${gy}" x2="${hx+headW}" y2="${gy}" stroke="#5b6472" stroke-width="0.8"/>`; }
+    for(let c=1;c<dk;c++){ const gx=hx+headW*c/dk; s+=`<line x1="${gx}" y1="${top+24}" x2="${gx}" y2="${top+headH}" stroke="#5b6472" stroke-width="0.8"/>`; }
+    s += `<rect x="${hx}" y="${top}" width="${headW}" height="22" rx="5" fill="${col}"/>`;
+    if (headW >= 50) s += `<text x="${hx+headW/2}" y="${top+15}" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">Head ${i+1}</text>`;
+    else s += `<text x="${hx+headW/2}" y="${top+15}" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">${i+1}</text>`;
+    s += `<text x="${hx+headW/2}" y="${top+headH+14}" text-anchor="middle" font-size="10.5" fill="${col}" ${mathFont} font-style="italic">Z<tspan dy="2.5" font-size="8">${i}</tspan></text>`;
+    // dk bracket above
+    s += `<line x1="${hx+1}" y1="${top-9}" x2="${hx+headW-1}" y2="${top-9}" stroke="${col}" stroke-width="1.4"/>`;
+    if (headW >= 88)
+      s += `<text x="${hx+headW/2}" y="${top-15}" text-anchor="middle" font-size="10.5" fill="${col}" ${mathFont} font-style="italic">d<tspan dy="2.5" font-size="8">k</tspan><tspan dy="-2.5" font-size="10.5"> = d/${h} = ${dk}</tspan></text>`;
+    else if (headW >= 40)
+      s += `<text x="${hx+headW/2}" y="${top-15}" text-anchor="middle" font-size="10.5" fill="${col}" ${mathFont} font-style="italic">d<tspan dy="2.5" font-size="8">k</tspan><tspan dy="-2.5" font-size="10.5"> = ${dk}</tspan></text>`;
+  }
+  // d bracket over all heads
+  const dEnd = x0 + concatW;
+  s += `<line x1="${x0}" y1="${top-30}" x2="${dEnd}" y2="${top-30}" stroke="#e0812f" stroke-width="1.6"/>`;
+  s += `<text x="${(x0+dEnd)/2}" y="${top-37}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#e0812f">concatenated width = <tspan ${mathFont} font-style="italic">d</tspan> = 6</text>`;
+
+  // ") ×" then W_O
+  let xc = dEnd + 12;
+  s += `<text x="${xc}" y="${top+headH/2+5}" font-size="16" font-weight="700" fill="#1f2937">) ×</text>`;
+  xc += 42;
+  const woW = 78, woH = 78, woY = top + (headH-woH)/2;
+  s += gridRect(xc, woY, woW, woH, 4, 4, "#2a5ca8", "#173a70");
+  s += `<text x="${xc+woW/2}" y="${woY-10}" text-anchor="middle" font-size="12.5" fill="#173a70" font-weight="600"><tspan ${mathFont} font-style="italic">W<tspan dy="3" font-size="9">O</tspan></tspan><tspan dy="-3"> ∈ ℝ</tspan><tspan dy="-4" font-size="9" ${mathFont} font-style="italic">d×d</tspan></text>`;
+  s += `<text x="${xc+woW/2}" y="${woY+woH+16}" text-anchor="middle" font-size="11" fill="#64708a">the “project manager”</text>`;
+
+  // "=" then Z output
+  xc += woW + 16;
+  s += `<text x="${xc}" y="${top+headH/2+5}" font-size="16" font-weight="700" fill="#1f2937">=</text>`;
+  xc += 24;
+  const zW = 6*15, zH = headH-24;
+  s += gridRect(xc, top+24, zW, zH, 6, 5, "#fbe6ef", "#d67ba4");
+  s += `<text x="${xc-10}" y="${top+24+zH/2+4}" text-anchor="end" font-size="11.5" fill="#c0392b" ${mathFont} font-style="italic">n</text>`;
+  s += `<text x="${xc+zW/2}" y="${top+10}" text-anchor="middle" font-size="12" font-weight="700" fill="#c2557f"><tspan ${mathFont} font-style="italic">Z</tspan> ∈ ℝ<tspan dy="-4" font-size="9" ${mathFont} font-style="italic">n×d</tspan></text>`;
+  s += `<text x="${xc+zW/2}" y="${top+24+zH+16}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#c2557f">same dim as input!</text>`;
+
+  const W = xc + zW + 60;
+  document.getElementById("mhBox").innerHTML =
+    `<svg viewBox="0 0 ${W} 250" width="${W}" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">${s}</svg>`;
+
+  const roles = h <= 3
+    ? Array.from({length:h}, (_,i)=>`<b style="color:${HEADCOLS[i]}">Head ${i+1}</b> might focus on <b>${HEADROLE[i]}</b>`).join("; ")
+    : `Each head might specialize in a different relationship (syntax, semantics, long-range links, …)`;
+  document.getElementById("mhExplain").innerHTML =
+    `With <b>h = ${h}</b> head${h>1?"s":""} and <math><mi>d</mi><mo>=</mo><mn>6</mn></math>, each head works in a subspace of width ` +
+    `<math><msub><mi>d</mi><mi>k</mi></msub><mo>=</mo><mn>6</mn><mo>/</mo><mn>${h}</mn><mo>=</mo><mn>${dk}</mn></math>. ` +
+    `${roles}. Concatenating the ${h>1? h+" outputs" : "output"} restores width <math><mi>d</mi></math>, and ` +
+    `<math><msup><mi>W</mi><mi>O</mi></msup></math> mixes information <em>across</em> heads — so the block's output shape ` +
+    `equals its input shape, ready for the residual connection.`;
+}
+document.getElementById("headTabs").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b || !b.dataset.h) return;
+  curH = +b.dataset.h;
+  document.querySelectorAll("#headTabs button").forEach(x=> x.className = "");
+  b.className = "on-q";
+  drawMultiHead();
+});
+
+/* ---------------- init ---------------- */
+renderProjection();
+renderScores();
+renderAttn();
+renderAgg();
+drawPipeline();
+drawMultiHead();
+</script>
+</body>
+</html>
