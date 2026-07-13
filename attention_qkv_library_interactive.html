@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attention Q, K, V · The Library Analogy</title>
+<!--
+  ============================================================================
+  THE CORE OF ATTENTION — A LIBRARY ANALOGY (Q, K, V)
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget. Everything (HTML + CSS + JS) in this file.
+
+  PEDAGOGICAL GOAL (per maintainer):
+  Give students an intuition for Query / Key / Value BEFORE seeing the math.
+  The analogy: you walk into a library with a question (QUERY). Every book
+  advertises a spine label (KEY — used only for matching) and holds content
+  inside (VALUE — what is actually retrieved). A matching engine compares
+  your query against every label, a softmax turns the match scores into
+  weights that sum to 100%, and you walk out with a BLEND of the books'
+  contents, weighted by how well each label matched. Nothing is selected
+  or discarded — everything contributes, just in different amounts.
+
+  FLOW (mirrors the reference diagram):
+    1. QUERY   — pick a contextual need (chips).
+    2. LIBRARY — four books, each with a visible KEY tag and hidden VALUE;
+                 per-book match score and softmax attention weight.
+    3. RETRIEVAL — weighted sum shown as a 100% stacked composition bar.
+    4. RESULT  — blended color swatch + plain-language composition sentence.
+  A final section connects the analogy to softmax(QKᵀ/√dk)V with a mapping
+  table, a live numeric table, and a sharpness (temperature) slider.
+
+  DESIGN NOTES:
+  - LIGHT academic theme, no looping animations (repo conventions).
+  - Math rendered with native MathML (no libraries), per CLAUDE.md.
+  - Match scores per query are hand-designed constants (not real dot
+    products) chosen to make the softmax behavior pedagogically clear:
+    some queries are sharp (one book dominates), some are split.
+
+  HOW TO MODIFY:
+  - BOOKS holds the four key/value cards; QUERIES holds the chips and their
+    raw match scores (one per book, same order as BOOKS).
+  - render() is the single re-render entry point after state changes.
+  ============================================================================
+-->
+<style>
+  :root{
+    --ink:#1f2937; --muted:#6b7280; --bg:#f6f7fb; --card:#ffffff;
+    --line:#e5e7eb; --soft:#f1f5f9;
+    --accent:#2563eb; --accent-soft:#eff4ff;
+    --key:#166534;  --key-soft:#ecfdf5;
+    --val:#7c2d92;  --val-soft:#faf0fd;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --math:"STIX Two Math","Cambria Math","Latin Modern Math","Times New Roman",Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--ink);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:32px 16px 64px;}
+  math{font-family:var(--math);}
+  .wrap{max-width:1100px;margin:0 auto;}
+  h1{font-size:1.7rem;line-height:1.25;margin-bottom:6px;}
+  .subtitle{color:var(--muted);max-width:840px;margin-bottom:26px;}
+  h2{font-size:1.12rem;margin-bottom:4px;display:flex;align-items:center;gap:10px;}
+  .h2-sub{color:var(--muted);font-size:.92rem;margin-bottom:14px;max-width:840px;}
+  .stepnum{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--ink);
+    color:#fff;font-size:.85rem;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:22px 22px 20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+
+  /* ---- Step 1: query chips ---- */
+  .chips{display:flex;flex-wrap:wrap;gap:10px;}
+  .chip{padding:9px 16px;border-radius:999px;border:2px solid var(--line);background:#fff;
+    color:var(--ink);font-size:.92rem;font-weight:600;cursor:pointer;transition:border-color .15s,background .15s;}
+  .chip:hover{border-color:var(--accent);}
+  .chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .query-readout{margin-top:14px;font-size:.95rem;color:var(--muted);}
+  .query-readout b{color:var(--ink);}
+
+  /* ---- Step 2: library ---- */
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px;font-size:.85rem;}
+  .legend .li{display:flex;align-items:center;gap:7px;color:var(--muted);}
+  .swatch-key,.swatch-val{display:inline-block;padding:2px 9px;border-radius:5px;font-weight:700;font-size:.78rem;}
+  .swatch-key{background:var(--key-soft);color:var(--key);border:1px solid #a7e3cd;}
+  .swatch-val{background:var(--val-soft);color:var(--val);border:1px solid #e3c2ef;}
+
+  .shelf{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:16px;}
+  .book{border:2px solid var(--line);border-radius:12px;padding:14px;background:#fff;
+    display:flex;flex-direction:column;gap:10px;transition:border-color .15s,box-shadow .15s;}
+  .book.top{border-color:var(--book);box-shadow:0 3px 12px rgba(0,0,0,.08);}
+  .book .keytag{align-self:flex-start;background:var(--key-soft);border:1px solid #a7e3cd;
+    color:var(--key);font-size:.78rem;font-weight:700;padding:3px 10px;border-radius:5px;}
+  .book .keytag .kname{font-size:.95rem;}
+  .book .cover{border-left:6px solid var(--book);background:var(--soft);border-radius:6px;
+    padding:10px 12px;min-height:74px;}
+  .book .cover .vlabel{font-size:.72rem;font-weight:700;letter-spacing:.4px;color:var(--val);
+    text-transform:uppercase;margin-bottom:4px;}
+  .book .cover .vtext{font-size:.86rem;color:var(--ink);line-height:1.45;}
+  .book .matchrow{font-size:.8rem;color:var(--muted);display:flex;justify-content:space-between;align-items:baseline;}
+  .book .matchrow b{color:var(--ink);font-family:var(--mono);font-weight:600;}
+  .book .wbar{height:14px;border-radius:7px;background:var(--soft);overflow:hidden;}
+  .book .wbar .fill{height:100%;background:var(--book);border-radius:7px;transition:width .25s ease;}
+  .book .wpct{font-size:.95rem;font-weight:700;color:var(--book);font-family:var(--mono);}
+  .book .wlabel{font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+
+  .callout{margin-top:18px;border-left:4px solid var(--accent);background:var(--accent-soft);
+    border-radius:0 8px 8px 0;padding:10px 14px;font-size:.9rem;color:#1e3a8a;max-width:840px;}
+
+  /* ---- Step 3: retrieval ---- */
+  .stackwrap{margin-top:6px;}
+  .stackbar{display:flex;height:44px;border-radius:9px;overflow:hidden;border:1px solid var(--line);}
+  .stackbar .seg{display:flex;align-items:center;justify-content:center;color:#fff;
+    font-size:.82rem;font-weight:700;font-family:var(--mono);white-space:nowrap;overflow:hidden;
+    transition:width .25s ease;}
+  .stacklegend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:.85rem;color:var(--muted);}
+  .stacklegend .li{display:flex;align-items:center;gap:6px;}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
+
+  /* ---- Step 4: result ---- */
+  .result{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
+  .result .cube{width:92px;height:92px;border-radius:14px;border:1px solid var(--line);
+    box-shadow:inset 0 -14px 22px rgba(0,0,0,.14), 0 2px 8px rgba(0,0,0,.10);flex:0 0 auto;}
+  .result .sentence{flex:1 1 320px;font-size:.98rem;line-height:1.6;}
+  .result .sentence b{font-weight:700;}
+
+  /* ---- Math section ---- */
+  details.mathbox{border:1px solid var(--line);border-radius:14px;background:var(--card);
+    margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  details.mathbox summary{cursor:pointer;padding:16px 22px;font-weight:700;font-size:1.05rem;
+    list-style:none;display:flex;align-items:center;gap:10px;}
+  details.mathbox summary::-webkit-details-marker{display:none;}
+  details.mathbox summary::after{content:"▸";margin-left:auto;color:var(--muted);transition:transform .15s;}
+  details.mathbox[open] summary::after{transform:rotate(90deg);}
+  details.mathbox .inner{padding:0 22px 22px;}
+  .eq{background:var(--soft);border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;margin:6px 0 16px;overflow-x:auto;font-size:1.12rem;}
+  table.map{border-collapse:collapse;width:100%;font-size:.88rem;margin:8px 0 20px;}
+  table.map th,table.map td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top;}
+  table.map th{background:var(--soft);font-size:.8rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);}
+  table.map td:first-child{background:#fffdf5;}
+  table.num{border-collapse:collapse;font-size:.88rem;margin:8px 0 4px;min-width:420px;}
+  table.num th,table.num td{border:1px solid var(--line);padding:7px 12px;text-align:right;font-family:var(--mono);}
+  table.num th{background:var(--soft);font-family:inherit;font-size:.78rem;text-transform:uppercase;
+    letter-spacing:.4px;color:var(--muted);text-align:right;}
+  table.num td:first-child,table.num th:first-child{text-align:left;font-family:inherit;font-weight:600;}
+  .tscroll{overflow-x:auto;}
+  .sliderrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:14px 0 6px;}
+  .sliderrow label{font-size:.9rem;font-weight:600;}
+  .sliderrow input[type=range]{width:220px;accent-color:var(--accent);}
+  .sliderrow .tval{font-family:var(--mono);font-size:.88rem;color:var(--muted);min-width:150px;}
+  .note{font-size:.86rem;color:var(--muted);max-width:840px;}
+
+  footer{color:var(--muted);font-size:.85rem;margin-top:34px;text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+
+<h1>The Core of Attention: A Library Analogy (Q, K, V)</h1>
+<p class="subtitle">
+  You walk into a library with a question. Every book shows a <b>label on its spine</b>
+  (the <b>Key</b> — used only for matching) and holds <b>content inside</b>
+  (the <b>Value</b> — what you actually take away). Attention is the librarian:
+  it compares your question (the <b>Query</b>) against every label, and hands you a
+  <b>mixture of contents, weighted by how well each label matched</b>.
+  Pick a query below and follow the four steps.
+</p>
+
+<!-- ============ STEP 1 · QUERY ============ -->
+<section>
+  <h2><span class="stepnum">1</span> The Query (Q) — what are you looking for?</h2>
+  <p class="h2-sub">Your contextual need. In a transformer this is a vector the current
+  token computes to ask: <i>“what information do I need from the others?”</i></p>
+  <div class="chips" id="chips"></div>
+  <p class="query-readout" id="queryReadout"></p>
+</section>
+
+<!-- ============ STEP 2 · LIBRARY ============ -->
+<section>
+  <h2><span class="stepnum">2</span> The Library — Keys are matched, Values wait inside</h2>
+  <p class="h2-sub">The matching engine compares the query against <b>every</b> spine label
+  and softmax turns the match scores into <b>attention weights that always sum to 100%</b>.</p>
+  <div class="legend">
+    <span class="li"><span class="swatch-key">KEY</span> spine label · visible · used for matching</span>
+    <span class="li"><span class="swatch-val">VALUE</span> content inside · retrieved, never matched</span>
+  </div>
+  <div class="shelf" id="shelf"></div>
+  <div class="callout">
+    <b>The separation is the point:</b> the Key decides <i>how much</i> attention a book gets;
+    the Value is <i>what</i> actually flows out. A book can advertise one thing and contain another —
+    matching and content are two different jobs, so attention learns two different vectors for them.
+  </div>
+</section>
+
+<!-- ============ STEP 3 · RETRIEVAL ============ -->
+<section>
+  <h2><span class="stepnum">3</span> The Retrieval — a weighted sum of Values</h2>
+  <p class="h2-sub">No book is “selected” and none is discarded. Every Value flows into the
+  result — each contributing exactly its attention weight.</p>
+  <div class="stackwrap">
+    <div class="stackbar" id="stackbar"></div>
+    <div class="stacklegend" id="stacklegend"></div>
+  </div>
+</section>
+
+<!-- ============ STEP 4 · RESULT ============ -->
+<section>
+  <h2><span class="stepnum">4</span> The Result — a context-aware representation</h2>
+  <p class="h2-sub">The blend depends entirely on the query: change the question and the
+  same library returns a different mixture.</p>
+  <div class="result">
+    <div class="cube" id="resultCube"></div>
+    <p class="sentence" id="resultSentence"></p>
+  </div>
+  <div class="callout">
+    <b>Attention is a weighted average, not an if/else.</b> The output is a <i>mixture</i> of
+    Values — mostly the best match, but with a little of everything else. That softness is what
+    lets gradients flow and lets the model hedge between several relevant sources.
+  </div>
+</section>
+
+<!-- ============ FROM ANALOGY TO EQUATION ============ -->
+<details class="mathbox">
+  <summary><span class="stepnum">+</span> From the analogy to the real equation (peek ahead)</summary>
+  <div class="inner">
+
+    <p class="note">Everything above is one formula. Each row of <math><mi>Q</mi></math> is a
+    query, each row of <math><mi>K</mi></math> a spine label, each row of
+    <math><mi>V</mi></math> a book’s content:</p>
+
+    <div class="eq">
+      <math display="block">
+        <mrow>
+          <mi>Attention</mi><mo stretchy="false">(</mo><mi>Q</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>V</mi><mo stretchy="false">)</mo>
+          <mo>=</mo>
+          <mi>softmax</mi>
+          <mrow>
+            <mo>(</mo>
+            <mfrac>
+              <mrow><mi>Q</mi><msup><mi>K</mi><mo>⊤</mo></msup></mrow>
+              <msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt>
+            </mfrac>
+            <mo>)</mo>
+          </mrow>
+          <mi>V</mi>
+        </mrow>
+      </math>
+    </div>
+
+    <table class="map">
+      <thead><tr><th>In the library</th><th>In attention</th></tr></thead>
+      <tbody>
+        <tr><td>You, with a question (“Physics”)</td>
+            <td>Query vector <math><mi>q</mi></math> computed by the current token</td></tr>
+        <tr><td>The spine label of book <math><mi>i</mi></math></td>
+            <td>Key vector <math><msub><mi>k</mi><mi>i</mi></msub></math> of token <math><mi>i</mi></math></td></tr>
+        <tr><td>The content inside book <math><mi>i</mi></math></td>
+            <td>Value vector <math><msub><mi>v</mi><mi>i</mi></msub></math> of token <math><mi>i</mi></math></td></tr>
+        <tr><td>How well a label matches your question</td>
+            <td>Score <math><mrow><mi>q</mi><mo>·</mo><msub><mi>k</mi><mi>i</mi></msub></mrow></math> (a dot product)</td></tr>
+        <tr><td>The librarian normalizing enthusiasm to 100%</td>
+            <td><math><mi>softmax</mi></math> over the scores → weights <math><msub><mi>w</mi><mi>i</mi></msub></math></td></tr>
+        <tr><td>Photocopying pages from several books, proportionally</td>
+            <td>Weighted sum
+                <math><mrow><munder><mo>∑</mo><mi>i</mi></munder><msub><mi>w</mi><mi>i</mi></msub><msub><mi>v</mi><mi>i</mi></msub></mrow></math></td></tr>
+        <tr><td>The notes you walk out with</td>
+            <td>The token’s new context-aware representation</td></tr>
+      </tbody>
+    </table>
+
+    <p class="note" style="margin-bottom:14px"><b>One thing the analogy hides:</b> in
+    <i>self</i>-attention there is no separate reader — <b>every token plays all three roles at
+    once</b>. It asks a question (Q), advertises a label (K), and offers content (V), all computed
+    from its own embedding by three learned matrices
+    <math><mrow><msub><mi>W</mi><mi>Q</mi></msub><mo>,</mo><msub><mi>W</mi><mi>K</mi></msub><mo>,</mo><msub><mi>W</mi><mi>V</mi></msub></mrow></math>.
+    Every token visits the library, and every token is also a book.</p>
+
+    <div class="sliderrow">
+      <label for="temp">Score sharpness</label>
+      <input type="range" id="temp" min="-1" max="1" step="0.05" value="0">
+      <span class="tval" id="tempReadout"></span>
+    </div>
+    <p class="note" style="margin-bottom:12px">This rescales the scores before softmax — the same
+    role the <math><mrow><mn>1</mn><mo>/</mo><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mrow></math>
+    factor plays in the formula. Sharper → the winner takes (almost) all; softer → weights spread
+    toward a uniform average. Watch the bars in steps 2–4 react.</p>
+
+    <div class="tscroll">
+      <table class="num" id="numTable"></table>
+    </div>
+  </div>
+</details>
+
+<footer>
+  Attention Q/K/V — library analogy · self-contained HTML · MathML rendered natively by your browser
+</footer>
+
+</div>
+
+<script>
+'use strict';
+
+/* ---------- data ---------- */
+const BOOKS = [
+  { name:'Science', color:'#0d9488',
+    value:'atoms, energy, experiments, E = mc²' },
+  { name:'History', color:'#d97706',
+    value:'dates, empires, revolutions, treaties' },
+  { name:'Fiction', color:'#7c3aed',
+    value:'characters, plots, imaginary worlds' },
+  { name:'Cooking', color:'#e11d48',
+    value:'recipes, flavors, techniques' },
+];
+
+/* raw match scores per query, one per book (Science, History, Fiction, Cooking).
+   Hand-designed for pedagogy: some sharp, some deliberately split. */
+const QUERIES = [
+  { label:'Physics',                    scores:[3.2, 0.6, 0.3, 0.1],
+    blurb:'a sharp query — one label clearly dominates' },
+  { label:'The French Revolution',      scores:[0.4, 3.2, 0.9, 0.2],
+    blurb:'History wins; Fiction gets a little (novels about it exist)' },
+  { label:'A science-fiction novel',    scores:[2.1, 0.2, 2.5, 0.0],
+    blurb:'a split query — two labels match, so two Values blend' },
+  { label:'The history of chemistry',   scores:[2.4, 2.5, 0.2, 0.1],
+    blurb:'an almost perfect tie between two shelves' },
+  { label:'A dinner to impress',        scores:[0.3, 0.2, 0.8, 3.1],
+    blurb:'Cooking dominates; Fiction chips in ideas for the mood' },
+];
+
+const state = { q: 0, sharp: 0 };   // sharp in [-1,1] → multiplier 4^sharp
+
+/* ---------- helpers ---------- */
+function softmax(scores, mult){
+  const exps = scores.map(s => Math.exp(s * mult));
+  const sum = exps.reduce((a,b)=>a+b,0);
+  return exps.map(e => e/sum);
+}
+function hexToRgb(h){ return [1,3,5].map(i => parseInt(h.slice(i,i+2),16)); }
+function mixColor(weights){
+  const rgb = [0,0,0];
+  BOOKS.forEach((b,i)=>{
+    const c = hexToRgb(b.color);
+    for (let j=0;j<3;j++) rgb[j] += weights[i]*c[j];
+  });
+  return `rgb(${rgb.map(v=>Math.round(v)).join(',')})`;
+}
+function pct(w){ return (w*100).toFixed(w*100 >= 9.95 ? 0 : 1) + '%'; }
+
+/* ---------- static DOM ---------- */
+const chipsEl = document.getElementById('chips');
+QUERIES.forEach((q,i)=>{
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = '“' + q.label + '”';
+  b.addEventListener('click', ()=>{ state.q = i; render(); });
+  chipsEl.appendChild(b);
+});
+
+const shelfEl = document.getElementById('shelf');
+BOOKS.forEach((book,i)=>{
+  const d = document.createElement('div');
+  d.className = 'book'; d.style.setProperty('--book', book.color);
+  d.innerHTML = `
+    <div class="keytag">KEY · <span class="kname">${book.name}</span></div>
+    <div class="cover">
+      <div class="vlabel">Value (inside)</div>
+      <div class="vtext">${book.value}</div>
+    </div>
+    <div class="matchrow"><span>match score</span><b id="score-${i}"></b></div>
+    <div class="wlabel">attention weight</div>
+    <div class="wbar"><div class="fill" id="fill-${i}"></div></div>
+    <div class="wpct" id="wpct-${i}" style="color:${book.color}"></div>`;
+  shelfEl.appendChild(d);
+});
+
+const legendEl = document.getElementById('stacklegend');
+BOOKS.forEach((book,i)=>{
+  const s = document.createElement('span');
+  s.className = 'li';
+  s.innerHTML = `<span class="dot" style="background:${book.color}"></span>${book.name} <b id="leg-${i}" style="font-family:var(--mono)"></b>`;
+  legendEl.appendChild(s);
+});
+
+const stackEl = document.getElementById('stackbar');
+BOOKS.forEach((book,i)=>{
+  const seg = document.createElement('div');
+  seg.className = 'seg'; seg.id = 'seg-'+i; seg.style.background = book.color;
+  stackEl.appendChild(seg);
+});
+
+/* ---------- render ---------- */
+function render(){
+  const q = QUERIES[state.q];
+  const mult = Math.pow(4, state.sharp);          // sharpness multiplier
+  const w = softmax(q.scores, mult);
+  const top = w.indexOf(Math.max(...w));
+
+  /* chips + readout */
+  [...chipsEl.children].forEach((c,i)=> c.classList.toggle('active', i===state.q));
+  document.getElementById('queryReadout').innerHTML =
+    `Query: <b>“${q.label}”</b> — ${q.blurb}.`;
+
+  /* books */
+  BOOKS.forEach((book,i)=>{
+    shelfEl.children[i].classList.toggle('top', i===top);
+    document.getElementById('score-'+i).textContent = q.scores[i].toFixed(1);
+    document.getElementById('fill-'+i).style.width = (w[i]*100).toFixed(1)+'%';
+    document.getElementById('wpct-'+i).textContent = pct(w[i]);
+  });
+
+  /* stacked bar + legend */
+  BOOKS.forEach((book,i)=>{
+    const seg = document.getElementById('seg-'+i);
+    seg.style.width = (w[i]*100)+'%';
+    seg.textContent = w[i] >= 0.09 ? pct(w[i]) : '';
+    seg.title = `${book.name}: ${pct(w[i])}`;
+    document.getElementById('leg-'+i).textContent = pct(w[i]);
+  });
+
+  /* result */
+  document.getElementById('resultCube').style.background = mixColor(w);
+  const order = w.map((wi,i)=>({wi,i})).sort((a,b)=>b.wi-a.wi);
+  const [first, ...rest] = order;
+  document.getElementById('resultSentence').innerHTML =
+    `For the query <b>“${q.label}”</b>, the result is mostly ` +
+    `<b style="color:${BOOKS[first.i].color}">${BOOKS[first.i].name} (${pct(first.wi)})</b>, ` +
+    `plus ` + rest.map(({wi,i}) =>
+      `<span style="color:${BOOKS[i].color};font-weight:600">${BOOKS[i].name} (${pct(wi)})</span>`
+    ).join(', ') +
+    `. The final information is a mixture of <b>Values</b>, weighted by how well their ` +
+    `<b>Keys</b> matched the <b>Query</b>.`;
+
+  /* sharpness readout */
+  document.getElementById('tempReadout').textContent =
+    'scores × ' + mult.toFixed(2) +
+    (state.sharp > 0.15 ? ' (sharper)' : state.sharp < -0.15 ? ' (softer)' : ' (default)');
+
+  /* numeric table */
+  const rows = BOOKS.map((book,i)=>{
+    const s = q.scores[i]*mult;
+    return `<tr><td style="color:${book.color}">${book.name}</td>` +
+      `<td>${q.scores[i].toFixed(1)}</td><td>${s.toFixed(2)}</td>` +
+      `<td>${Math.exp(s).toFixed(2)}</td><td>${pct(w[i])}</td></tr>`;
+  }).join('');
+  document.getElementById('numTable').innerHTML =
+    `<thead><tr><th>book</th><th>raw score</th><th>scaled</th>` +
+    `<th>exp(scaled)</th><th>weight <math><msub><mi>w</mi><mi>i</mi></msub></math></th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+document.getElementById('temp').addEventListener('input', e=>{
+  state.sharp = parseFloat(e.target.value); render();
+});
+
+render();
+</script>
+
+</body>
+</html>
