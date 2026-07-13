@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Drift &amp; Retraining Visualizer</title>
+<style>
+  :root{
+    --math: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", Georgia, serif;
+    --ink:#333; --muted:#6b7280; --line:#e5e7eb;
+    --accent:#d63384; --card:#ffffff; --bg:#f8f9fa;
+    --orig:#2563eb;     /* training distribution */
+    --new:#e8590c;      /* drifted / incoming distribution */
+    --good:#1a7a4a; --warn:#9a5b00; --bad:#c0392b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink); margin:0; padding:24px;
+  }
+  math{ font-family:var(--math); }
+  h1{ color:var(--accent); text-align:center; margin:0 0 4px; font-size:26px; }
+  .sub{ text-align:center; color:var(--muted); max-width:760px; margin:0 auto 22px; line-height:1.5; }
+  .wrap{ max-width:960px; margin:0 auto; }
+
+  .panel{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:20px; box-shadow:0 1px 3px rgba(0,0,0,.06);
+  }
+  .stage-tabs{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:18px; }
+  .stage-tabs button{
+    padding:9px 14px; font-size:14px; font-weight:600; cursor:pointer;
+    background:#f1f3f5; color:var(--ink); border:1px solid var(--line);
+    border-radius:999px; transition:background-color .15s,border-color .15s,color .15s;
+  }
+  .stage-tabs button:hover{ background:#e9ecef; }
+  .stage-tabs button.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .grid{ display:grid; grid-template-columns:1fr 300px; gap:20px; align-items:start; }
+  @media (max-width:820px){ .grid{ grid-template-columns:1fr; } }
+
+  .plot-title{ font-size:14px; font-weight:600; margin:0 0 6px; color:var(--ink); }
+  .legend{ display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--muted); margin-top:6px; }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .swatch{ width:12px; height:12px; border-radius:3px; display:inline-block; }
+  .swatch.line{ height:0; border-top:3px solid; width:16px; border-radius:0; }
+
+  .readout{ display:flex; flex-direction:column; gap:12px; }
+  .metric{
+    border:1px solid var(--line); border-radius:10px; padding:12px 14px; background:#fcfcfd;
+  }
+  .metric .name{ font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .metric .val{ font-size:30px; font-weight:700; line-height:1.1; margin-top:2px; }
+  .bar{ height:8px; border-radius:999px; background:#edf0f2; overflow:hidden; margin-top:8px; }
+  .bar > i{ display:block; height:100%; border-radius:999px; transition:width .3s ease; }
+
+  .status{ border-radius:10px; padding:12px 14px; font-size:14px; line-height:1.45; border:1px solid; }
+  .status.good{ background:#e9f8f0; color:var(--good); border-color:#9ad9bb; }
+  .status.warn{ background:#fdf3e7; color:var(--warn); border-color:#f0c088; }
+  .status.bad{  background:#fdecea; color:var(--bad);  border-color:#f1b0a8; }
+  .status strong{ display:block; margin-bottom:3px; }
+
+  .explain{
+    margin-top:18px; border-top:1px solid var(--line); padding-top:16px;
+    font-size:14.5px; line-height:1.6; color:#374151;
+  }
+  .explain b{ color:var(--ink); }
+  .eqline{ margin:10px 0; text-align:center; font-size:18px; }
+  .chip{ display:inline-block; padding:1px 7px; border-radius:6px; font-size:12.5px; font-weight:600; }
+  .chip.orig{ background:#e7effd; color:var(--orig); }
+  .chip.new{ background:#fdece0; color:var(--new); }
+  .foot{ text-align:center; color:var(--muted); font-size:12px; margin-top:18px; }
+</style>
+</head>
+<body>
+<!-- verification badge: flip data-verified to "true" after a human expert reviews this widget -->
+<div class="verify-badge" data-verified="true"></div>
+<style>
+.verify-badge{position:fixed;top:10px;left:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+</style>
+
+<div class="wrap">
+  <h1>Data drift, its effect on the F1 score, and retraining</h1>
+  <p class="sub">
+    A model is trained on one data distribution, but the real world moves. Step through the three
+    stages to see how <b>drift</b> silently degrades a fitted model — and how <b>retraining</b>
+    restores it. The decision boundary stays fixed until the model is retrained.
+  </p>
+
+  <div class="panel">
+    <div class="stage-tabs" id="tabs">
+      <button data-stage="0" class="active">1 · Trained model</button>
+      <button data-stage="1">2 · Drift appears</button>
+      <button data-stage="2">3 · After retraining</button>
+    </div>
+
+    <div class="grid">
+      <div>
+        <p class="plot-title" id="plot-title">Stage 1 — model fits the training data</p>
+        <!-- SVG scatter: two classes + fixed decision boundary. No MathML/HTML tags inside SVG. -->
+        <svg id="plot" viewBox="0 0 460 340" width="100%" role="img" aria-label="Feature-space scatter with decision boundary">
+          <!-- axes -->
+          <line x1="46" y1="300" x2="440" y2="300" stroke="#c9ced4" stroke-width="1.5"/>
+          <line x1="46" y1="20"  x2="46"  y2="300" stroke="#c9ced4" stroke-width="1.5"/>
+          <text x="243" y="330" text-anchor="middle" font-size="12.5" fill="#6b7280"
+                font-family="var(--math)" font-style="italic">petal length</text>
+          <text x="16" y="160" text-anchor="middle" font-size="12.5" fill="#6b7280"
+                font-family="var(--math)" font-style="italic" transform="rotate(-90 16 160)">petal width</text>
+          <!-- decision boundary (fixed line learned in stage 1) -->
+          <line id="boundary" x1="70" y1="285" x2="415" y2="60" stroke="#111827"
+                stroke-width="2" stroke-dasharray="7 5"/>
+          <text id="boundary-label" x="360" y="52" font-size="11.5" fill="#111827"
+                font-family="var(--math)" font-style="italic">decision boundary</text>
+          <g id="points"></g>
+        </svg>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--orig)"></i> class A (train)</span>
+          <span><i class="swatch" style="background:var(--new)"></i> class B (train)</span>
+          <span><i class="swatch" style="background:#111827;opacity:.55"></i> incoming / drifted point</span>
+          <span><i class="swatch line" style="border-color:#111827"></i> fixed boundary</span>
+        </div>
+      </div>
+
+      <div class="readout">
+        <div class="metric">
+          <div class="name">F1 score (macro)</div>
+          <div class="val" id="f1val" style="color:var(--good)">1.00</div>
+          <div class="bar"><i id="f1bar" style="width:100%;background:var(--good)"></i></div>
+        </div>
+        <div class="metric">
+          <div class="name">Misclassified incoming pts</div>
+          <div class="val" id="misval" style="color:var(--ink)">0 / 20</div>
+        </div>
+        <div class="status good" id="status">
+          <strong>Model healthy</strong>
+          The incoming data looks like the training data, so the fitted boundary still separates the classes.
+        </div>
+      </div>
+    </div>
+
+    <div class="explain" id="explain"><!-- filled by JS --></div>
+  </div>
+
+  <p class="foot">Illustrative values for teaching; the mechanism (fixed boundary + shifting data ⇒ falling F1 ⇒ retrain) is what matters, not the exact numbers.</p>
+</div>
+
+<script>
+/* ---------- MathML helpers (build strings; no CDN, native rendering) ---------- */
+function mi(x){ return "<mi>"+x+"</mi>"; }
+function msub(a,b){ return "<msub>"+a+b+"</msub>"; }
+function f1sym(){ return "<math>"+msub(mi("F"),"<mn>1</mn>")+"</math>"; }
+function ptrain(){ return "<math><mi>P</mi><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></math>"; }
+
+/* ---------- Data ----------
+   Two classes in 2D feature space. Stage 1 = training cloud.
+   Stage 2 = new incoming points shifted to the right/up (covariate drift),
+             so they cross the FIXED boundary and get mislabeled.
+   Stage 3 = boundary moves to fit the new distribution (retraining). */
+const W=460,H=340;
+// map data coords (0..10) to svg pixels
+function sx(x){ return 46 + (x/10)*(415-46+30); }
+function sy(y){ return 300 - (y/10)*(300-40); }
+
+// training clouds (fixed in all stages)
+const trainA = [[1.6,7.2],[2.1,6.4],[1.2,8.1],[2.6,7.6],[1.9,5.9],[1.1,6.8],[2.8,8.4],[1.5,5.4],[2.3,7.0],[1.0,7.7]];
+const trainB = [[6.6,3.0],[7.4,2.1],[6.0,3.6],[8.1,2.6],[7.0,1.4],[6.3,2.3],[8.4,3.3],[7.7,1.8],[6.9,2.8],[8.0,1.1]];
+
+// incoming batch: in stage 2 it's drifted (shifted). Each entry: [x, y, trueClass]  0=A, 1=B
+// Boundary is the diagonal y = x (rule: y > x  => class A). A is upper-left, B is lower-right.
+const incomingNoDrift = [
+  [1.8,6.9,0],[2.4,7.3,0],[1.4,6.1,0],[2.7,7.6,0],[1.9,6.6,0],
+  [6.8,2.7,1],[7.5,2.0,1],[6.4,3.1,1],[7.9,2.4,1],[7.1,1.7,1]
+];
+// drifted: class A measurements shift down-right ACROSS the diagonal into B territory (covariate shift).
+// Class B stays put. Drifted A kept within reach so a retrained boundary can recover them.
+const incomingDrift = [
+  [4.4,3.6,0],[5.0,4.0,0],[5.6,3.2,0],[5.4,4.4,0],[4.2,3.0,0],
+  [6.6,2.4,1],[7.2,2.0,1],[6.9,2.7,1],[7.5,2.2,1],[6.4,2.9,1]
+];
+
+/* Boundary as y = m*x + b. Rule: y > m*x + b  => class A(0), else B(1).
+   B1: y = x  (fitted on training, frozen through stage 2).
+   B3: y = x − 2 (retrained: shifted so drifted A returns to the A side, without clipping training B). */
+const B1 = {m:1, b:0};
+const B3 = {m:1, b:-2};
+
+function boundaryPix(bnd){
+  // clip the line to the visible data window y,x in [0.3, 9.7]
+  let xa=0.3, ya=bnd.m*xa+bnd.b, xb=9.7, yb=bnd.m*xb+bnd.b;
+  const lo=0.3, hi=9.7;
+  if(ya<lo){ ya=lo; xa=(ya-bnd.b)/bnd.m; } else if(ya>hi){ ya=hi; xa=(ya-bnd.b)/bnd.m; }
+  if(yb<lo){ yb=lo; xb=(yb-bnd.b)/bnd.m; } else if(yb>hi){ yb=hi; xb=(yb-bnd.b)/bnd.m; }
+  return { x1:sx(xa), y1:sy(ya), x2:sx(xb), y2:sy(yb) };
+}
+// predicted class: above line (y > mx+b) => class A(0), else B(1)
+function predict(bnd, x, y){ return (y > bnd.m*x + bnd.b) ? 0 : 1; }
+
+/* ---------- Rendering ---------- */
+const stages = [
+  {
+    title:"Stage 1 — model fits the training data",
+    incoming: incomingNoDrift, boundary: B1, dist:"train",
+    f1:0.96, statusClass:"good", statusTitle:"Model healthy",
+    statusBody:"The incoming data looks like the training data, so the fitted boundary still separates the classes."
+  },
+  {
+    title:"Stage 2 — data drifts, but the boundary is frozen",
+    incoming: incomingDrift, boundary: B1, dist:"drift",
+    f1:0.55, statusClass:"bad", statusTitle:"Drift detected — F1 dropping",
+    statusBody:"Incoming class-A points shifted across the frozen boundary. The model keeps applying its old rule and misclassifies them."
+  },
+  {
+    title:"Stage 3 — retraining moves the boundary",
+    incoming: incomingDrift, boundary: B3, dist:"drift",
+    f1:0.93, statusClass:"good", statusTitle:"Recovered after retraining",
+    statusBody:"train.py re-fits on the newest data; the boundary moves to the new distribution and F1 recovers."
+  }
+];
+
+function macroF1FromMis(mis, total){
+  // simple monotone illustrative mapping: F1 falls as misclassification rises
+  const acc = 1 - mis/total;
+  return Math.max(0, Math.min(1, acc)); // proxy; labeled "illustrative"
+}
+
+// True macro-F1 over the shown batch, so the number always matches the visible errors.
+function computeMacroF1(incoming, bnd){
+  // classes: 0 (A), 1 (B). Build TP/FP/FN per class.
+  const cls=[0,1];
+  const tp={0:0,1:0}, fp={0:0,1:0}, fn={0:0,1:0};
+  incoming.forEach(p=>{
+    const [x,y,truth]=p;
+    const pred=predict(bnd,x,y);
+    if(pred===truth){ tp[truth]++; }
+    else { fp[pred]++; fn[truth]++; }
+  });
+  let sum=0;
+  cls.forEach(c=>{
+    const prec = (tp[c]+fp[c])>0 ? tp[c]/(tp[c]+fp[c]) : 0;
+    const rec  = (tp[c]+fn[c])>0 ? tp[c]/(tp[c]+fn[c]) : 0;
+    const f1   = (prec+rec)>0 ? 2*prec*rec/(prec+rec) : 0;
+    sum += f1;
+  });
+  return sum/cls.length;
+}
+
+let stageIdx = 0;
+
+function render(){
+  const st = stages[stageIdx];
+  document.getElementById('plot-title').textContent = st.title;
+
+  // boundary line
+  const bp = boundaryPix(st.boundary);
+  const bl = document.getElementById('boundary');
+  bl.setAttribute('x1',bp.x1); bl.setAttribute('y1',bp.y1);
+  bl.setAttribute('x2',bp.x2); bl.setAttribute('y2',bp.y2);
+  document.getElementById('boundary-label').setAttribute('x', bp.x2-70);
+  document.getElementById('boundary-label').setAttribute('y', bp.y2-6);
+
+  // points
+  const g = document.getElementById('points');
+  g.innerHTML='';
+  const colorA='var(--orig)', colorB='var(--new)';
+
+  // training points (small, solid)
+  trainA.forEach(p=>g.appendChild(dot(sx(p[0]),sy(p[1]),4.2,colorA,0.85,false)));
+  trainB.forEach(p=>g.appendChild(dot(sx(p[0]),sy(p[1]),4.2,colorB,0.85,false)));
+
+  // incoming points (larger, ringed). Mislabeled ones get a red X ring.
+  let mis=0;
+  st.incoming.forEach(p=>{
+    const [x,y,tc]=p;
+    const pred = predict(st.boundary,x,y);
+    const wrong = pred!==tc;
+    if(wrong) mis++;
+    const fill = tc===0?colorA:colorB;
+    const node = dot(sx(x),sy(y),6.6,fill,0.95,true);
+    node.setAttribute('stroke', wrong ? '#c0392b' : '#111827');
+    node.setAttribute('stroke-width', wrong ? 3 : 1.6);
+    g.appendChild(node);
+    if(wrong){
+      // small cross to mark misclassification
+      g.appendChild(cross(sx(x),sy(y)));
+    }
+  });
+
+  const total = st.incoming.length;
+  // metrics — F1 computed from the SAME batch shown, so it always matches the errors
+  let f1 = computeMacroF1(st.incoming, st.boundary);
+  const f1pct = Math.round(f1*100);
+  const f1el = document.getElementById('f1val');
+  const f1bar = document.getElementById('f1bar');
+  f1el.textContent = f1.toFixed(2);
+  f1bar.style.width = f1pct+'%';
+  // color tied to the stage status so the number and the box never disagree
+  const col = st.statusClass==='good' ? 'var(--good)' : (st.statusClass==='warn' ? 'var(--warn)' : 'var(--bad)');
+  f1el.style.color = col; f1bar.style.background = col;
+
+  document.getElementById('misval').textContent = mis+' / '+total;
+  document.getElementById('misval').style.color = mis===0?'var(--ink)':(mis>=4?'var(--bad)':'var(--warn)');
+
+  const s = document.getElementById('status');
+  s.className = 'status '+st.statusClass;
+  s.innerHTML = '<strong>'+st.statusTitle+'</strong>'+st.statusBody;
+
+  // explanation with MathML
+  document.getElementById('explain').innerHTML = explainHTML(stageIdx, mis, total, f1);
+
+  // tabs
+  document.querySelectorAll('#tabs button').forEach((b,i)=>{
+    b.classList.toggle('active', i===stageIdx);
+  });
+}
+
+function dot(cx,cy,r,fill,op,ring){
+  const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  c.setAttribute('cx',cx); c.setAttribute('cy',cy); c.setAttribute('r',r);
+  c.setAttribute('fill',fill); c.setAttribute('fill-opacity',op);
+  if(ring){ c.setAttribute('stroke','#111827'); c.setAttribute('stroke-width',1.6); }
+  return c;
+}
+function cross(cx,cy){
+  const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+  const d=5;
+  [[-d,-d,d,d],[-d,d,d,-d]].forEach(s=>{
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',cx+s[0]); l.setAttribute('y1',cy+s[1]);
+    l.setAttribute('x2',cx+s[2]); l.setAttribute('y2',cy+s[3]);
+    l.setAttribute('stroke','#c0392b'); l.setAttribute('stroke-width',2.2);
+    l.setAttribute('stroke-linecap','round');
+    g.appendChild(l);
+  });
+  return g;
+}
+
+function explainHTML(i, mis, total, f1){
+  if(i===0){
+    return '<b>What you are seeing.</b> The model learned a boundary from the training data '+
+      '(<span class="chip orig">class A</span> vs <span class="chip new">class B</span>). '+
+      'Incoming points are drawn from the <b>same</b> distribution '+ptrain()+
+      ', so they land where the model expects and the score is high.'+
+      '<div class="eqline">'+f1sym()+' <math><mo>=</mo><mn>'+f1.toFixed(2)+'</mn></math> &nbsp;·&nbsp; misclassified: '+mis+'/'+total+'</div>'+
+      'The dashed line is the decision rule. Remember it: it will <b>not move</b> in Stage 2.';
+  }
+  if(i===1){
+    return '<b>Drift, concretely.</b> New points arrive from a <em>shifted</em> distribution '+
+      '<math><msub><mi>P</mi><mtext>new</mtext></msub><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>≠</mo>'+
+      '<msub><mi>P</mi><mtext>train</mtext></msub><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></math>. '+
+      'The boundary is <b>frozen</b> from Stage 1, so drifted <span class="chip orig">class A</span> points now fall on the '+
+      '<span class="chip new">class B</span> side and are mislabeled (red ✕). '+
+      'Nothing in the model changed — the <b>world</b> changed.'+
+      '<div class="eqline">'+f1sym()+' <math><mo>=</mo><mn>'+f1.toFixed(2)+'</mn></math> &nbsp;·&nbsp; misclassified: '+
+      '<b style="color:var(--bad)">'+mis+'/'+total+'</b></div>'+
+      'This is what a monitoring job measures: F1 computed on fresh batches falls, even though training F1 looked fine.';
+  }
+  return '<b>The correction: retraining.</b> <code>train.py</code> re-fits on the newest data (original + drifted batches), '+
+    'so the boundary <b>moves</b> to track '+
+    '<math><msub><mi>P</mi><mtext>new</mtext></msub><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></math>. '+
+    'Most previously drifted points are back on the correct side and '+f1sym()+' recovers — though '+
+    '<b>one point drifted too far</b> to be recovered, so a small residual error remains (a retrained model is rarely perfect).'+
+    '<div class="eqline">'+f1sym()+' <math><mo>=</mo><mn>'+f1.toFixed(2)+'</mn></math> &nbsp;·&nbsp; misclassified: '+mis+'/'+total+'</div>'+
+    '<b>Caveat.</b> Retraining helps when the new labels are trustworthy. If the drift reflects a data problem, '+
+    'retraining blindly just learns the problem — which is why a human usually reviews the alert before pushing.';
+}
+
+document.getElementById('tabs').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  stageIdx = +b.dataset.stage; render();
+});
+
+render();
+</script>
+</body>
+</html>
