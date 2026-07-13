@@ -24,11 +24,18 @@
   - LIGHT academic theme, matches repo conventions (see rnn_unrolling_interactive.html).
   - NO looping animations. Sliders update a static diagram + counters instantly.
   - Math rendered with native MathML per CLAUDE.md (no external libraries).
+  - N (2..100,000) and d (2..1,024) span real architecture scale, so both
+    sliders are LOG-scale (see sliderToVal/valToSlider) — a linear slider
+    can't usefully reach both N=4 and N=100,000.
+  - The weight-matrix box in the diagram is a FIXED pixel size (GEO.wBox).
+    Only the grid's line density changes with N*d; past GEO.wMaxLines lines
+    per side it switches to a faint mesh fill instead of drawing (N*d)^2
+    individual cells, which would be both unreadable and slow.
 
   HOW TO MODIFY:
-  - N_RANGE / D_RANGE control the slider bounds.
+  - N_MIN/N_MAX, D_MIN/D_MAX control the (log-scale) slider bounds.
   - drawDiagram() builds the flatten -> weight-matrix -> output SVG.
-  - REFS array holds the "real world" comparison numbers for the blow-up card.
+  - REFS array holds the named-LLM comparison numbers for the blow-up card.
   ============================================================================
 -->
 <style>
@@ -126,6 +133,14 @@
           border-radius: 10px; padding: 12px 16px; font-size:.95rem; margin: 16px 0 0; }
   .story b{ color: var(--accent); }
 
+  .bigo-note{ background: #fbf8ee; border:1px solid #ecdfa8; border-left: 4px solid #b8952e;
+              border-radius: 10px; padding: 12px 16px; margin: 4px 0 16px; }
+  .bigo-note .bigo-tag{ display:inline-block; font-size:.72rem; font-weight:700; text-transform:uppercase;
+                         letter-spacing:.5px; color:#8a6d1f; background:#f3e6b8; border-radius:999px;
+                         padding:2px 10px; margin-bottom:6px; }
+  .bigo-note p{ margin:0; font-size:.9rem; color:var(--text); }
+  .bigo-note b{ color:#8a6d1f; }
+
   .facts{ display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:22px; }
   @media (max-width: 860px){ .facts{ grid-template-columns: 1fr; } }
   .fact-card{ background: var(--panel); border:1px solid var(--line); border-radius: 12px;
@@ -176,16 +191,16 @@
           <span class="sg-name">Sequence length N</span>
           <span class="sg-val" id="nVal">4</span>
         </div>
-        <input type="range" id="nSlider" min="2" max="12" value="4" step="1">
-        <div class="sg-sub">tokens in the sequence (words, sub-words, …)</div>
+        <input type="range" id="nSlider" min="0" max="1000" value="0" step="1">
+        <div class="sg-sub">tokens in the sequence (words, sub-words, …) — up to 100,000</div>
       </div>
       <div class="slider-group d">
         <div class="sg-head">
           <span class="sg-name">Features per token d</span>
           <span class="sg-val" id="dVal">4</span>
         </div>
-        <input type="range" id="dSlider" min="2" max="12" value="4" step="1">
-        <div class="sg-sub">size of each token's vector representation</div>
+        <input type="range" id="dSlider" min="0" max="1000" value="0" step="1">
+        <div class="sg-sub">size of each token's vector representation — up to 1,024</div>
       </div>
     </div>
 
@@ -205,6 +220,14 @@
     <p class="hint">Doubling the sequence length doesn't double the cost — it roughly <b>quadruples</b> it.
        The same is true for doubling <math><mi>d</mi></math>. That's what it means for a cost to scale as
        <math><msup><mi>N</mi><mn>2</mn></msup><mo>·</mo><msup><mi>d</mi><mn>2</mn></msup></math>.</p>
+    <div class="bigo-note">
+      <span class="bigo-tag">Big-O, demystified</span>
+      <p>You'll see this cost written as
+        <math><mi>O</mi><mo stretchy="false">(</mo><msup><mi>N</mi><mn>2</mn></msup><msup><mi>d</mi><mn>2</mn></msup><mo stretchy="false">)</mo></math>
+        — that notation isn't a new idea, it's just a <b>label</b> for the doubling-quadruples-it pattern
+        you already watched happen in the counter above. "Quadratic" only means: <em>double the input, cost
+        goes up by roughly 4×</em>. Nothing more mysterious than that.</p>
+    </div>
     <div class="blowup">
       <div class="count-card">
         <div class="formula">
@@ -244,8 +267,9 @@
     </div>
     <div class="fact-card">
       <h3>🚧 This doesn't scale to real sequences</h3>
-      <p>Real sequences run into the hundreds or thousands of tokens, with hidden sizes in the hundreds.
-         Plug those into the counter above and the parameter count blows past anything trainable.</p>
+      <p>Real documents and code files run into the tens or hundreds of thousands of tokens, with hidden
+         sizes in the hundreds to low thousands. Push the sliders toward those values above and the
+         parameter count blows past every model in the comparison list.</p>
       <p class="sub">This is the problem that motivates looking for a fundamentally different kind of layer.</p>
     </div>
   </section>
@@ -259,19 +283,39 @@
 const $ = id => document.getElementById(id);
 
 /* ============================== APP STATE ================================ */
+/* N and d are chosen on LOG-scale sliders (0..1000) so the same widget can
+   reach both toy sizes (N=4) and real architectures (N=100,000) without
+   making small values unreachable. sliderToN/D and NToSlider/dToSlider
+   convert between the raw <input type=range> value and the actual N/d. */
+const N_MIN = 2, N_MAX = 100_000;
+const D_MIN = 2, D_MAX = 1_024;
+const SLIDER_MAX = 1000;
+
+const sliderToVal = (s, lo, hi) => {
+  const t = s / SLIDER_MAX;
+  return Math.round(lo * Math.pow(hi/lo, t));
+};
+const valToSlider = (v, lo, hi) => {
+  const t = Math.log(v/lo) / Math.log(hi/lo);
+  return Math.round(t * SLIDER_MAX);
+};
+
 const state = { N: 4, d: 4 };
 
 /* ============================ REFERENCE SCALE ============================= */
-/* "Real world" comparators for the blow-up card. Values are counts of
-   trainable numbers, used only to give students a visceral sense of scale. */
+/* Known LLM parameter counts for the blow-up card — gives students a
+   visceral sense of how N^2*d^2 compares to real, named models. */
 const REFS = [
-  { label: "Params in this repo's tiny char-RNN demo", value: 5_000 },
-  { label: "A small MLP hidden layer (512 × 512)",     value: 262_144 },
-  { label: "LeNet-5 (a classic small CNN)",             value: 60_000 },
-  { label: "GPT-2 small (124M params)",                 value: 124_000_000 },
+  { label: "GPT-2 small",         value: 124_000_000 },
+  { label: "GPT-2 XL",            value: 1_500_000_000 },
+  { label: "LLaMA 2 7B",          value: 7_000_000_000 },
+  { label: "GPT-3",               value: 175_000_000_000 },
+  { label: "DeepSeek-V3 (total)", value: 671_000_000_000 },
+  { label: "GPT-4 (est.)",        value: 1_760_000_000_000 },
 ];
 
 function fmt(n){
+  if (n >= 1e15) return (n/1e15).toFixed(2) + "Q";  /* quadrillion */
   if (n >= 1e12) return (n/1e12).toFixed(2) + "T";
   if (n >= 1e9)  return (n/1e9).toFixed(2)  + "B";
   if (n >= 1e6)  return (n/1e6).toFixed(2)  + "M";
@@ -287,14 +331,10 @@ function fmt(n){
 const GEO = {
   cellPx: 16, cellGap: 2, maxCellsShown: 14, /* cap so huge N*d stays readable */
   tokY: 30, tokGap: 10,
-  rowH: 300
+  rowH: 300,
+  wBox: 220,          /* weight-matrix box: FIXED pixel size, never grows */
+  wMaxLines: 40        /* above this many gridlines per side, switch to solid fill */
 };
-
-function clampGrid(total, cellPx, gap, cap){
-  /* returns {shown, cellPx, gap} — shrinks cell size before capping count */
-  let shown = Math.min(total, cap);
-  return shown;
-}
 
 function vecSVG(x, y, count, cellPx, gap, fill, line, cap){
   const shown = Math.min(count, cap);
@@ -316,13 +356,16 @@ function drawDiagram(N, d){
   const cap = g.maxCellsShown;
   const total = N * d;
 
-  /* --- token vectors: N columns of d cells --- */
+  /* --- token vectors: up to `cap` columns of up to `cap` cells (N and d can
+     both reach into the tens/hundreds of thousands, so both axes are capped
+     with a trailing "⋮"/"…" — the point is "many tokens", not drawing all of them) --- */
   const tokColW = g.cellPx + 6;
-  const tokBlockW = N * tokColW + (N-1)*4;
+  const nShown = Math.min(N, cap);
+  const tokBlockW = nShown * tokColW + (nShown-1)*4;
   let tokX = 20;
   let s = "";
   const dShown = Math.min(d, cap);
-  for (let t=0; t<N; t++){
+  for (let t=0; t<nShown; t++){
     const cx = tokX + t*(tokColW+4);
     for (let i=0;i<dShown;i++){
       s += `<rect x="${cx}" y="${g.tokY+i*(g.cellPx+g.cellGap)}" width="${g.cellPx}" height="${g.cellPx}" rx="2"
@@ -337,23 +380,29 @@ function drawDiagram(N, d){
             font-size="11" fill="var(--text-dim)">tok ${t+1}</text>`;
     }
   }
+  if (N > cap){
+    s += `<text x="${tokX+tokBlockW+8}" y="${g.tokY+Math.min(dShown,cap)*(g.cellPx+g.cellGap)/2+5}"
+          text-anchor="start" font-family="var(--font)" font-size="18" font-weight="700"
+          fill="var(--tok-line)">…</text>`;
+  }
   const tokVisH = Math.min(dShown,cap)*(g.cellPx+g.cellGap) + (d>cap?16:0);
   s += `<text x="${tokX + tokBlockW/2}" y="${g.tokY + tokVisH + 34}" text-anchor="middle"
-        font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--text-dim)">N = ${N} tokens × d = ${d} features</text>`;
+        font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--text-dim)">N = ${fmt(N)} tokens × d = ${fmt(d)} features</text>`;
 
   /* --- arrow: flatten --- */
   const arrowY = g.tokY + tokVisH/2;
-  const flatX = tokX + tokBlockW + 46;
-  s += `<line x1="${tokX+tokBlockW+6}" y1="${arrowY}" x2="${flatX-8}" y2="${arrowY}"
+  const ellipsisPad = N > cap ? 22 : 0;
+  const flatX = tokX + tokBlockW + ellipsisPad + 46;
+  s += `<line x1="${tokX+tokBlockW+ellipsisPad+6}" y1="${arrowY}" x2="${flatX-8}" y2="${arrowY}"
         stroke="#41506a" stroke-width="1.9" marker-end="url(#mA)"/>`;
-  s += `<text x="${(tokX+tokBlockW+flatX)/2}" y="${arrowY-10}" text-anchor="middle"
+  s += `<text x="${(tokX+tokBlockW+ellipsisPad+flatX)/2}" y="${arrowY-10}" text-anchor="middle"
         font-family="var(--font)" font-size="11.5" fill="var(--text-dim)">flatten</text>`;
 
   /* --- flattened vector: N*d cells in one column --- */
   const flatV = vecSVG(flatX, g.tokY, total, g.cellPx, g.cellGap, "var(--flat-fill)", "var(--flat-line)", cap);
   s += flatV.svg;
   s += `<text x="${flatX+g.cellPx/2}" y="${g.tokY + flatV.height + 20}" text-anchor="middle"
-        font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--flat-line)">length N·d = ${total}</text>`;
+        font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--flat-line)">length N·d = ${fmt(total)}</text>`;
 
   /* --- arrow: dense --- */
   const wX = flatX + 70;
@@ -362,27 +411,36 @@ function drawDiagram(N, d){
   s += `<text x="${(flatX+g.cellPx+wX)/2}" y="${arrowY-10}" text-anchor="middle"
         font-family="var(--font)" font-size="11.5" fill="var(--text-dim)">Dense layer</text>`;
 
-  /* --- weight matrix: square grid, side = min(N*d, cap) cells, scaled if huge --- */
-  const side = Math.min(total, cap);
-  const wCell = total > cap ? Math.max(6, g.cellPx * (cap/Math.min(total,cap*3))) : g.cellPx;
-  const wSize = side * (wCell+1.4);
-  let wS = "";
-  for (let r=0;r<side;r++){
-    for (let cIdx=0;cIdx<side;cIdx++){
-      wS += `<rect x="${wX+cIdx*(wCell+1.4)}" y="${g.tokY+r*(wCell+1.4)}" width="${wCell}" height="${wCell}"
-             fill="var(--w-fill)" stroke="var(--w-line)" stroke-width="0.6"/>`;
+  /* --- weight matrix: FIXED-size box; only the grid gets denser as N*d grows.
+     Up to wMaxLines per side we draw real gridlines (so students can still see
+     "this is a grid of cells"); beyond that, individual cells are thinner than
+     a pixel anyway, so we switch to a smooth solid fill — still the same box. */
+  const wSize = g.wBox;
+  const wX0 = wX, wY0 = g.tokY;
+  const lines = Math.min(total, g.wMaxLines);
+  const dense = total > g.wMaxLines;
+  let wS = `<rect x="${wX0}" y="${wY0}" width="${wSize}" height="${wSize}" fill="var(--w-fill)"/>`;
+  if (!dense){
+    const step = wSize / lines;
+    for (let i=0;i<=lines;i++){
+      wS += `<line x1="${wX0+i*step}" y1="${wY0}" x2="${wX0+i*step}" y2="${wY0+wSize}" stroke="var(--w-line)" stroke-width="0.7" opacity=".55"/>`;
+      wS += `<line x1="${wX0}" y1="${wY0+i*step}" x2="${wX0+wSize}" y2="${wY0+i*step}" stroke="var(--w-line)" stroke-width="0.7" opacity=".55"/>`;
+    }
+  } else {
+    /* faint fine mesh to read as "densely packed cells", not a flat block */
+    const meshStep = wSize / g.wMaxLines;
+    for (let i=1;i<g.wMaxLines;i++){
+      wS += `<line x1="${wX0+i*meshStep}" y1="${wY0}" x2="${wX0+i*meshStep}" y2="${wY0+wSize}" stroke="var(--w-line)" stroke-width="0.4" opacity=".18"/>`;
+      wS += `<line x1="${wX0}" y1="${wY0+i*meshStep}" x2="${wX0+wSize}" y2="${wY0+i*meshStep}" stroke="var(--w-line)" stroke-width="0.4" opacity=".18"/>`;
     }
   }
   s += wS;
-  const wRectX0 = wX, wRectY0 = g.tokY;
-  s += `<rect x="${wRectX0}" y="${wRectY0}" width="${wSize}" height="${wSize}" fill="none"
+  s += `<rect x="${wX0}" y="${wY0}" width="${wSize}" height="${wSize}" fill="none"
         stroke="var(--w-line)" stroke-width="2"/>`;
-  if (total > cap){
-    s += `<text x="${wX+wSize/2}" y="${g.tokY+wSize/2+5}" text-anchor="middle"
-          font-family="var(--font)" font-size="${Math.min(15,wSize/8)}" font-weight="700"
-          fill="#b3364a" opacity=".85">${total}×${total}</text>`;
-  }
-  const wLabel = `(N·d) × (N·d) = ${total}×${total} = ${fmt(total*total)} weights`;
+  s += `<text x="${wX+wSize/2}" y="${g.tokY+wSize/2+5}" text-anchor="middle"
+        font-family="var(--font)" font-size="${dense?15:Math.min(15, wSize/Math.max(4,lines/2))}" font-weight="700"
+        fill="#b3364a" opacity=".9">${fmt(total)}×${fmt(total)}</text>`;
+  const wLabel = `(N·d) × (N·d) = ${fmt(total)}×${fmt(total)} = ${fmt(total*total)} weights`;
   s += `<text x="${wX+wSize/2}" y="${g.tokY + wSize + 20}" text-anchor="middle"
         font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--w-line)">${wLabel}</text>`;
   const wLabelW = wLabel.length * 7.2;
@@ -399,9 +457,9 @@ function drawDiagram(N, d){
   const outV = vecSVG(outX, Math.max(outY, g.tokY), total, g.cellPx, g.cellGap, "var(--out-fill)", "var(--out-line)", cap);
   s += outV.svg;
   s += `<text x="${outX+g.cellPx/2}" y="${Math.max(outY, g.tokY) + outV.height + 20}" text-anchor="middle"
-        font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--out-line)">length N·d = ${total}</text>`;
+        font-family="var(--font)" font-size="12.5" font-weight="700" fill="var(--out-line)">length N·d = ${fmt(total)}</text>`;
 
-  const outLabelW = `length N·d = ${total}`.length * 7;
+  const outLabelW = `length N·d = ${fmt(total)}`.length * 7;
   const totalW = outX + Math.max(g.cellPx, outLabelW) / 2 + 30;
   const totalH = Math.max(g.tokY + wSize + 48, g.tokY + flatV.height + 48, 260);
 
@@ -415,24 +473,24 @@ function drawDiagram(N, d){
 /* ================================ NARRATION ================================ */
 function narration(N, d){
   const total = N*d;
-  return `Flatten <b>${N}</b> tokens of <b>${d}</b> numbers each into one vector of length
-    <b>${total}</b>. A fully-connected layer mapping that vector to an output of the same size needs a
+  return `Flatten <b>${fmt(N)}</b> tokens of <b>${fmt(d)}</b> numbers each into one vector of length
+    <b>${fmt(total)}</b>. A fully-connected layer mapping that vector to an output of the same size needs a
     weight for <em>every</em> pair of (input number, output number) — a
-    <b>${total} × ${total}</b> matrix, i.e. <b>${fmt(total*total)}</b> weights just for this one layer.`;
+    <b>${fmt(total)} × ${fmt(total)}</b> matrix, i.e. <b>${fmt(total*total)}</b> weights just for this one layer.`;
 }
 
 /* ================================ RENDER ==================================== */
 function render(){
   const { N, d } = state;
-  $('nVal').textContent = N;
-  $('dVal').textContent = d;
+  $('nVal').textContent = N.toLocaleString('en-US');
+  $('dVal').textContent = d.toLocaleString('en-US');
   $('svgHost').innerHTML = drawDiagram(N, d);
   $('story').innerHTML = narration(N, d);
 
   const total = N*d;
   const paramCount = total*total;
-  $('countBig').textContent = paramCount.toLocaleString('en-US');
-  $('countSub').textContent = `weights, for N=${N}, d=${d} — this is one layer, before the model has learned anything`;
+  $('countBig').textContent = paramCount < 1e9 ? paramCount.toLocaleString('en-US') : fmt(paramCount);
+  $('countSub').textContent = `weights, for N=${N.toLocaleString('en-US')}, d=${d.toLocaleString('en-US')} — this is one layer, before the model has learned anything`;
 
   const rows = REFS.map(r => ({...r})).concat([{label:"This layer, right now", value: paramCount, self:true}])
     .sort((a,b)=>a.value-b.value);
@@ -450,8 +508,11 @@ function render(){
 }
 
 /* ================================= WIRING ==================================== */
-$('nSlider').oninput = e => { state.N = +e.target.value; render(); };
-$('dSlider').oninput = e => { state.d = +e.target.value; render(); };
+$('nSlider').oninput = e => { state.N = sliderToVal(+e.target.value, N_MIN, N_MAX); render(); };
+$('dSlider').oninput = e => { state.d = sliderToVal(+e.target.value, D_MIN, D_MAX); render(); };
+
+$('nSlider').value = valToSlider(state.N, N_MIN, N_MAX);
+$('dSlider').value = valToSlider(state.d, D_MIN, D_MAX);
 
 render();
 </script>
