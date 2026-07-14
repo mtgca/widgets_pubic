@@ -619,10 +619,16 @@
         pos_emb  = self.position_embedding[pos_idx]  <span class="cm"># lookup in a computed table</span>
         <span class="ls">emb = word_emb + pos_emb</span>                     <span class="cm"># same element-wise sum as before</span>
         <span class="k">return</span> self.linear(emb)</pre>
-  <p class="pg-note" style="margin-top:10px;"><code class="inl">register_buffer</code> is the key line: the
-    tensor moves with the model (<code class="inl">.to(device)</code>, <code class="inl">state_dict</code>)
-    but is invisible to the optimizer — <code class="inl">model.parameters()</code> never yields it, so
-    <code class="inl">opt.step()</code> can never touch it.</p>
+  <div class="technote" style="margin-top:14px;">
+    <p><b>Why <code class="inl">register_buffer</code>?</b> Parameter = <em>learned</em> state; buffer =
+    <em>non-learned</em> state. The buffer makes the table part of the model in every way except training:</p>
+    <p>&#9312; <strong>Invisible to the optimizer</strong> — <code class="inl">model.parameters()</code> never
+    yields it, so <code class="inl">opt.step()</code> can never overwrite the sinusoids. &nbsp;
+    &#9313; <strong>Moves with the model</strong> — <code class="inl">.to(device)</code> /
+    <code class="inl">.half()</code> carry it along, no manual bookkeeping. &nbsp;
+    &#9314; <strong>Saved in <code class="inl">state_dict</code></strong> — checkpointed like BatchNorm&rsquo;s
+    running stats. A plain tensor attribute gives you none of &#9313;&ndash;&#9314;.</p>
+  </div>
 </div>
 
 <footer>Self-contained teaching widget · trains a tiny language model with frozen sinusoidal positional encodings entirely in your browser · no libraries.</footer>
