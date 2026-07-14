@@ -15,33 +15,35 @@
       French   "Le chat s'est assis sur le tapis"
 
   PEDAGOGICAL GOALS:
-  1. DATA PREPARATION — from ONE target sequence, build TWO tensors by
-     shifting: decoder input (<SOS> + drop last) and loss target
-     (drop first + <EOS>). Position t of the input must predict
-     position t of the target.
-  2. PADDING — variable-length sequences are padded to a uniform length
-     per batch; a padding mask stops attention from looking at <PAD>,
-     and the loss ignores <PAD> targets (ignore_index).
-  3. TEACHER FORCING — during training the decoder reads the GROUND-TRUTH
-     prefix, never its own previous predictions.
-  4. THE CAUSAL MASK "TRICK" — the full shifted sequence is fed once;
+  1. END-TO-END WALKTHROUGH (§1) — a single diagram mirroring the lecture
+     slide (data prep | encoder–decoder | output & loss) with an 8-step
+     stepper that spotlights each stage: the training pair, <SOS>/<EOS>
+     wrapping, the two shifts (decoder input = drop last, loss target =
+     drop first), the encoder (bidirectional, unshifted), the decoder
+     (teacher forcing + cross-attention), per-position comparison into one
+     cross-entropy loss, and the "it is all one parallel pass" hook to §2.
+     Plus: padding + padding-mask demo for variable-length batches.
+  2. THE CAUSAL MASK "TRICK" (§2) — the full shifted sequence is fed once;
      an upper-triangular −inf mask makes row t attend only to tokens ≤ t,
      so one 8-token sequence yields 8 prefix→next-token training examples
-     in a single parallel forward pass, all hitting one cross-entropy loss.
-  5. SCOPE — shifting + causal masking are DECODER-only. The encoder always
-     sees the full, unshifted source with bidirectional self-attention.
+     in a single parallel forward pass, all hitting one loss (§3).
+  3. SCOPE (§4) — shifting + causal masking are DECODER-only. The encoder
+     always sees the full, unshifted source with bidirectional attention.
 
   DESIGN NOTES:
   - Light academic theme, no looping animations (repo conventions).
   - Colors echo the slides: encoder = blue, decoder = purple,
     cross-attention = orange, loss = red, forbidden mask cells = red tint.
   - Equations in native MathML (no libraries). None inside SVG (no SVG used).
-  - One timestep slider drives §3 (mask row + visible prefix + prediction).
+  - One timestep slider drives §2 (mask row + visible prefix + prediction);
+    clicking a prediction→target pair in §1 jumps to that timestep in §2.
 
   HOW TO MODIFY:
   - SRC / TGT hold the sentence pair; DEC_IN, TARGET, PREDS are derived
     or hard-coded to match the slides (two intentional wrong predictions).
-  - renderStep(t) is the single entry point for the explorer.
+  - WALK holds the §1 stepper: spots = stage ids to spotlight,
+    strike = "first"/"last" token of the wrapped row to cross out.
+    renderWalk(k) and renderStep(t) are the two entry points.
   ============================================================================
 -->
 <style>
@@ -92,10 +94,42 @@
   .tok.masked-out{background:var(--bad-soft);border-color:var(--bad-line);color:var(--bad);
     text-decoration:line-through;opacity:.55;}
 
-  /* ---------- §1 shift explorer ---------- */
-  #shiftbox .tokrow{cursor:default;}
-  #shiftbox .tok{cursor:pointer;}
-  .arrowcol{display:flex;flex-direction:column;justify-content:center;font-size:1.1rem;color:var(--muted);}
+  /* ---------- §1 end-to-end walkthrough ---------- */
+  .walk-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0 14px;}
+  .wbtn{font:600 .85rem/1 inherit;padding:9px 14px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--dec-line);background:var(--dec-soft);color:var(--dec);}
+  .wbtn:disabled{opacity:.4;cursor:default;}
+  .step-pills{display:flex;gap:5px;flex-wrap:wrap;}
+  .spill{font:600 .74rem/1 inherit;padding:7px 10px;border-radius:999px;cursor:pointer;
+    border:1px solid var(--line);background:var(--soft);color:var(--muted);}
+  .spill.on{background:var(--dec);border-color:var(--dec);color:#fff;}
+  .e2e{display:grid;grid-template-columns:minmax(368px,1.35fr) 26px minmax(212px,1fr) 26px minmax(226px,1fr);
+    gap:9px;min-width:1000px;align-items:stretch;}
+  .panel{border:1px solid var(--line);border-radius:12px;padding:12px 12px 10px;}
+  .panel .ptitle{font:700 .68rem/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:10px;}
+  .p-data{background:#eef4fb;} .p-model{background:#f8f5ef;} .p-out{background:#fbf3ee;}
+  .pcol{display:flex;flex-direction:column;gap:8px;height:100%;}
+  .pcol.center{justify-content:space-around;}
+  .stage{border-radius:9px;padding:7px 8px;border:1px solid transparent;transition:opacity .15s;opacity:.42;}
+  .stage.spot{opacity:1;background:#fff;border-color:var(--xatt);box-shadow:0 0 0 2px var(--xatt);}
+  .stage .slbl{font-size:.7rem;color:var(--muted);margin-bottom:4px;line-height:1.3;}
+  .tokline{display:flex;gap:4px;flex-wrap:wrap;}
+  .e2e .tok{font-size:.66rem;padding:5px 5px;border-radius:5px;cursor:default;}
+  .e2e .tok[data-kind]{cursor:pointer;}
+  .e2e-arrows{display:flex;flex-direction:column;justify-content:space-around;align-items:center;
+    font-size:1.3rem;color:var(--muted);}
+  .pairrow{display:flex;align-items:center;gap:5px;margin:3px 0;cursor:pointer;border-radius:6px;padding:2px 4px;}
+  .pairrow:hover{background:#fff;}
+  .ptok{font:600 .66rem/1 var(--mono);padding:5px 6px;border-radius:5px;min-width:44px;text-align:center;}
+  .ptok.pred{background:var(--dec);color:#fff;}
+  .ptok.tgt{background:var(--dec-soft);border:1px solid var(--dec-line);color:var(--dec);}
+  .pairrow .mark{font-size:.75rem;}
+  .lossbox{background:var(--bad);color:#fff;font-weight:800;text-align:center;border-radius:9px;
+    padding:12px 10px;font-size:.85rem;letter-spacing:.03em;}
+  .walk-exp{border:1px solid var(--dec-line);background:var(--dec-soft);border-radius:10px;
+    padding:14px 16px;margin-top:14px;}
+  .walk-exp h3{margin:0 0 6px;color:var(--dec);}
   .shift-hint{min-height:44px;background:var(--soft);border:1px solid var(--line);border-radius:8px;
     padding:9px 13px;font-size:.92rem;margin-top:12px;}
   .shift-hint b{color:var(--dec);}
@@ -114,10 +148,7 @@
     border:1px solid var(--enc-line);background:var(--enc-soft);color:var(--enc);}
   .toggle-btn[aria-pressed="true"]{background:var(--enc);color:#fff;}
 
-  /* ---------- §2 pipeline diagram ---------- */
-  .pipeline{display:grid;grid-template-columns:1fr auto 1.15fr auto 1fr;gap:0 4px;
-    align-items:stretch;min-width:760px;margin:14px 0 4px;}
-  .pipe-col{display:flex;flex-direction:column;gap:10px;justify-content:center;}
+  /* ---------- model blocks (inside the §1 diagram) ---------- */
   .blockbox{border-radius:10px;padding:13px 14px;text-align:center;font-weight:700;}
   .blockbox small{display:block;font-weight:400;font-size:.78rem;margin-top:4px;opacity:.85;}
   .b-enc{background:var(--enc);color:#fff;}
@@ -125,13 +156,6 @@
   .b-xatt{position:absolute;top:8px;left:50%;transform:translateX(-50%);
     background:var(--xatt);color:#fff;font-size:.78rem;font-weight:700;border-radius:7px;
     padding:6px 10px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25);}
-  .b-io{background:var(--soft);border:1px solid var(--line);border-radius:10px;
-    padding:10px 12px;font-size:.82rem;text-align:center;}
-  .b-io b{display:block;font-size:.84rem;margin-bottom:2px;}
-  .b-io .toks{font:600 .72rem/1.7 var(--mono);word-spacing:2px;}
-  .b-io.src b{color:var(--enc);} .b-io.tgt b{color:var(--dec);} .b-io.loss{border-color:var(--bad-line);background:var(--bad-soft);}
-  .b-io.loss b{color:var(--bad);}
-  .pipe-arrow{display:flex;align-items:center;font-size:1.5rem;color:var(--muted);padding:0 6px;}
 
   /* ---------- §3 explorer ---------- */
   .controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 0 16px;}
@@ -229,40 +253,86 @@
 
 <!-- ============================================================ §1 -->
 <section>
-  <div class="kicker">1 · Data preparation</div>
-  <h2>One target sentence, two tensors — the shift trick</h2>
+  <div class="kicker">1 · Data preparation &amp; model processing</div>
+  <h2>One training pair, end to end — step through it</h2>
   <p>
-    The decoder is trained to predict the <em>next</em> French token given the previous ones.
-    So wrap the target sentence with <code class="inl">&lt;SOS&gt;</code> and <code class="inl">&lt;EOS&gt;</code>,
-    then build <strong>two</strong> aligned tensors from it:
-    the <strong>decoder input</strong> (everything except the last token — “shifted right”)
-    and the <strong>target for the loss</strong> (everything except the first token — “shifted left”).
-    Both have length 8, and position <math><mi>t</mi></math> of the input must predict
-    position <math><mi>t</mi></math> of the target.
+    The diagram below is <strong>one</strong> training step for one sentence pair, from raw text to the loss.
+    Use <strong>Next</strong>/<strong>Back</strong> (or click a step) to walk through it: each step lights up
+    the part of the diagram it explains — data preparation on the left, the encoder–decoder in the middle,
+    output and loss on the right.
   </p>
-  <p class="note"><strong>Hover any token</strong> below to see which prediction pair it belongs to.</p>
 
-  <div id="shiftbox" class="scroll-x">
-    <div class="tokrow">
-      <div class="lbl">Source sequence (English)<br>→ Encoder input</div>
-      <div id="row-src"></div>
-    </div>
-    <div class="tokrow" style="margin-top:16px;">
-      <div class="lbl">Target sequence (French)<br><span style="font-size:.75rem;">&lt;SOS&gt; &amp; &lt;EOS&gt; added (9 tokens)</span></div>
-      <div id="row-tgt"></div>
-    </div>
-    <div class="tokrow">
-      <div class="lbl">Decoder input<br><span style="font-size:.75rem;">last token removed — “shifted right”</span></div>
-      <div id="row-decin"></div>
-    </div>
-    <div class="tokrow">
-      <div class="lbl">Target for loss<br><span style="font-size:.75rem;">first token removed — “shifted left”</span></div>
-      <div id="row-target"></div>
+  <div class="walk-controls">
+    <button class="wbtn" id="wprev">← Back</button>
+    <button class="wbtn" id="wnext">Next →</button>
+    <div class="step-pills" id="wpills"></div>
+  </div>
+
+  <div class="scroll-x">
+    <div class="e2e" id="e2e">
+      <div class="panel p-data">
+        <div class="ptitle">Data preparation</div>
+        <div class="pcol">
+          <div class="stage" id="st-src">
+            <div class="slbl">Source sequence (English) — encoder input</div>
+            <div class="tokline" id="e2e-src"></div>
+          </div>
+          <div class="stage" id="st-tgt">
+            <div class="slbl">Target sequence (French)</div>
+            <div class="tokline" id="e2e-tgt"></div>
+          </div>
+          <div class="stage" id="st-wrap">
+            <div class="slbl">Wrapped target — <code class="inl">&lt;SOS&gt;</code> + sentence + <code class="inl">&lt;EOS&gt;</code> = 9 tokens</div>
+            <div class="tokline" id="e2e-wrap"></div>
+          </div>
+          <div class="stage" id="st-decin">
+            <div class="slbl">Decoder input — last token removed (“shifted right”, 8 tokens)</div>
+            <div class="tokline" id="e2e-decin"></div>
+          </div>
+          <div class="stage" id="st-losstgt">
+            <div class="slbl">Target for loss — first token removed (“shifted left”, 8 tokens)</div>
+            <div class="tokline" id="e2e-losstgt"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="e2e-arrows"><span>→</span><span>→</span></div>
+
+      <div class="panel p-model">
+        <div class="ptitle">Model processing (teacher forcing)</div>
+        <div class="pcol center">
+          <div class="stage" id="st-enc">
+            <div class="blockbox b-enc">ENCODER<small>bidirectional self-attention · no mask, no shift</small></div>
+          </div>
+          <div class="stage" id="st-dec">
+            <div class="blockbox b-dec"><span class="b-xatt">Cross-Attention</span>
+              DECODER<small>reads the encoder output via cross-attention · causal self-attention (§2)</small></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="e2e-arrows"><span>→</span></div>
+
+      <div class="panel p-out">
+        <div class="ptitle">Output &amp; loss (at each step t)</div>
+        <div class="pcol">
+          <div class="stage" id="st-out">
+            <div class="slbl">Predicted (argmax) → target for loss</div>
+            <div id="e2e-pairs"></div>
+          </div>
+          <div class="stage" id="st-loss">
+            <div class="lossbox">CROSS-ENTROPY LOSS</div>
+            <div class="slbl" style="margin:6px 0 0;text-align:center;">−log p(target), averaged over positions</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
+
+  <div class="walk-exp"><h3 id="walk-title"></h3><div id="walk-text"></div></div>
   <div class="shift-hint" id="shift-hint">
-    Hover a purple token: the decoder-input position (orange) is paired with the loss-target token (green)
-    it must learn to predict.
+    <b>Hover</b> any token of the two shifted rows to see its prediction pair;
+    <b>click</b> a prediction→target pair (right panel) to inspect that timestep in §2.
   </div>
 
   <h3>Why padding? Batches mix sentence lengths</h3>
@@ -278,47 +348,8 @@
 </section>
 
 <!-- ============================================================ §2 -->
-<section>
-  <div class="kicker">2 · Model processing</div>
-  <h2>Teacher forcing: the decoder reads the ground truth, not its own guesses</h2>
-  <p>
-    The encoder consumes the <strong>full, unshifted</strong> English sentence with
-    bidirectional self-attention — no shifting, no causal mask. The decoder receives the shifted
-    French input and, through <strong>cross-attention</strong>, looks at the encoder output at every step.
-    During training the decoder's input is always the <em>ground-truth</em> prefix — even when the model
-    just made a mistake at the previous position. That is <strong>teacher forcing</strong>.
-  </p>
-  <div class="scroll-x">
-    <div class="pipeline">
-      <div class="pipe-col">
-        <div class="b-io src"><b>Encoder input (source)</b>
-          <div class="toks">The cat sat on the mat</div></div>
-        <div class="b-io tgt"><b>Decoder input (shifted right)</b>
-          <div class="toks">&lt;SOS&gt; Le chat s'est assis sur le tapis</div></div>
-      </div>
-      <div class="pipe-arrow">→</div>
-      <div class="pipe-col">
-        <div class="blockbox b-enc">ENCODER<small>bidirectional self-attention · no mask, no shift</small></div>
-        <div class="blockbox b-dec"><span class="b-xatt">Cross-Attention ← encoder output</span>
-          DECODER<small>causal self-attention (§3)</small></div>
-      </div>
-      <div class="pipe-arrow">→</div>
-      <div class="pipe-col">
-        <div class="b-io"><b>Predicted logits</b>one next-token distribution per position <math><mi>t</mi></math></div>
-        <div class="b-io loss"><b>Cross-entropy loss</b>compared against the loss target
-          <div class="toks">Le chat s'est assis sur le tapis &lt;EOS&gt;</div></div>
-      </div>
-    </div>
-  </div>
-  <p class="note">
-    The whole diagram is <strong>one</strong> forward pass — all positions are processed at the same time.
-    How can the model predict token 2 without cheating by reading tokens 3…8? That is the causal mask's job.
-  </p>
-</section>
-
-<!-- ============================================================ §3 -->
-<section>
-  <div class="kicker">3 · The decoder causal mask</div>
+<section id="sec-mask">
+  <div class="kicker">2 · The decoder causal mask</div>
   <h2>One input tensor, eight training examples</h2>
   <p>
     The full shifted sequence is fed <strong>simultaneously</strong> for all 8 timesteps.
@@ -375,9 +406,9 @@
   </div>
 </section>
 
-<!-- ============================================================ §4 -->
+<!-- ============================================================ §3 -->
 <section>
-  <div class="kicker">4 · Output &amp; loss</div>
+  <div class="kicker">3 · Output &amp; loss</div>
   <h2>All eight predictions hit one cross-entropy loss — in parallel</h2>
   <p>
     Each row of the decoder output is a probability distribution over the French vocabulary.
@@ -403,15 +434,15 @@
     The probabilities below are illustrative. Note that even a <em>correct</em> argmax prediction still
     contributes some loss (its probability is below 1), and the two wrong positions
     (<code class="inl">t=2</code>, <code class="inl">t=8</code>) dominate the total.
-    The highlighted row follows the timestep slider in §3.
+    The highlighted row follows the timestep slider in §2.
   </p>
   <div class="scroll-x"><table class="losstab" id="losstab"></table></div>
   <p class="meanline" id="meanline"></p>
 </section>
 
-<!-- ============================================================ §5 -->
+<!-- ============================================================ §4 -->
 <section>
-  <div class="kicker">5 · Scope &amp; check yourself</div>
+  <div class="kicker">4 · Scope &amp; check yourself</div>
   <h2>What is decoder-only, and what is not</h2>
   <div class="takeaway">
     <b>Padding mask ≠ causal mask.</b> The padding mask hides <em>meaningless</em> positions
@@ -459,34 +490,117 @@ const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;
 const isSpecial = s => s.startsWith("<");
 const $ = id => document.getElementById(id);
 
-/* ================= §1 shift explorer ================= */
+/* ================= §1 end-to-end walkthrough ================= */
 function tokenSpan(txt, cls, data){
   return `<span class="tok ${cls}${isSpecial(txt)?" special":""}" ${data||""}>${esc(txt)}</span>`;
 }
-$("row-src").outerHTML    = SRC.map(w=>tokenSpan(w,"")).join(" ");
-$("row-tgt").outerHTML    = ["<SOS>",...TGT,"<EOS>"].map(w=>tokenSpan(w,"fr")).join(" ");
-(function(){
-  const decin  = DEC_IN.map((w,i)=>tokenSpan(w,"fr", `data-kind="in" data-i="${i}"`)).join(" ");
-  const target = TARGET.map((w,i)=>tokenSpan(w,"fr", `data-kind="out" data-i="${i}"`)).join(" ");
-  $("row-decin").outerHTML  = decin;
-  $("row-target").outerHTML = target;
-})();
+const WRAP9 = ["<SOS>", ...TGT, "<EOS>"];
+function fillTokline(id, words, cls, kind){
+  $(id).innerHTML = words.map((w,i)=>
+    tokenSpan(w, cls, kind ? `data-kind="${kind}" data-i="${i}"` : "")).join("");
+}
+fillTokline("e2e-src",     SRC,    "");
+fillTokline("e2e-tgt",     TGT,    "fr");
+fillTokline("e2e-wrap",    WRAP9,  "fr");
+fillTokline("e2e-decin",   DEC_IN, "fr", "in");
+fillTokline("e2e-losstgt", TARGET, "fr", "out");
 
-const shiftbox = $("shiftbox"), shiftHint = $("shift-hint");
+$("e2e-pairs").innerHTML = PREDS.map((p,i)=>{
+  const ok = p.pred === TARGET[i];
+  return `<div class="pairrow" data-t="${i+1}" title="inspect t=${i+1} in the mask explorer (§2)">
+    <span class="ptok pred">${esc(p.pred)}</span><span style="color:var(--muted);">→</span>
+    <span class="ptok tgt">${esc(TARGET[i])}</span><span class="mark">${ok?"✅":"❌"}</span></div>`;
+}).join("");
+
+const WALK = [
+  {pill:"Pair", title:"A supervised translation pair", spots:["st-src","st-tgt"],
+   text:`Training data is just thousands of sentence pairs. This one: English <b>“The cat sat on the
+     mat”</b> (6 tokens) and its French translation <b>“Le chat s'est assis sur le tapis”</b> (7 tokens).
+     The goal: teach the decoder to produce each <em>next</em> French token, given the English sentence
+     and the French tokens so far.`},
+  {pill:"Wrap", title:"Wrap the target with <SOS> and <EOS>", spots:["st-tgt","st-wrap"],
+   text:`Two special tokens wrap the French sentence, making <b>9 tokens</b>.
+     <code class="inl">&lt;SOS&gt;</code> (start of sequence) gives the decoder something to read before
+     it has produced anything; <code class="inl">&lt;EOS&gt;</code> (end of sequence) is a token the model
+     must learn to <em>predict</em>, so that at inference time it can say “the sentence ends here”.`},
+  {pill:"Shift →", title:"Shift right → the decoder input", spots:["st-wrap","st-decin"], strike:"last",
+   text:`Remove the <b>last</b> token of the wrapped sequence (crossed out above). The remaining
+     <b>8 tokens are the decoder input</b>: at position <i>t</i> the decoder reads the ground-truth
+     token <i>t</i> — starting from <code class="inl">&lt;SOS&gt;</code>, not from a model prediction.`},
+  {pill:"Shift ←", title:"Shift left → the target for the loss", spots:["st-wrap","st-losstgt"], strike:"first",
+   text:`Now remove the <b>first</b> token instead: another 8-token tensor, the <b>loss target</b>.
+     The two tensors are the same sequence offset by one, so input position <i>t</i> lines up with exactly
+     the token it must predict. <b>Hover any token</b> in the two shifted rows to see its prediction pair.`},
+  {pill:"Encoder", title:"The encoder reads the full source", spots:["st-src","st-enc"],
+   text:`The complete, <b>unshifted</b> English sentence flows through the encoder's bidirectional
+     self-attention — “cat” may freely attend to “mat”, five positions ahead. No shifting and no causal
+     mask here: those are decoder-only. The output is one context vector per English token.`},
+  {pill:"Decoder", title:"The decoder: teacher forcing + cross-attention", spots:["st-decin","st-dec"],
+   text:`The decoder consumes the <b>ground-truth prefix</b> — never its own earlier guesses. That is
+     <b>teacher forcing</b>: even if the model gets position 2 wrong, position 3 still reads the correct
+     token “chat”. Meanwhile <b>cross-attention</b> lets every decoder position look at the <em>entire</em>
+     encoder output, connecting French positions to English words.`},
+  {pill:"Loss", title:"Compare, position by position → one loss", spots:["st-losstgt","st-out","st-loss"],
+   text:`Every decoder position outputs a probability distribution over the French vocabulary; its argmax
+     is the “best guess”. Compared against the loss target, positions <b>2</b> and <b>8</b> are wrong here
+     (❌). Cross-entropy charges each position −log p(correct token) and averages — the numbers are in §3.
+     <b>Click any pair</b> on the right to inspect that timestep in the mask explorer.`},
+  {pill:"One pass", title:"…and it is all ONE parallel forward pass", spots:["st-decin","st-dec","st-out"],
+   text:`Nothing here happens token-by-token: all 8 positions are computed <b>simultaneously</b>, in one
+     forward pass. But then, when predicting position 2, what stops the decoder from simply <em>reading</em>
+     tokens 3…8, which sit right there in the same input tensor? That is the causal mask's job —
+     <b>§2, below</b>.`},
+];
+$("wpills").innerHTML = WALK.map((s,i)=>
+  `<button class="spill" data-k="${i}">${i+1} · ${esc(s.pill)}</button>`).join("");
+
+let wstep = 0;
+function renderWalk(k){
+  wstep = Math.max(0, Math.min(WALK.length-1, k));
+  const st = WALK[wstep];
+  document.querySelectorAll("#e2e .stage").forEach(s=>
+    s.classList.toggle("spot", st.spots.includes(s.id)));
+  document.querySelectorAll("#e2e-wrap .tok").forEach((t,i)=>
+    t.classList.toggle("masked-out",
+      (st.strike==="last" && i===WRAP9.length-1) || (st.strike==="first" && i===0)));
+  $("walk-title").textContent = `Step ${wstep+1} of ${WALK.length} · ${st.title}`;
+  $("walk-text").innerHTML = st.text;
+  $("wprev").disabled = wstep===0;
+  $("wnext").disabled = wstep===WALK.length-1;
+  document.querySelectorAll("#wpills .spill").forEach((p,i)=>
+    p.classList.toggle("on", i===wstep));
+}
+$("wprev").addEventListener("click", ()=>renderWalk(wstep-1));
+$("wnext").addEventListener("click", ()=>renderWalk(wstep+1));
+$("wpills").addEventListener("click", e=>{
+  const b = e.target.closest("[data-k]");
+  if(b) renderWalk(+b.dataset.k);
+});
+$("e2e-pairs").addEventListener("click", e=>{
+  const r = e.target.closest(".pairrow");
+  if(!r) return;
+  $("tslider").value = r.dataset.t;
+  renderStep(+r.dataset.t);
+  $("sec-mask").scrollIntoView({behavior:"smooth"});
+});
+renderWalk(0);
+
+/* hover pairing between the two shifted rows */
+const e2e = $("e2e"), shiftHint = $("shift-hint");
 const defaultHint = shiftHint.innerHTML;
-shiftbox.addEventListener("mouseover", e=>{
-  const tok = e.target.closest(".tok[data-i]");
+e2e.addEventListener("mouseover", e=>{
+  const tok = e.target.closest(".tok[data-kind]");
   if(!tok) return;
   const i = +tok.dataset.i;
-  shiftbox.querySelectorAll(".tok").forEach(t=>t.classList.remove("hl","linked"));
-  shiftbox.querySelectorAll(`.tok[data-kind="in"][data-i="${i}"]`).forEach(t=>t.classList.add("hl"));
-  shiftbox.querySelectorAll(`.tok[data-kind="out"][data-i="${i}"]`).forEach(t=>t.classList.add("linked"));
+  e2e.querySelectorAll(".tok").forEach(t=>t.classList.remove("hl","linked"));
+  e2e.querySelectorAll(`.tok[data-kind="in"][data-i="${i}"]`).forEach(t=>t.classList.add("hl"));
+  e2e.querySelectorAll(`.tok[data-kind="out"][data-i="${i}"]`).forEach(t=>t.classList.add("linked"));
   shiftHint.innerHTML =
     `Pair <b>t = ${i+1}</b>: given decoder-input tokens 1…${i+1} (ending in
      <b>${esc(DEC_IN[i])}</b>), the decoder must predict <b>${esc(TARGET[i])}</b>.`;
 });
-shiftbox.addEventListener("mouseleave", ()=>{
-  shiftbox.querySelectorAll(".tok").forEach(t=>t.classList.remove("hl","linked"));
+e2e.addEventListener("mouseleave", ()=>{
+  e2e.querySelectorAll(".tok").forEach(t=>t.classList.remove("hl","linked"));
   shiftHint.innerHTML = defaultHint;
 });
 
@@ -527,7 +641,7 @@ $("padmask-btn").addEventListener("click", function(){
 });
 renderPad();
 
-/* ================= §3 mask matrix ================= */
+/* ================= §2 mask matrix ================= */
 $("mask-collbls").innerHTML = DEC_IN.map(w=>`<div>${esc(w)}</div>`).join("");
 $("mask-rowlbls").innerHTML = DEC_IN.map((w,i)=>`<div data-t="${i+1}">t=${i+1}</div>`).join("");
 (function(){
@@ -546,7 +660,7 @@ $("maskgrid").addEventListener("click", e=>{
   if(c){ $("tslider").value = c.dataset.r; renderStep(+c.dataset.r); }
 });
 
-/* ================= §4 loss table ================= */
+/* ================= §3 loss table ================= */
 const nll = p => -Math.log(p);
 function renderLossTable(curT){
   let rows = `<tr><th>t</th><th>decoder sees (prefix)</th><th>predicted (argmax)</th>
@@ -573,7 +687,7 @@ function renderLossTable(curT){
      ${(nll(PREDS[1].pTarget)+nll(PREDS[7].pTarget)).toFixed(2)} of it — gradients push hardest there.`;
 }
 
-/* ================= §3 step renderer ================= */
+/* ================= §2 step renderer ================= */
 function renderStep(t){
   $("tval").textContent = `t = ${t}`;
   $("step-title").textContent = `Training example at t = ${t}`;
@@ -618,7 +732,7 @@ function renderStep(t){
 $("tslider").addEventListener("input", e=>renderStep(+e.target.value));
 renderStep(2);
 
-/* ================= §5 quiz ================= */
+/* ================= §4 quiz ================= */
 const QUIZ = [
   {q:"The encoder also shifts its input and applies a causal mask.", a:false,
    fb:"False — shifting and causal masking are strictly decoder operations. The encoder processes the complete, unshifted source with unmasked, bidirectional self-attention."},
