@@ -119,6 +119,8 @@
   .e2e .tok[data-kind]{cursor:pointer;}
   .e2e-arrows{display:flex;flex-direction:column;justify-content:space-around;align-items:center;
     font-size:1.3rem;color:var(--muted);}
+  .enc2dec{text-align:center;font-size:.72rem;font-weight:700;line-height:1.2;color:var(--xatt);}
+  .enc2dec .arr{display:block;font-size:1.15rem;line-height:1;}
   .pairrow{display:flex;align-items:center;gap:5px;margin:3px 0;cursor:pointer;border-radius:6px;padding:2px 4px;}
   .pairrow:hover{background:#fff;}
   .ptok{font:600 .66rem/1 var(--mono);padding:5px 6px;border-radius:5px;min-width:44px;text-align:center;}
@@ -304,6 +306,7 @@
           <div class="stage" id="st-enc">
             <div class="blockbox b-enc">ENCODER<small>bidirectional self-attention · no mask, no shift</small></div>
           </div>
+          <div class="enc2dec">encoder output<span class="arr">↓</span></div>
           <div class="stage" id="st-dec">
             <div class="blockbox b-dec"><span class="b-xatt">Cross-Attention</span>
               DECODER<small>reads the encoder output via cross-attention · causal self-attention (§2)</small></div>
