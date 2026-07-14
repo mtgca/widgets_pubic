@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transformer Training · Teacher Forcing &amp; the Decoder Causal Mask</title>
+<!--
+  ============================================================================
+  TRANSFORMER TRAINING — TEACHER FORCING & THE DECODER CAUSAL MASK
+  ----------------------------------------------------------------------------
+  Self-contained teaching widget (HTML + CSS + JS in this one file).
+  Based on two lecture slides about encoder–decoder Transformer training
+  with the translation pair:
+      English  "The cat sat on the mat"
+      French   "Le chat s'est assis sur le tapis"
+
+  PEDAGOGICAL GOALS:
+  1. DATA PREPARATION — from ONE target sequence, build TWO tensors by
+     shifting: decoder input (<SOS> + drop last) and loss target
+     (drop first + <EOS>). Position t of the input must predict
+     position t of the target.
+  2. PADDING — variable-length sequences are padded to a uniform length
+     per batch; a padding mask stops attention from looking at <PAD>,
+     and the loss ignores <PAD> targets (ignore_index).
+  3. TEACHER FORCING — during training the decoder reads the GROUND-TRUTH
+     prefix, never its own previous predictions.
+  4. THE CAUSAL MASK "TRICK" — the full shifted sequence is fed once;
+     an upper-triangular −inf mask makes row t attend only to tokens ≤ t,
+     so one 8-token sequence yields 8 prefix→next-token training examples
+     in a single parallel forward pass, all hitting one cross-entropy loss.
+  5. SCOPE — shifting + causal masking are DECODER-only. The encoder always
+     sees the full, unshifted source with bidirectional self-attention.
+
+  DESIGN NOTES:
+  - Light academic theme, no looping animations (repo conventions).
+  - Colors echo the slides: encoder = blue, decoder = purple,
+    cross-attention = orange, loss = red, forbidden mask cells = red tint.
+  - Equations in native MathML (no libraries). None inside SVG (no SVG used).
+  - One timestep slider drives §3 (mask row + visible prefix + prediction).
+
+  HOW TO MODIFY:
+  - SRC / TGT hold the sentence pair; DEC_IN, TARGET, PREDS are derived
+    or hard-coded to match the slides (two intentional wrong predictions).
+  - renderStep(t) is the single entry point for the explorer.
+  ============================================================================
+-->
+<style>
+  :root{
+    --ink:#1f2937; --muted:#6b7280; --bg:#f6f7fb; --card:#ffffff;
+    --line:#e5e7eb; --soft:#f1f5f9;
+    --enc:#1d5fae;  --enc-soft:#e8f1fb;  --enc-line:#b7d2ee;
+    --dec:#7c3aed;  --dec-soft:#f5f0ff;  --dec-line:#ddd0f7;
+    --xatt:#c2620a; --xatt-soft:#fdf1e3; --xatt-line:#f0c088;
+    --ok:#1a7a4a;   --ok-soft:#e6f9f1;   --ok-line:#9ad9bb;
+    --bad:#b91c1c;  --bad-soft:#fdecec;  --bad-line:#f3b4b4;
+    --pad:#94a3b8;  --pad-soft:#eef2f6;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --math:"STIX Two Math","Cambria Math","Latin Modern Math","Times New Roman",Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--ink);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:32px 16px 64px;}
+  .wrap{max-width:1060px;margin:0 auto;}
+  h1{font-size:1.7rem;line-height:1.25;margin-bottom:8px;}
+  .subtitle{color:var(--muted);max-width:62rem;margin-bottom:26px;}
+  h2{font-size:1.18rem;margin:0 0 4px;}
+  h3{font-size:1rem;margin:14px 0 6px;}
+  section{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:22px 24px;margin-bottom:26px;box-shadow:0 1px 3px rgba(15,23,42,.05);}
+  .kicker{font:700 .72rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:6px;}
+  p{margin:8px 0;max-width:64rem;}
+  .note{font-size:.9rem;color:var(--muted);}
+  math{font-family:var(--math);}
+  code.inl{font:.85em var(--mono);background:var(--soft);border:1px solid var(--line);
+    border-radius:5px;padding:1px 5px;white-space:nowrap;}
+  .scroll-x{overflow-x:auto;padding-bottom:4px;}
+
+  /* ---------- token chips ---------- */
+  .tokrow{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin:6px 0;}
+  .tokrow .lbl{flex:0 0 168px;font-size:.82rem;color:var(--muted);text-align:right;
+    padding-right:10px;line-height:1.3;}
+  .tok{font:600 .85rem/1 var(--mono);padding:8px 9px;border-radius:7px;white-space:nowrap;
+    border:1px solid var(--enc-line);background:var(--enc-soft);color:var(--enc);}
+  .tok.fr{border-color:var(--dec-line);background:var(--dec-soft);color:var(--dec);}
+  .tok.special{border-style:dashed;background:#fff;}
+  .tok.padtok{border-color:var(--line);background:var(--pad-soft);color:var(--pad);border-style:dashed;}
+  .tok.ghost{opacity:.28;}
+  .tok.hl{outline:3px solid var(--xatt);outline-offset:1px;}
+  .tok.linked{outline:3px solid var(--ok);outline-offset:1px;}
+  .tok.masked-out{background:var(--bad-soft);border-color:var(--bad-line);color:var(--bad);
+    text-decoration:line-through;opacity:.55;}
+
+  /* ---------- §1 shift explorer ---------- */
+  #shiftbox .tokrow{cursor:default;}
+  #shiftbox .tok{cursor:pointer;}
+  .arrowcol{display:flex;flex-direction:column;justify-content:center;font-size:1.1rem;color:var(--muted);}
+  .shift-hint{min-height:44px;background:var(--soft);border:1px solid var(--line);border-radius:8px;
+    padding:9px 13px;font-size:.92rem;margin-top:12px;}
+  .shift-hint b{color:var(--dec);}
+
+  /* ---------- padding demo ---------- */
+  .padgrid{display:grid;grid-template-columns:150px repeat(7,minmax(58px,1fr));gap:5px;
+    align-items:stretch;min-width:640px;}
+  .padgrid .rowlbl{font-size:.8rem;color:var(--muted);display:flex;align-items:center;
+    justify-content:flex-end;padding-right:8px;text-align:right;}
+  .padgrid .cell{font:600 .78rem/1 var(--mono);border-radius:6px;padding:9px 4px;text-align:center;
+    border:1px solid var(--dec-line);background:var(--dec-soft);color:var(--dec);}
+  .padgrid .cell.padded{border:1px dashed var(--line);background:var(--pad-soft);color:var(--pad);}
+  .padgrid .cell.mask1{border:1px solid var(--ok-line);background:var(--ok-soft);color:var(--ok);}
+  .padgrid .cell.mask0{border:1px solid var(--bad-line);background:var(--bad-soft);color:var(--bad);}
+  .toggle-btn{font:600 .85rem/1 inherit;padding:9px 14px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--enc-line);background:var(--enc-soft);color:var(--enc);}
+  .toggle-btn[aria-pressed="true"]{background:var(--enc);color:#fff;}
+
+  /* ---------- §2 pipeline diagram ---------- */
+  .pipeline{display:grid;grid-template-columns:1fr auto 1.15fr auto 1fr;gap:0 4px;
+    align-items:stretch;min-width:760px;margin:14px 0 4px;}
+  .pipe-col{display:flex;flex-direction:column;gap:10px;justify-content:center;}
+  .blockbox{border-radius:10px;padding:13px 14px;text-align:center;font-weight:700;}
+  .blockbox small{display:block;font-weight:400;font-size:.78rem;margin-top:4px;opacity:.85;}
+  .b-enc{background:var(--enc);color:#fff;}
+  .b-dec{background:var(--dec);color:#fff;position:relative;padding-top:44px;}
+  .b-xatt{position:absolute;top:8px;left:50%;transform:translateX(-50%);
+    background:var(--xatt);color:#fff;font-size:.78rem;font-weight:700;border-radius:7px;
+    padding:6px 10px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25);}
+  .b-io{background:var(--soft);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;font-size:.82rem;text-align:center;}
+  .b-io b{display:block;font-size:.84rem;margin-bottom:2px;}
+  .b-io .toks{font:600 .72rem/1.7 var(--mono);word-spacing:2px;}
+  .b-io.src b{color:var(--enc);} .b-io.tgt b{color:var(--dec);} .b-io.loss{border-color:var(--bad-line);background:var(--bad-soft);}
+  .b-io.loss b{color:var(--bad);}
+  .pipe-arrow{display:flex;align-items:center;font-size:1.5rem;color:var(--muted);padding:0 6px;}
+
+  /* ---------- §3 explorer ---------- */
+  .controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 0 16px;}
+  .controls label{font-weight:700;font-size:.92rem;}
+  input[type=range]{width:260px;accent-color:var(--dec);}
+  .tval{font:700 .95rem var(--mono);color:var(--dec);min-width:44px;}
+  .explorer{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:start;}
+  @media (max-width:820px){.explorer{grid-template-columns:1fr;}}
+
+  .maskwrap{display:grid;grid-template-columns:auto auto;gap:4px;}
+  .mask-collbls{grid-column:2;display:grid;grid-template-columns:repeat(8,34px);gap:3px;}
+  .mask-collbls div{font:600 .6rem/1.1 var(--mono);color:var(--muted);text-align:center;
+    height:34px;display:flex;align-items:flex-end;justify-content:center;
+    writing-mode:vertical-rl;transform:rotate(180deg);margin:0 auto;}
+  .mask-rowlbls{display:grid;grid-template-rows:repeat(8,34px);gap:3px;}
+  .mask-rowlbls div{font:600 .7rem/1 var(--mono);color:var(--muted);display:flex;
+    align-items:center;justify-content:flex-end;padding-right:7px;cursor:pointer;border-radius:5px;}
+  .mask-rowlbls div:hover{background:var(--soft);}
+  .mask-rowlbls div.on{color:var(--dec);font-weight:800;}
+  .maskgrid{display:grid;grid-template-columns:repeat(8,34px);grid-template-rows:repeat(8,34px);gap:3px;}
+  .mcell{border-radius:5px;display:flex;align-items:center;justify-content:center;
+    font:700 .72rem/1 var(--mono);cursor:pointer;border:1px solid var(--line);background:#fff;color:#8aa0b8;}
+  .mcell.forbid{background:var(--bad-soft);border-color:var(--bad-line);color:var(--bad);}
+  .mcell.dimmed{opacity:.3;}
+  .mcell.rowon{box-shadow:0 0 0 2px var(--dec) inset;}
+  .legend{display:flex;gap:16px;margin-top:10px;font-size:.82rem;color:var(--muted);flex-wrap:wrap;}
+  .legend .sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:5px;}
+
+  .steppanel{border:1px solid var(--dec-line);background:var(--dec-soft);border-radius:10px;padding:16px 18px;}
+  .steppanel h3{margin-top:0;color:var(--dec);}
+  .pred-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0;}
+  .pred-chip{font:700 .9rem/1 var(--mono);padding:9px 12px;border-radius:8px;}
+  .pred-chip.good{background:var(--ok-soft);border:1px solid var(--ok-line);color:var(--ok);}
+  .pred-chip.wrong{background:var(--bad-soft);border:1px solid var(--bad-line);color:var(--bad);}
+  .pred-chip.target{background:#fff;border:1px solid var(--dec-line);color:var(--dec);}
+  .verdict{font-size:1rem;font-weight:800;}
+  .verdict.good{color:var(--ok);} .verdict.wrong{color:var(--bad);}
+  .loss-detail{font-size:.9rem;background:#fff;border:1px solid var(--dec-line);
+    border-radius:8px;padding:10px 13px;margin-top:10px;}
+
+  /* ---------- §4 parallel loss table ---------- */
+  table.losstab{border-collapse:collapse;font-size:.88rem;min-width:660px;}
+  table.losstab th,table.losstab td{border:1px solid var(--line);padding:7px 11px;text-align:left;vertical-align:middle;}
+  table.losstab th{background:var(--soft);font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);}
+  table.losstab td.mono{font:600 .84rem var(--mono);}
+  table.losstab tr.wrongrow td{background:var(--bad-soft);}
+  table.losstab tr.currow td{outline:2px solid var(--dec);outline-offset:-2px;}
+  .num{font:600 .84rem var(--mono);text-align:right !important;}
+  .meanline{margin-top:12px;font-size:.95rem;}
+  .meanline b{color:var(--bad);}
+
+  /* ---------- takeaway / quiz ---------- */
+  .takeaway{border-left:4px solid var(--xatt);background:var(--xatt-soft);
+    border-radius:0 8px 8px 0;padding:12px 16px;margin:14px 0;}
+  .takeaway b{color:var(--xatt);}
+  .quiz-item{border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0;}
+  .quiz-item .q{font-weight:600;margin-bottom:10px;}
+  .quiz-item button{font:600 .85rem/1 inherit;padding:8px 16px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--line);background:var(--soft);color:var(--ink);margin-right:8px;}
+  .quiz-item button:hover{border-color:var(--dec-line);}
+  .quiz-item .fb{margin-top:10px;font-size:.9rem;display:none;border-radius:8px;padding:10px 13px;}
+  .quiz-item .fb.show{display:block;}
+  .quiz-item .fb.good{background:var(--ok-soft);border:1px solid var(--ok-line);color:var(--ok);}
+  .quiz-item .fb.wrong{background:var(--bad-soft);border:1px solid var(--bad-line);color:var(--bad);}
+
+  footer{color:var(--muted);font-size:.85rem;margin-top:34px;text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false" data-author="mtgca"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+.verify-badge[data-author]::after{content:"· by @" attr(data-author);opacity:.75;margin-left:4px;}
+</style>
+
+<div class="wrap">
+
+<h1>Transformer Training: Teacher Forcing &amp; the Decoder Causal Mask</h1>
+<p class="subtitle">
+  How does an encoder–decoder Transformer learn to translate
+  <em>“The cat sat on the mat”</em> into <em>“Le chat s'est assis sur le tapis”</em>?
+  Follow one training pair end to end: how the target sequence is <strong>shifted</strong> into a decoder
+  input and a loss target, why variable-length batches need <strong>padding masks</strong>, and how a single
+  upper-triangular <strong>causal mask</strong> turns one 8-token sequence into
+  <strong>8 training examples computed in one parallel forward pass</strong>.
+</p>
+
+<!-- ============================================================ §1 -->
+<section>
+  <div class="kicker">1 · Data preparation</div>
+  <h2>One target sentence, two tensors — the shift trick</h2>
+  <p>
+    The decoder is trained to predict the <em>next</em> French token given the previous ones.
+    So wrap the target sentence with <code class="inl">&lt;SOS&gt;</code> and <code class="inl">&lt;EOS&gt;</code>,
+    then build <strong>two</strong> aligned tensors from it:
+    the <strong>decoder input</strong> (everything except the last token — “shifted right”)
+    and the <strong>target for the loss</strong> (everything except the first token — “shifted left”).
+    Both have length 8, and position <math><mi>t</mi></math> of the input must predict
+    position <math><mi>t</mi></math> of the target.
+  </p>
+  <p class="note"><strong>Hover any token</strong> below to see which prediction pair it belongs to.</p>
+
+  <div id="shiftbox" class="scroll-x">
+    <div class="tokrow">
+      <div class="lbl">Source sequence (English)<br>→ Encoder input</div>
+      <div id="row-src"></div>
+    </div>
+    <div class="tokrow" style="margin-top:16px;">
+      <div class="lbl">Target sequence (French)<br><span style="font-size:.75rem;">&lt;SOS&gt; &amp; &lt;EOS&gt; added (9 tokens)</span></div>
+      <div id="row-tgt"></div>
+    </div>
+    <div class="tokrow">
+      <div class="lbl">Decoder input<br><span style="font-size:.75rem;">last token removed — “shifted right”</span></div>
+      <div id="row-decin"></div>
+    </div>
+    <div class="tokrow">
+      <div class="lbl">Target for loss<br><span style="font-size:.75rem;">first token removed — “shifted left”</span></div>
+      <div id="row-target"></div>
+    </div>
+  </div>
+  <div class="shift-hint" id="shift-hint">
+    Hover a purple token: the decoder-input position (orange) is paired with the loss-target token (green)
+    it must learn to predict.
+  </div>
+
+  <h3>Why padding? Batches mix sentence lengths</h3>
+  <p>
+    Real batches contain sentences of different lengths, but a tensor must be rectangular.
+    Shorter sequences are <strong>padded</strong> with <code class="inl">&lt;PAD&gt;</code> to the longest
+    length in the batch, and a <strong>padding mask</strong> marks which positions are real (1) and which
+    are padding (0) so attention never looks at <code class="inl">&lt;PAD&gt;</code> — and the loss
+    skips padded targets (e.g. <code class="inl">ignore_index</code> in PyTorch).
+  </p>
+  <p><button class="toggle-btn" id="padmask-btn" aria-pressed="false">Show the padding mask</button></p>
+  <div class="scroll-x"><div class="padgrid" id="padgrid"></div></div>
+</section>
+
+<!-- ============================================================ §2 -->
+<section>
+  <div class="kicker">2 · Model processing</div>
+  <h2>Teacher forcing: the decoder reads the ground truth, not its own guesses</h2>
+  <p>
+    The encoder consumes the <strong>full, unshifted</strong> English sentence with
+    bidirectional self-attention — no shifting, no causal mask. The decoder receives the shifted
+    French input and, through <strong>cross-attention</strong>, looks at the encoder output at every step.
+    During training the decoder's input is always the <em>ground-truth</em> prefix — even when the model
+    just made a mistake at the previous position. That is <strong>teacher forcing</strong>.
+  </p>
+  <div class="scroll-x">
+    <div class="pipeline">
+      <div class="pipe-col">
+        <div class="b-io src"><b>Encoder input (source)</b>
+          <div class="toks">The cat sat on the mat</div></div>
+        <div class="b-io tgt"><b>Decoder input (shifted right)</b>
+          <div class="toks">&lt;SOS&gt; Le chat s'est assis sur le tapis</div></div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-col">
+        <div class="blockbox b-enc">ENCODER<small>bidirectional self-attention · no mask, no shift</small></div>
+        <div class="blockbox b-dec"><span class="b-xatt">Cross-Attention ← encoder output</span>
+          DECODER<small>causal self-attention (§3)</small></div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-col">
+        <div class="b-io"><b>Predicted logits</b>one next-token distribution per position <math><mi>t</mi></math></div>
+        <div class="b-io loss"><b>Cross-entropy loss</b>compared against the loss target
+          <div class="toks">Le chat s'est assis sur le tapis &lt;EOS&gt;</div></div>
+      </div>
+    </div>
+  </div>
+  <p class="note">
+    The whole diagram is <strong>one</strong> forward pass — all positions are processed at the same time.
+    How can the model predict token 2 without cheating by reading tokens 3…8? That is the causal mask's job.
+  </p>
+</section>
+
+<!-- ============================================================ §3 -->
+<section>
+  <div class="kicker">3 · The decoder causal mask</div>
+  <h2>One input tensor, eight training examples</h2>
+  <p>
+    The full shifted sequence is fed <strong>simultaneously</strong> for all 8 timesteps.
+    Before the softmax, the attention scores get an upper-triangular mask
+    <math><msub><mi>M</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></math> added:
+    <math display="inline">
+      <msub><mi>M</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo>
+      <mrow><mo>{</mo><mtable columnalign="left">
+        <mtr><mtd><mn>0</mn></mtd><mtd><mtext>&nbsp;if&nbsp;</mtext><mi>j</mi><mo>≤</mo><mi>i</mi><mtext>&nbsp;(allowed)</mtext></mtd></mtr>
+        <mtr><mtd><mo>−</mo><mi>∞</mi></mtd><mtd><mtext>&nbsp;if&nbsp;</mtext><mi>j</mi><mo>&gt;</mo><mi>i</mi><mtext>&nbsp;(forbidden)</mtext></mtd></mtr>
+      </mtable></mrow>
+    </math>,
+    so
+    <math display="inline">
+      <mtext>softmax</mtext><mo stretchy="false">(</mo>
+      <mfrac><mrow><mi>Q</mi><msup><mi>K</mi><mi>⊤</mi></msup></mrow>
+        <msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac>
+      <mo>+</mo><mi>M</mi><mo stretchy="false">)</mo>
+    </math>
+    puts exactly zero attention weight on future positions.
+    Row <math><mi>t</mi></math> can only see tokens up to <math><mi>t</mi></math> —
+    every row is its own prefix→next-token training example.
+  </p>
+
+  <div class="controls">
+    <label for="tslider">Timestep</label>
+    <input type="range" id="tslider" min="1" max="8" step="1" value="2">
+    <span class="tval" id="tval">t = 2</span>
+    <span class="note">(drag, or click a row label of the matrix)</span>
+  </div>
+
+  <div class="explorer">
+    <div>
+      <div class="maskwrap">
+        <div class="mask-collbls" id="mask-collbls"></div>
+        <div class="mask-rowlbls" id="mask-rowlbls"></div>
+        <div class="maskgrid" id="maskgrid"></div>
+      </div>
+      <div class="legend">
+        <span><span class="sw" style="background:#fff;border:1px solid var(--line);"></span>allowed: 0</span>
+        <span><span class="sw" style="background:var(--bad-soft);border:1px solid var(--bad-line);"></span>forbidden: −∞</span>
+      </div>
+    </div>
+
+    <div class="steppanel">
+      <h3 id="step-title">Training example at t = 2</h3>
+      <div class="tokrow" style="margin:4px 0 2px;">
+        <div id="row-visible"></div>
+      </div>
+      <p class="note" id="visible-note"></p>
+      <div class="pred-line" id="pred-line"></div>
+      <div class="loss-detail" id="loss-detail"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ §4 -->
+<section>
+  <div class="kicker">4 · Output &amp; loss</div>
+  <h2>All eight predictions hit one cross-entropy loss — in parallel</h2>
+  <p>
+    Each row of the decoder output is a probability distribution over the French vocabulary.
+    Cross-entropy charges each position the negative log-probability it assigned to the correct token,
+    then averages over positions (skipping any <code class="inl">&lt;PAD&gt;</code> targets):
+  </p>
+  <p style="text-align:center;margin:14px 0;">
+    <math display="block">
+      <mi>L</mi><mo>=</mo>
+      <mo>−</mo><mfrac><mn>1</mn><mi>T</mi></mfrac>
+      <munderover><mo>∑</mo><mrow><mi>t</mi><mo>=</mo><mn>1</mn></mrow><mi>T</mi></munderover>
+      <mi>log</mi><mo>&#8289;</mo>
+      <msub><mi>p</mi><mi>θ</mi></msub>
+      <mo stretchy="false">(</mo>
+      <msub><mi>y</mi><mi>t</mi></msub>
+      <mo>∣</mo>
+      <msub><mi>y</mi><mrow><mo>&lt;</mo><mi>t</mi></mrow></msub>
+      <mo>,</mo><mi>x</mi>
+      <mo stretchy="false">)</mo>
+    </math>
+  </p>
+  <p class="note">
+    The probabilities below are illustrative. Note that even a <em>correct</em> argmax prediction still
+    contributes some loss (its probability is below 1), and the two wrong positions
+    (<code class="inl">t=2</code>, <code class="inl">t=8</code>) dominate the total.
+    The highlighted row follows the timestep slider in §3.
+  </p>
+  <div class="scroll-x"><table class="losstab" id="losstab"></table></div>
+  <p class="meanline" id="meanline"></p>
+</section>
+
+<!-- ============================================================ §5 -->
+<section>
+  <div class="kicker">5 · Scope &amp; check yourself</div>
+  <h2>What is decoder-only, and what is not</h2>
+  <div class="takeaway">
+    <b>Padding mask ≠ causal mask.</b> The padding mask hides <em>meaningless</em> positions
+    (<code class="inl">&lt;PAD&gt;</code>) and is used wherever attention runs — encoder, decoder, and
+    cross-attention. The causal mask hides the <em>future</em> and exists only in the decoder's
+    self-attention.
+  </div>
+  <div class="takeaway">
+    <b>Shifting and causal masking are strictly decoder operations.</b> The encoder always processes the
+    complete, unshifted source sequence with unmasked, bidirectional self-attention — the word
+    “cat” may freely attend to “mat”, six positions ahead.
+  </div>
+
+  <div id="quiz"></div>
+</section>
+
+<footer>
+  Interactive widget for teaching Transformer training · encoder–decoder translation example
+  “The cat sat on the mat” → “Le chat s'est assis sur le tapis”.
+</footer>
+</div>
+
+<script>
+"use strict";
+/* ================= data ================= */
+const SRC    = ["The","cat","sat","on","the","mat"];
+const TGT    = ["Le","chat","s'est","assis","sur","le","tapis"];
+const DEC_IN = ["<SOS>","Le","chat","s'est","assis","sur","le","tapis"];   // [<SOS>]+TGT+[<EOS>] minus last token
+const TARGET = ["Le","chat","s'est","assis","sur","le","tapis","<EOS>"];   // [<SOS>]+TGT+[<EOS>] minus first token
+const T = 8;
+
+/* predictions match the slides: wrong at t=2 (tapis vs chat) and t=8 (tapis vs <EOS>) */
+const PREDS = [
+  {pred:"Le",    pTarget:0.82},
+  {pred:"tapis", pTarget:0.11},
+  {pred:"s'est", pTarget:0.74},
+  {pred:"assis", pTarget:0.88},
+  {pred:"sur",   pTarget:0.79},
+  {pred:"le",    pTarget:0.85},
+  {pred:"tapis", pTarget:0.71},
+  {pred:"tapis", pTarget:0.09},
+];
+
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const isSpecial = s => s.startsWith("<");
+const $ = id => document.getElementById(id);
+
+/* ================= §1 shift explorer ================= */
+function tokenSpan(txt, cls, data){
+  return `<span class="tok ${cls}${isSpecial(txt)?" special":""}" ${data||""}>${esc(txt)}</span>`;
+}
+$("row-src").outerHTML    = SRC.map(w=>tokenSpan(w,"")).join(" ");
+$("row-tgt").outerHTML    = ["<SOS>",...TGT,"<EOS>"].map(w=>tokenSpan(w,"fr")).join(" ");
+(function(){
+  const decin  = DEC_IN.map((w,i)=>tokenSpan(w,"fr", `data-kind="in" data-i="${i}"`)).join(" ");
+  const target = TARGET.map((w,i)=>tokenSpan(w,"fr", `data-kind="out" data-i="${i}"`)).join(" ");
+  $("row-decin").outerHTML  = decin;
+  $("row-target").outerHTML = target;
+})();
+
+const shiftbox = $("shiftbox"), shiftHint = $("shift-hint");
+const defaultHint = shiftHint.innerHTML;
+shiftbox.addEventListener("mouseover", e=>{
+  const tok = e.target.closest(".tok[data-i]");
+  if(!tok) return;
+  const i = +tok.dataset.i;
+  shiftbox.querySelectorAll(".tok").forEach(t=>t.classList.remove("hl","linked"));
+  shiftbox.querySelectorAll(`.tok[data-kind="in"][data-i="${i}"]`).forEach(t=>t.classList.add("hl"));
+  shiftbox.querySelectorAll(`.tok[data-kind="out"][data-i="${i}"]`).forEach(t=>t.classList.add("linked"));
+  shiftHint.innerHTML =
+    `Pair <b>t = ${i+1}</b>: given decoder-input tokens 1…${i+1} (ending in
+     <b>${esc(DEC_IN[i])}</b>), the decoder must predict <b>${esc(TARGET[i])}</b>.`;
+});
+shiftbox.addEventListener("mouseleave", ()=>{
+  shiftbox.querySelectorAll(".tok").forEach(t=>t.classList.remove("hl","linked"));
+  shiftHint.innerHTML = defaultHint;
+});
+
+/* ================= §1 padding demo ================= */
+const BATCH = [
+  ["Le","chat","dort"],
+  ["Le","chat","s'est","assis","sur","le","tapis"],
+  ["Il","pleut"],
+];
+const MAXLEN = 7;
+let maskShown = false;
+function renderPad(){
+  const g = $("padgrid");
+  let html = "";
+  BATCH.forEach((sent,r)=>{
+    html += `<div class="rowlbl">sentence ${r+1} (len ${sent.length})</div>`;
+    for(let c=0;c<MAXLEN;c++){
+      html += c < sent.length
+        ? `<div class="cell">${esc(sent[c])}</div>`
+        : `<div class="cell padded">&lt;PAD&gt;</div>`;
+    }
+    if(maskShown){
+      html += `<div class="rowlbl">padding mask</div>`;
+      for(let c=0;c<MAXLEN;c++){
+        html += c < sent.length
+          ? `<div class="cell mask1">1</div>`
+          : `<div class="cell mask0">0</div>`;
+      }
+    }
+  });
+  g.innerHTML = html;
+}
+$("padmask-btn").addEventListener("click", function(){
+  maskShown = !maskShown;
+  this.setAttribute("aria-pressed", maskShown);
+  this.textContent = maskShown ? "Hide the padding mask" : "Show the padding mask";
+  renderPad();
+});
+renderPad();
+
+/* ================= §3 mask matrix ================= */
+$("mask-collbls").innerHTML = DEC_IN.map(w=>`<div>${esc(w)}</div>`).join("");
+$("mask-rowlbls").innerHTML = DEC_IN.map((w,i)=>`<div data-t="${i+1}">t=${i+1}</div>`).join("");
+(function(){
+  let cells = "";
+  for(let i=0;i<T;i++)
+    for(let j=0;j<T;j++)
+      cells += `<div class="mcell${j>i?" forbid":""}" data-r="${i+1}">${j>i?"⊘":""}</div>`;
+  $("maskgrid").innerHTML = cells;
+})();
+$("mask-rowlbls").addEventListener("click", e=>{
+  const d = e.target.closest("[data-t]");
+  if(d){ $("tslider").value = d.dataset.t; renderStep(+d.dataset.t); }
+});
+$("maskgrid").addEventListener("click", e=>{
+  const c = e.target.closest("[data-r]");
+  if(c){ $("tslider").value = c.dataset.r; renderStep(+c.dataset.r); }
+});
+
+/* ================= §4 loss table ================= */
+const nll = p => -Math.log(p);
+function renderLossTable(curT){
+  let rows = `<tr><th>t</th><th>decoder sees (prefix)</th><th>predicted (argmax)</th>
+              <th>target</th><th></th><th>p(target)</th><th>−log p</th></tr>`;
+  let sum = 0;
+  for(let t=1;t<=T;t++){
+    const pr = PREDS[t-1], tgt = TARGET[t-1];
+    const ok = pr.pred === tgt;
+    const loss = nll(pr.pTarget); sum += loss;
+    const prefix = DEC_IN.slice(0,t).join(" ");
+    rows += `<tr class="${ok?"":"wrongrow"}${t===curT?" currow":""}">
+      <td class="num">${t}</td>
+      <td class="mono">${esc(prefix)}</td>
+      <td class="mono" style="color:${ok?"var(--ok)":"var(--bad)"}">${esc(pr.pred)}</td>
+      <td class="mono">${esc(tgt)}</td>
+      <td>${ok?"✅":"❌"}</td>
+      <td class="num">${pr.pTarget.toFixed(2)}</td>
+      <td class="num">${loss.toFixed(2)}</td></tr>`;
+  }
+  $("losstab").innerHTML = rows;
+  $("meanline").innerHTML =
+    `Total = ${sum.toFixed(2)} over ${T} positions → mean cross-entropy
+     <b>L = ${(sum/T).toFixed(2)}</b>. The two wrong positions contribute
+     ${(nll(PREDS[1].pTarget)+nll(PREDS[7].pTarget)).toFixed(2)} of it — gradients push hardest there.`;
+}
+
+/* ================= §3 step renderer ================= */
+function renderStep(t){
+  $("tval").textContent = `t = ${t}`;
+  $("step-title").textContent = `Training example at t = ${t}`;
+
+  document.querySelectorAll("#mask-rowlbls [data-t]").forEach(d=>
+    d.classList.toggle("on", +d.dataset.t === t));
+  document.querySelectorAll("#maskgrid .mcell").forEach(c=>{
+    const r = +c.dataset.r;
+    c.classList.toggle("rowon",  r === t);
+    c.classList.toggle("dimmed", r !== t);
+  });
+
+  $("row-visible").outerHTML = '<div id="row-visible" style="display:flex;gap:6px;flex-wrap:wrap;">' +
+    DEC_IN.map((w,i)=> i < t
+      ? tokenSpan(w,"fr")
+      : `<span class="tok fr masked-out${isSpecial(w)?" special":""}">${esc(w)}</span>`
+    ).join("") + '</div>';
+
+  $("visible-note").innerHTML =
+    `Self-attention at row t=${t} sees only the ${t} allowed token${t>1?"s":""} —
+     the ${T-t>0?`${T-t} crossed-out future token${T-t>1?"s":""} get zero attention weight`
+     :"whole input is visible (nothing left to hide)"}.
+     Cross-attention still sees the <em>entire</em> English sentence.`;
+
+  const pr = PREDS[t-1], tgt = TARGET[t-1], ok = pr.pred === tgt;
+  $("pred-line").innerHTML =
+    `<span>prediction:</span><span class="pred-chip ${ok?"good":"wrong"}">${esc(pr.pred)}</span>
+     <span>target:</span><span class="pred-chip target">${esc(tgt)}</span>
+     <span class="verdict ${ok?"good":"wrong"}">${ok?"✅ correct":"❌ wrong"}</span>`;
+
+  $("loss-detail").innerHTML = ok
+    ? `The model put p = ${pr.pTarget.toFixed(2)} on <b>${esc(tgt)}</b>, so this position still adds
+       −log ${pr.pTarget.toFixed(2)} = <b>${nll(pr.pTarget).toFixed(2)}</b> to the loss.
+       Thanks to <b>teacher forcing</b>, the next row's input is the ground truth either way.`
+    : `The model predicted <b>${esc(pr.pred)}</b> but put only p = ${pr.pTarget.toFixed(2)} on the true
+       token <b>${esc(tgt)}</b> → a large −log ${pr.pTarget.toFixed(2)} = <b>${nll(pr.pTarget).toFixed(2)}</b>
+       penalty. Note the mistake does <em>not</em> corrupt later rows: teacher forcing feeds them the
+       ground-truth prefix, not this wrong prediction.`;
+
+  renderLossTable(t);
+}
+$("tslider").addEventListener("input", e=>renderStep(+e.target.value));
+renderStep(2);
+
+/* ================= §5 quiz ================= */
+const QUIZ = [
+  {q:"The encoder also shifts its input and applies a causal mask.", a:false,
+   fb:"False — shifting and causal masking are strictly decoder operations. The encoder processes the complete, unshifted source with unmasked, bidirectional self-attention."},
+  {q:"During training, the decoder's input at position t is the model's own prediction from position t−1.", a:false,
+   fb:"False — that happens at inference. During training, teacher forcing feeds the ground-truth prefix, so one wrong prediction never derails the following positions."},
+  {q:"Feeding the full shifted sequence once with a causal mask trains all 8 prefix→next-token examples in a single parallel forward pass.", a:true,
+   fb:"True — that's the whole point of the mask: row t attends only to tokens ≤ t, so the 8 rows are 8 independent training examples sharing one forward pass."},
+  {q:"The padding mask and the causal mask do the same job.", a:false,
+   fb:"False — the padding mask hides meaningless <PAD> positions (used in encoder, decoder and cross-attention); the causal mask hides the future (decoder self-attention only)."},
+];
+$("quiz").innerHTML = QUIZ.map((it,i)=>`
+  <div class="quiz-item" data-i="${i}">
+    <div class="q">${i+1}. ${esc(it.q)}</div>
+    <button data-ans="true">True</button><button data-ans="false">False</button>
+    <div class="fb"></div>
+  </div>`).join("");
+$("quiz").addEventListener("click", e=>{
+  const btn = e.target.closest("button[data-ans]");
+  if(!btn) return;
+  const item = btn.closest(".quiz-item");
+  const it = QUIZ[+item.dataset.i];
+  const right = (btn.dataset.ans === "true") === it.a;
+  const fb = item.querySelector(".fb");
+  fb.className = "fb show " + (right ? "good" : "wrong");
+  fb.innerHTML = (right ? "✅ Correct. " : "❌ Not quite. ") + esc(it.fb);
+});
+</script>
+</body>
+</html>
