@@ -134,6 +134,7 @@
   .tag-llms     { background: #fdf0e8; color: #c2610a; }
   .tag-deep-learning { background: #f3e8fd; color: #7c3aaa; }
   .tag-ai       { background: #fff0f5; color: #b5245a; }
+  .tag-mlops    { background: #e8f7fa; color: #0e7490; }
 
   .verify-badge {
     padding: 3px 10px;
@@ -173,6 +174,17 @@
     color: #5a6478;
     line-height: 1.6;
     flex: 1;
+  }
+
+  .card-author {
+    font-size: 0.78rem;
+    color: #8a94a8;
+    align-self: flex-start;
+  }
+
+  .card-author:hover {
+    color: #4f7df3;
+    text-decoration: underline;
   }
 
   .card-arrow {
@@ -218,6 +230,7 @@
   <button class="filter-btn" data-filter="llms">LLMs</button>
   <button class="filter-btn" data-filter="deep-learning">Deep Learning</button>
   <button class="filter-btn" data-filter="ai">AI</button>
+  <button class="filter-btn" data-filter="mlops">MLOps</button>
   <button class="filter-btn" data-filter="verified">✓ Verified</button>
   <button class="filter-btn" data-filter="unverified">⚠ Unverified</button>
 </div>
@@ -226,7 +239,7 @@
 
 <div class="grid" id="grid">
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/llmpretraining.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/llmpretraining.html"
      data-tags="llms ai">
     <div class="card-tags">
       <span class="tag tag-llms">LLMs</span>
@@ -235,10 +248,11 @@
     <div class="card-title">LLM Next-Word Prediction</div>
     <div class="card-desc">Visualizes LLM pretraining via next-token prediction over text corpus.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/external_metrics_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/external_metrics_interactive.html"
      data-tags="ml clustering">
     <div class="card-tags">
       <span class="tag tag-ml">ML</span>
@@ -247,10 +261,11 @@
     <div class="card-title">External Clustering Metrics: ARI &amp; NMI</div>
     <div class="card-desc">Drag-and-drop demo of Adjusted Rand Index and Normalized Mutual Information on cluster assignments.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/gmm_covariance_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/gmm_covariance_interactive.html"
      data-tags="ml clustering">
     <div class="card-tags">
       <span class="tag tag-ml">ML</span>
@@ -259,10 +274,11 @@
     <div class="card-title">GMM Covariance Types</div>
     <div class="card-desc">How covariance matrix types (full, tied, diagonal, spherical) shape GMM clusters.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/gmm_em_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/gmm_em_interactive.html"
      data-tags="ml clustering">
     <div class="card-tags">
       <span class="tag tag-ml">ML</span>
@@ -271,10 +287,11 @@
     <div class="card-title">EM Algorithm for GMMs</div>
     <div class="card-desc">Step-through visualization of the Expectation-Maximization algorithm fitting a Gaussian Mixture Model to data.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/linkage_methods_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/linkage_methods_interactive.html"
      data-tags="ml clustering">
     <div class="card-tags">
       <span class="tag tag-ml">ML</span>
@@ -283,10 +300,11 @@
     <div class="card-title">Hierarchical Clustering Linkage Methods</div>
     <div class="card-desc">Compares single, complete, average, and Ward linkage strategies for building hierarchical cluster dendrograms.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/Learning_Rate_Scheduling.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/Learning_Rate_Scheduling.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -295,10 +313,11 @@
     <div class="card-title">Learning Rate Scheduling</div>
     <div class="card-desc">Compare learning rate decay strategies: cosine annealing, SGDR, step, exponential, warm-up.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/dropout.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/dropout.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -307,10 +326,11 @@
     <div class="card-title">Dropout Regularization</div>
     <div class="card-desc">How dropout randomly deactivates neurons during training to prevent overfitting.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/conv.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/conv.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -319,10 +339,11 @@
     <div class="card-title">Convolution Visualizer</div>
     <div class="card-desc">Kernel sliding over input matrix to produce feature map in 2D convolution.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/cnn_output_calculator.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/cnn_output_calculator.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -331,10 +352,11 @@
     <div class="card-title">CNN Output Size Calculator</div>
     <div class="card-desc">Compute CNN layer output dimensions given kernel size, padding, and stride.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/cnn_intuition.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/cnn_intuition.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -343,10 +365,11 @@
     <div class="card-title">Intuitive CNN Feature Map</div>
     <div class="card-desc">3D visualization of convolution kernel scanning input grid to build feature map.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/normalization_techniques.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/normalization_techniques.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -355,10 +378,11 @@
     <div class="card-title">Normalization Techniques</div>
     <div class="card-desc">Compare Batch, Layer, Instance, and Group Normalization on (N, C, H, W) tensors.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="false" href="https://mtgca.github.io/interactive-widgets/cnn_architecture_blocks_interactive.html"
+  <a class="card" data-verified="false" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/cnn_architecture_blocks_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -367,10 +391,11 @@
     <div class="card-title">CNN Building Blocks</div>
     <div class="card-desc">Evolution of CNN building blocks from LeNet to ConvNeXt with timeline and comparison.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/naive_dense_sequence_cost_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/naive_dense_sequence_cost_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -379,10 +404,11 @@
     <div class="card-title">Why Not Just Flatten the Sequence?</div>
     <div class="card-desc">Flatten a sequence into one vector and feed it through a Dense layer — watch the weight matrix explode as N²·d². Motivates why naive fully-connected sequence mixing doesn't scale.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/sequential_models_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/sequential_models_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -391,10 +417,11 @@
     <div class="card-title">Types of Sequential Models</div>
     <div class="card-desc">Compare many-to-one, one-to-many, and many-to-many sequence models with examples.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/rnn_unrolling_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/rnn_unrolling_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -403,10 +430,11 @@
     <div class="card-title">RNNs: Unrolling the Computational Graph</div>
     <div class="card-desc">Unroll recurrent cell feedback loop over time with native MathML and parameter sharing.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/rnn_matrix_shapes_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/rnn_matrix_shapes_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -415,10 +443,11 @@
     <div class="card-title">RNNs: Hidden-State &amp; Output Update — Matrix Shapes</div>
     <div class="card-desc">Interactive explorer of RNN update equations: choose dimensions, see weight matrices and dot products.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/rnn_char_lm_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/rnn_char_lm_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -427,10 +456,11 @@
     <div class="card-title">RNNs: Character-Level Language Modeling</div>
     <div class="card-desc">Train tiny RNN on "hello": step through training, inference, and temperature playground.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="false" href="https://mtgca.github.io/interactive-widgets/bptt_gradients_interactive.html"
+  <a class="card" data-verified="false" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/bptt_gradients_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -439,10 +469,11 @@
     <div class="card-title">BPTT: Vanishing &amp; Exploding Gradients</div>
     <div class="card-desc">Slide eigenvalue and sequence length to watch gradients amplify or vanish through time.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/vocab_to_embedding_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/vocab_to_embedding_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -451,10 +482,11 @@
     <div class="card-title">From Vocabulary to Embedding: Embedding vs Linear Layers</div>
     <div class="card-desc">Token journey from vocabulary to embedding; compare lookup and linear layer costs.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/semantic_vector_spaces_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/semantic_vector_spaces_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -463,10 +495,11 @@
     <div class="card-title">Semantic Vector Spaces: The Geometry of Meaning</div>
     <div class="card-desc">Word embedding semantics: heatmap, 2D projections, nearest neighbors, and king − man + woman.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/embedding_training_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/embedding_training_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -475,10 +508,11 @@
     <div class="card-title">How Word Embeddings Are Learned: Train a Tiny Next-Word Predictor</div>
     <div class="card-desc">Train embedding model in browser; watch 8D space self-organize, explore weight tying and gotchas.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="true" href="https://mtgca.github.io/interactive-widgets/positional_embeddings_interactive.html"
+  <a class="card" data-verified="true" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/positional_embeddings_interactive.html"
      data-tags="deep-learning ai">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -487,10 +521,11 @@
     <div class="card-title">Trainable Positional Embeddings: Same Table, Different Index</div>
     <div class="card-desc">Positional embeddings are just embeddings indexed by position, not token: look up both tables, add rows, watch predictions shift by position.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="false" href="https://mtgca.github.io/interactive-widgets/attention_qkv_library_interactive.html"
+  <a class="card" data-verified="false" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/attention_qkv_library_interactive.html"
      data-tags="deep-learning ai llms">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -499,10 +534,11 @@
     <div class="card-title">Attention Q, K, V: The Library Analogy</div>
     <div class="card-desc">Pick a query and watch a library answer it: Keys (spine labels) are matched, matches become attention weights that add up to 100%, and the result blends the Values proportionally — a pure analogy, no equations.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
-  <a class="card" data-verified="false" href="https://mtgca.github.io/interactive-widgets/self_attention_head_interactive.html"
+  <a class="card" data-verified="false" data-author="mtgca" href="https://mtgca.github.io/interactive-widgets/self_attention_head_interactive.html"
      data-tags="deep-learning llms">
     <div class="card-tags">
       <span class="tag tag-deep-learning">Deep Learning</span>
@@ -511,6 +547,20 @@
     <div class="card-title">A Self-Attention Head, Step by Step</div>
     <div class="card-desc">Follow one attention head on a real computed example: project x into Q, K, V, take scaled dot-products, softmax into attention weights (asymmetric, non-constant diagonal), and blend the Values — then scale up to multi-head attention with dₖ = d/h.</div>
     <span class="verify-badge"></span>
+    <div class="card-author">by @mtgca</div>
+    <div class="card-arrow">Open widget →</div>
+  </a>
+
+  <a class="card" data-verified="true" data-author="DiegoDVillacreses" href="https://mtgca.github.io/interactive-widgets/data_drift_retraining.html"
+     data-tags="ml mlops">
+    <div class="card-tags">
+      <span class="tag tag-ml">ML</span>
+      <span class="tag tag-mlops">MLOps</span>
+    </div>
+    <div class="card-title">Data Drift &amp; Retraining</div>
+    <div class="card-desc">Step through three stages — a trained model, production data drifting away from the training distribution, and retraining — and watch how drift degrades the F1 score and retraining restores it.</div>
+    <span class="verify-badge"></span>
+    <div class="card-author">by @DiegoDVillacreses</div>
     <div class="card-arrow">Open widget →</div>
   </a>
 
@@ -557,6 +607,16 @@
       ? `Showing all ${visible} widgets`
       : `Showing ${visible} of ${cards.length} widgets`;
   }
+
+  // Cards are <a> elements, so the author credit can't be a nested link;
+  // open the GitHub profile from a delegated handler instead.
+  document.getElementById('grid').addEventListener('click', e => {
+    const author = e.target.closest('.card-author');
+    if (!author) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.open('https://github.com/' + author.closest('.card').dataset.author, '_blank', 'noopener');
+  });
 
   filterBar.addEventListener('click', e => {
     const btn = e.target.closest('.filter-btn');

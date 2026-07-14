@@ -33,6 +33,7 @@ interactive-widgets/
 - Widget filenames should be descriptive and end in `_interactive.html` for interactive demos, or be clearly named for the concept they teach.
 - When adding a new widget, **both** `README.md` and `index.html` must be updated (see below).
 - Every widget carries a **verification badge** (`data-verified`) indicating whether a human expert has reviewed it; new widgets start `"false"` (see "Human-Expert Verification").
+- Every widget carries an **author credit** (`data-author`) naming the GitHub user who created it (see "Author Credit").
 - **Descriptions must be concise: 3 lines maximum** (roughly 70–100 words) in both README and index.html. Lead with the core concept or action, omit implementation details.
 
 ## Visual Style (maintainer preferences)
@@ -69,12 +70,20 @@ This repo is not limited to AI/ML — it's meant for **any Computer Science or r
 
 1. Create a self-contained `.html` file in the repo root.
 2. Keep all CSS and JS inline (no CDN dependencies when avoidable).
-3. Add the **verification badge** snippet immediately after `<body>`, with `data-verified="false"` (see below). Every new widget starts unverified.
-4. Add a row to the table of contents in `README.md` with the GitHub Pages URL, a concise description (3 lines max, 70–100 words), and a `⚠️ AI-only` Status cell.
-5. Add a card to `index.html` inside the `#grid` div, following the existing card pattern (`data-verified="false"` on the `<a class="card">`, tags, title, desc, `<span class="verify-badge"></span>`, arrow link). Use the same concise description.
+3. Add the **verification badge** snippet immediately after `<body>`, with `data-verified="false"` and `data-author="<github-user>"` (see below). Every new widget starts unverified.
+4. Add a row to the table of contents in `README.md` with the GitHub Pages URL, a concise description (3 lines max, 70–100 words), an Author cell (`[@user](https://github.com/user)`), and a `⚠️ AI-only` Status cell.
+5. Add a card to `index.html` inside the `#grid` div, following the existing card pattern (`data-verified="false"` and `data-author="<github-user>"` on the `<a class="card">`, tags, title, desc, `<span class="verify-badge"></span>`, `<div class="card-author">by @user</div>`, arrow link). Use the same concise description.
 6. Commit and push — GitHub Pages deploys automatically.
 
 > **Important**: Steps 4 and 5 are both required every time a widget is added. Never update one without the other.
+
+## Author Credit
+
+Every widget credits its creator by **GitHub username** — the user whose commit/PR added the widget (for existing files, the author of the file's first commit: `git log --follow --reverse -- <file>`). The credit lives in three places per widget, kept in sync:
+
+- **Inside the widget** — `data-author="<github-user>"` on the `.verify-badge` div; a CSS rule in the badge's style block appends `· by @user` to the corner pill: `.verify-badge[data-author]::after{content:"· by @" attr(data-author);opacity:.75;margin-left:4px;}` (literal `·`, not a `\00B7` escape, and a margin rather than a leading space — the flex badge collapses it)
+- **`index.html`** — `data-author` on the card's `<a>` plus a `<div class="card-author">by @user</div>` line; a delegated click handler on `#grid` opens `https://github.com/<user>` (the card is itself an `<a>`, so the credit cannot be a nested link).
+- **`README.md`** — the Author column: `[@user](https://github.com/user)`.
 
 ## Human-Expert Verification
 
@@ -98,4 +107,4 @@ Outside contributions are welcome through three channels, all linked from the `i
 - **Pull requests** — add a new widget (follow "Adding a New Widget" above) or fix an existing one.
 - **Expert review** — a domain expert can review an unverified widget for correctness; see "Human-Expert Verification" above for how status gets flipped.
 
-When reviewing an incoming PR that adds a widget, check it follows the conventions in this file (single self-contained file, verification badge with `data-verified="false"`, MathML for any equations, light theme, matching README/index.html updates) before merging.
+When reviewing an incoming PR that adds a widget, check it follows the conventions in this file (single self-contained file, verification badge with `data-verified="false"`, author credit with the contributor's GitHub username in all three places, MathML for any equations, light theme, matching README/index.html updates) before merging.

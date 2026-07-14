@@ -183,7 +183,7 @@
 </head>
 <body>
 
-<div class="verify-badge" data-verified="true"></div>
+<div class="verify-badge" data-verified="true" data-author="mtgca"></div>
 <style>
 .verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
   font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
@@ -193,6 +193,7 @@
 .verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
 .verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
 .verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+.verify-badge[data-author]::after{content:"· by @" attr(data-author);opacity:.75;margin-left:4px;}
 </style>
 
 <div class="wrap">
