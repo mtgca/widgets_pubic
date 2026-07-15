@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inference Strategies: Greedy, Beam Search &amp; Nucleus Sampling</title>
+<style>
+:root{
+  --bg:#f9f9f7;
+  --surface:#ffffff;
+  --ink:#0b0b0b;
+  --ink-2:#52514e;
+  --muted:#898781;
+  --hairline:#e1e0d9;
+  --math:"STIX Two Math","Cambria Math","Latin Modern Math","Times New Roman",Georgia,serif;
+
+  --greedy:#2a78d6;   --greedy-dark:#1c5cab;  --greedy-bg:#edf4fc;  --greedy-line:#c4dbf5;
+  --beam:#eda100;     --beam-dark:#8a5f00;    --beam-bg:#fdf6e3;    --beam-line:#f0dfae;
+  --nucleus:#1baf7a;  --nucleus-dark:#0d7a54; --nucleus-bg:#e9f7f0; --nucleus-line:#bfe6d5;
+
+  --bad:#d03b3b; --bad-bg:#fbecec;
+  --good:#0ca30c;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+math{font-family:var(--math);}
+.wrap{max-width:1060px;margin:0 auto;padding:38px 20px 60px;}
+
+h1{font-size:1.75rem;line-height:1.25;margin:18px 0 8px;}
+.subtitle{color:var(--ink-2);max-width:56em;margin:0 0 6px;}
+h2{font-size:1.3rem;margin:0;}
+h3{font-size:1.02rem;margin:22px 0 8px;}
+p{max-width:60em;}
+.small{font-size:.86rem;color:var(--ink-2);}
+code{background:#f1f0ec;border:1px solid var(--hairline);border-radius:4px;padding:1px 5px;font-size:.86em;}
+
+/* ---------- section shells ---------- */
+section.strategy{
+  background:var(--surface);border:1px solid var(--hairline);border-radius:14px;
+  padding:24px 26px 26px;margin:28px 0;
+}
+section.strategy.greedy {border-top:5px solid var(--greedy);}
+section.strategy.beam   {border-top:5px solid var(--beam);}
+section.strategy.nucleus{border-top:5px solid var(--nucleus);}
+.sec-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px;}
+.sec-kicker{
+  font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 10px;border-radius:999px;white-space:nowrap;
+}
+.greedy  .sec-kicker{background:var(--greedy-bg);color:var(--greedy-dark);}
+.beam    .sec-kicker{background:var(--beam-bg);color:var(--beam-dark);}
+.nucleus .sec-kicker{background:var(--nucleus-bg);color:var(--nucleus-dark);}
+.tagline{color:var(--ink-2);font-style:italic;margin:2px 0 14px;}
+
+.analogy{
+  border:1px solid var(--hairline);border-left-width:4px;border-radius:8px;
+  padding:10px 16px;margin:14px 0;background:var(--bg);max-width:62em;
+}
+.greedy  .analogy{border-left-color:var(--greedy);}
+.beam    .analogy{border-left-color:var(--beam);}
+.nucleus .analogy{border-left-color:var(--nucleus);}
+.analogy b{display:block;font-size:.82rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:2px;}
+
+/* ---------- panels / lab areas ---------- */
+.lab{
+  border:1px solid var(--hairline);border-radius:10px;background:var(--bg);
+  padding:16px 18px;margin:16px 0;
+}
+.lab-title{font-weight:700;font-size:.92rem;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;}
+button.btn{
+  font:600 .9rem/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:9px 16px;border-radius:8px;border:1px solid var(--hairline);
+  background:var(--surface);color:var(--ink);cursor:pointer;
+}
+button.btn:hover{border-color:#c8c6bd;background:#fdfdfc;}
+button.btn:disabled{opacity:.45;cursor:default;}
+button.btn.primary-greedy {background:var(--greedy); border-color:var(--greedy); color:#fff;}
+button.btn.primary-greedy:hover {background:var(--greedy-dark);}
+button.btn.primary-beam   {background:var(--beam-dark); border-color:var(--beam-dark); color:#fff;}
+button.btn.primary-nucleus{background:var(--nucleus-dark);border-color:var(--nucleus-dark);color:#fff;}
+button.btn.primary-nucleus:hover{background:#0a6144;}
+
+.sentence-box{
+  font-family:var(--math);font-size:1.25rem;background:var(--surface);
+  border:1px solid var(--hairline);border-radius:8px;padding:12px 16px;min-height:52px;
+}
+.sentence-box .cursor{color:var(--muted);}
+.sentence-box .new-word{border-radius:4px;padding:0 3px;}
+.greedy .sentence-box .new-word{background:var(--greedy-bg);color:var(--greedy-dark);font-weight:600;}
+
+/* ---------- probability bar rows ---------- */
+.dist{margin:8px 0;}
+.dist-row{display:grid;grid-template-columns:110px 1fr 118px;gap:10px;align-items:center;padding:3px 0;}
+.dist-row .tok{font-family:var(--math);font-style:italic;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dist-row .bar-track{background:#efeee9;border-radius:5px;height:22px;position:relative;overflow:hidden;}
+.dist-row .bar{display:block;height:100%;border-radius:5px 4px 4px 5px;background:#9ec5f4;}
+.dist-row.is-max .bar{background:var(--greedy);}
+.dist-row .val{font-size:.84rem;color:var(--ink-2);white-space:nowrap;}
+.dist-row.is-max .val{color:var(--greedy-dark);font-weight:700;}
+.dist-row.dimmed{opacity:.45;}
+.pick-tag{font-size:.78rem;font-weight:700;color:var(--greedy-dark);}
+
+/* ---------- tree svg ---------- */
+.tree-scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--hairline);border-radius:10px;padding:8px 4px;}
+.tree-scroll svg{display:block;min-width:720px;width:100%;height:auto;}
+
+/* ---------- verdict / callouts ---------- */
+.verdict{
+  border-radius:10px;padding:14px 18px;margin:14px 0;border:1px solid;
+}
+.verdict.warn{background:var(--bad-bg);border-color:#eecaca;}
+.verdict.win{background:var(--nucleus-bg);border-color:var(--nucleus-line);}
+.verdict.info{background:var(--greedy-bg);border-color:var(--greedy-line);}
+.verdict b.vt{display:block;margin-bottom:4px;}
+
+/* ---------- pros / cons ---------- */
+.procon{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;}
+@media (max-width:720px){.procon{grid-template-columns:1fr;}}
+.procon > div{border:1px solid var(--hairline);border-radius:10px;padding:12px 16px;background:var(--surface);}
+.procon .pro{border-top:3px solid var(--good);}
+.procon .con{border-top:3px solid var(--bad);}
+.procon b{display:block;margin-bottom:6px;font-size:.9rem;}
+.procon ul{margin:0;padding-left:20px;}
+.procon li{margin:4px 0;font-size:.93rem;}
+
+/* ---------- beam table ---------- */
+.beam-table-wrap{overflow-x:auto;}
+table.beams{border-collapse:collapse;width:100%;min-width:560px;background:var(--surface);border:1px solid var(--hairline);border-radius:8px;}
+table.beams th,table.beams td{padding:7px 12px;text-align:left;border-bottom:1px solid var(--hairline);font-size:.92rem;}
+table.beams th{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:var(--bg);}
+table.beams td.num{font-variant-numeric:tabular-nums;white-space:nowrap;}
+table.beams tr.kept td{background:var(--beam-bg);}
+table.beams tr.kept td:first-child{border-left:4px solid var(--beam);}
+table.beams tr.pruned td{color:var(--muted);}
+table.beams tr.pruned td .seq{text-decoration:line-through;text-decoration-color:#c9c7bf;}
+table.beams tr.winner td{background:var(--nucleus-bg);font-weight:600;}
+table.beams .seq{font-family:var(--math);}
+.status-chip{font-size:.74rem;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;}
+.status-chip.kept{background:var(--beam);color:#fff;}
+.status-chip.pruned{background:#efeee9;color:var(--muted);}
+.status-chip.win{background:var(--nucleus);color:#fff;}
+.kslider{display:flex;gap:6px;align-items:center;}
+.kslider button{
+  width:38px;height:34px;border-radius:8px;border:1px solid var(--hairline);
+  background:var(--surface);font:700 1rem/1 inherit;cursor:pointer;
+}
+.kslider button.active{background:var(--beam);border-color:var(--beam);color:#fff;}
+
+/* ---------- nucleus ---------- */
+.ctx-toggle{display:flex;gap:8px;flex-wrap:wrap;}
+.ctx-toggle button{
+  border:1px solid var(--hairline);background:var(--surface);border-radius:8px;
+  padding:8px 14px;font:600 .88rem/1.3 inherit;cursor:pointer;text-align:left;
+}
+.ctx-toggle button.active{background:var(--nucleus-bg);border-color:var(--nucleus);color:var(--nucleus-dark);}
+.p-slider-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:12px 0 4px;}
+.p-slider-row input[type=range]{flex:1;min-width:200px;accent-color:var(--nucleus-dark);}
+.p-readout{font-family:var(--math);font-size:1.15rem;white-space:nowrap;}
+.cum-strip{position:relative;height:34px;border-radius:7px;overflow:hidden;border:1px solid var(--hairline);background:#efeee9;margin:10px 0 2px;}
+.cum-strip .seg{position:absolute;top:0;bottom:0;}
+.cum-strip .seg.in {background:var(--nucleus);opacity:.85;}
+.cum-strip .seg.out{background:#d8d6cd;}
+.cum-strip .seg{border-right:2px solid var(--bg);}
+.cum-strip .seg span{
+  position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+  text-align:center;font-size:.7rem;font-weight:700;color:#fff;overflow:hidden;white-space:nowrap;
+}
+.cum-strip .seg.out span{color:var(--muted);}
+.p-marker{position:absolute;top:-6px;bottom:-6px;width:0;border-left:2px dashed var(--ink);}
+.strip-holder{position:relative;padding:8px 0 4px;}
+.strip-caption{display:flex;justify-content:space-between;font-size:.76rem;color:var(--muted);}
+#nucDist{overflow-x:auto;}
+.nuc-row{display:grid;grid-template-columns:96px 1fr 218px 44px;gap:10px;align-items:center;padding:2px 0;min-width:540px;}
+.nuc-row .tok{font-family:var(--math);font-style:italic;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.nuc-row .bar-track{background:#efeee9;border-radius:5px;height:20px;overflow:hidden;}
+.nuc-row .bar{display:block;height:100%;border-radius:5px 4px 4px 5px;background:var(--nucleus);}
+.nuc-row.outside .bar{background:#cfcdc4;}
+.nuc-row.outside .tok,.nuc-row.outside .val{color:var(--muted);}
+.nuc-row .val{font-size:.82rem;color:var(--ink-2);white-space:nowrap;font-variant-numeric:tabular-nums;}
+.nuc-row .tally{font-size:.82rem;color:var(--nucleus-dark);font-weight:700;font-variant-numeric:tabular-nums;text-align:right;}
+.nuc-row.sampled-now .bar{outline:2px solid var(--ink);outline-offset:1px;}
+.nuc-boundary{
+  border:0;border-top:2px dashed var(--nucleus-dark);margin:6px 0;position:relative;
+}
+.nuc-boundary::after{
+  content:"nucleus boundary — tokens below are cut";
+  position:absolute;right:0;top:-10px;font-size:.72rem;background:var(--bg);
+  color:var(--nucleus-dark);padding:0 6px;font-weight:700;
+}
+.sample-log{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;min-height:30px;}
+.sample-chip{
+  font-family:var(--math);font-style:italic;font-size:.9rem;
+  background:var(--surface);border:1px solid var(--nucleus-line);border-radius:999px;padding:3px 12px;
+}
+.sample-chip.weird{border-color:#eecaca;background:var(--bad-bg);}
+.pool-note{font-size:.9rem;margin-top:8px;}
+.pool-note b{color:var(--nucleus-dark);}
+
+/* ---------- repetition trap ---------- */
+.loop-box{
+  font-family:var(--math);font-size:1.08rem;background:var(--surface);
+  border:1px solid var(--hairline);border-radius:8px;padding:12px 16px;min-height:78px;
+}
+.loop-box .rep{background:var(--bad-bg);border-bottom:2px solid var(--bad);border-radius:3px;}
+
+/* ---------- comparison + quiz ---------- */
+.compare-wrap{overflow-x:auto;margin-top:10px;}
+table.compare{border-collapse:collapse;width:100%;min-width:640px;background:var(--surface);}
+table.compare th,table.compare td{border:1px solid var(--hairline);padding:9px 12px;font-size:.92rem;vertical-align:top;}
+table.compare th{background:var(--bg);text-align:left;}
+table.compare thead th:nth-child(2){border-top:4px solid var(--greedy);}
+table.compare thead th:nth-child(3){border-top:4px solid var(--beam);}
+table.compare thead th:nth-child(4){border-top:4px solid var(--nucleus);}
+table.compare td:first-child{font-weight:600;background:var(--bg);font-size:.86rem;}
+
+.quiz-card{border:1px solid var(--hairline);border-radius:10px;background:var(--surface);padding:14px 18px;margin:14px 0;}
+.quiz-q{font-weight:600;margin-bottom:10px;}
+.quiz-opts{display:flex;gap:8px;flex-wrap:wrap;}
+.quiz-opts button{
+  border-radius:8px;border:1px solid var(--hairline);background:var(--bg);
+  padding:8px 14px;font:600 .88rem/1 inherit;cursor:pointer;
+}
+.quiz-opts button[data-s="greedy"]:hover {border-color:var(--greedy);}
+.quiz-opts button[data-s="beam"]:hover   {border-color:var(--beam);}
+.quiz-opts button[data-s="nucleus"]:hover{border-color:var(--nucleus);}
+.quiz-opts button.picked-right{background:var(--nucleus-bg);border-color:var(--nucleus);color:var(--nucleus-dark);}
+.quiz-opts button.picked-wrong{background:var(--bad-bg);border-color:#eecaca;color:var(--bad);}
+.quiz-fb{margin-top:10px;font-size:.93rem;display:none;}
+.quiz-fb.show{display:block;}
+.quiz-fb.right{color:var(--nucleus-dark);}
+.quiz-fb.wrong{color:var(--bad);}
+
+footer{color:var(--muted);font-size:.85rem;margin-top:40px;text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="verify-badge" data-verified="false" data-author="mtgca"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+.verify-badge[data-author]::after{content:"· by @" attr(data-author);opacity:.75;margin-left:4px;}
+</style>
+
+<div class="wrap">
+
+<h1>Inference Strategies: Three Ways to Read the Same Model</h1>
+<p class="subtitle">
+  A trained language model never tells you what the next word <em>is</em>. It hands you a
+  <strong>probability distribution</strong> over every word it knows — and then it's <em>your</em> job to pick one.
+  That picking rule is the <strong>decoding (inference) strategy</strong>, and it changes everything:
+  the same model can sound robotic, careful, or creative depending only on how you choose.
+  Below, one tiny toy model is decoded three different ways. Watch how the outputs diverge.
+</p>
+
+<!-- ================================================================ -->
+<!-- SECTION 0 : the setup                                            -->
+<!-- ================================================================ -->
+<section class="strategy greedy" style="border-top-color:var(--hairline);">
+  <div class="sec-head">
+    <span class="sec-kicker" style="background:#f1f0ec;color:var(--ink-2);">The setup</span>
+    <h2>A toy language model you can see all of</h2>
+  </div>
+  <p>
+    Real models have ~50,000 words in their vocabulary and effectively infinite sentences. Our toy model starts every
+    sentence with <span style="font-family:var(--math);font-style:italic;">The</span>, knows a handful of words,
+    and finishes after two more picks. Because it is tiny, we can draw its <strong>entire</strong> tree of possible
+    sentences — something impossible for a real LLM — and check which strategy actually finds the best one.
+  </p>
+  <p>
+    The probability of a whole sentence is the <strong>product</strong> of the step-by-step probabilities
+    (the chain rule):
+  </p>
+  <p style="text-align:center;">
+    <math display="block">
+      <mi>P</mi><mo stretchy="false">(</mo><msub><mi>y</mi><mn>1</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>y</mi><mi>T</mi></msub><mo>∣</mo><mi>x</mi><mo stretchy="false">)</mo>
+      <mo>=</mo>
+      <munderover><mo>∏</mo><mrow><mi>t</mi><mo>=</mo><mn>1</mn></mrow><mi>T</mi></munderover>
+      <mi>P</mi><mo stretchy="false">(</mo><msub><mi>y</mi><mi>t</mi></msub><mo>∣</mo><msub><mi>y</mi><mrow><mo>&lt;</mo><mi>t</mi></mrow></msub><mo>,</mo><mi>x</mi><mo stretchy="false">)</mo>
+    </math>
+  </p>
+  <p class="small">
+    Keep that in mind: a sentence that starts with a slightly <em>less</em> likely word can still end up
+    <em>more</em> likely overall — if its later words are strong. That single fact is why the three strategies below disagree.
+  </p>
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 1 : GREEDY                                               -->
+<!-- ================================================================ -->
+<section class="strategy greedy" id="greedy">
+  <div class="sec-head">
+    <span class="sec-kicker">Strategy 1 · Greedy decoding</span>
+    <h2>"Just take the biggest number, every time"</h2>
+  </div>
+  <p class="tagline">One path. No looking back, no looking ahead. Fast, deterministic — and short-sighted.</p>
+
+  <div class="analogy">
+    <b>Analogy</b>
+    Greedy decoding is a chess player who <em>always captures the most valuable piece available right now</em>,
+    never thinking one move ahead. Each capture looks great in the moment — and walks straight into checkmate.
+  </div>
+
+  <p>At every step, greedy picks the single most probable token and commits to it forever:</p>
+  <p style="text-align:center;">
+    <math display="block">
+      <msub><mi>y</mi><mi>t</mi></msub><mo>=</mo>
+      <munder><mo form="prefix" movablelimits="false">argmax</mo><mi>y</mi></munder>
+      <mspace width="0.2em"></mspace>
+      <mi>P</mi><mo stretchy="false">(</mo><mi>y</mi><mo>∣</mo><msub><mi>y</mi><mrow><mo>&lt;</mo><mi>t</mi></mrow></msub><mo>,</mo><mi>x</mi><mo stretchy="false">)</mo>
+    </math>
+  </p>
+
+  <div class="lab">
+    <div class="lab-title">🔍 Lab 1 — Decode greedily, then see what you missed</div>
+    <div class="sentence-box" id="greedySentence"></div>
+    <div class="controls">
+      <button class="btn primary-greedy" id="greedyStepBtn">Pick the next word (argmax) ▸</button>
+      <button class="btn" id="greedyResetBtn">↺ Reset</button>
+      <span class="small" id="greedyRunning"></span>
+    </div>
+    <div class="dist" id="greedyDist"></div>
+    <div id="greedyVerdict"></div>
+    <div id="greedyTreeWrap" style="display:none;">
+      <h3 style="margin-top:14px;">The full tree — what greedy never looked at</h3>
+      <div class="tree-scroll"><svg id="greedyTree"></svg></div>
+      <p class="small">
+        Blue = the greedy path. Green outline = the actual highest-probability sentence.
+        Greedy never saw it, because <span style="font-family:var(--math);font-style:italic;">dog</span>
+        (0.4) looked worse than <span style="font-family:var(--math);font-style:italic;">nice</span> (0.5)
+        at step 1 — a <strong>local optimum</strong> trap.
+      </p>
+    </div>
+  </div>
+
+  <div class="lab">
+    <div class="lab-title">🔁 Lab 2 — The repetition trap (the autocomplete game)</div>
+    <p class="small" style="margin-top:0;">
+      You may have played this on your phone: start a sentence, then keep tapping the top autocomplete
+      suggestion. That's greedy decoding with a real language model. Try it:
+    </p>
+    <div class="loop-box" id="loopBox"></div>
+    <div class="controls">
+      <button class="btn primary-greedy" id="loopBtn">Tap the top suggestion ▸</button>
+      <button class="btn" id="loopResetBtn">↺ Reset</button>
+    </div>
+    <div id="loopVerdict"></div>
+  </div>
+
+  <div class="procon">
+    <div class="pro"><b>✅ Pros</b>
+      <ul>
+        <li><strong>Fastest possible</strong> — one forward pass per token, no extra candidates to track.</li>
+        <li><strong>Deterministic</strong> — same prompt, same output, every time. Great for debugging and reproducible pipelines.</li>
+        <li>Surprisingly fine for short, factual completions where one answer dominates.</li>
+      </ul>
+    </div>
+    <div class="con"><b>❌ Cons</b>
+      <ul>
+        <li><strong>Local-optimum traps</strong> — a great first word can lead into a weak sentence (Lab 1).</li>
+        <li><strong>Repetition loops</strong> — once a loop enters the context, the same context keeps producing the same pick, forever (Lab 2).</li>
+        <li>Dull, generic text in open-ended generation — it never takes an interesting risk.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 2 : BEAM SEARCH                                          -->
+<!-- ================================================================ -->
+<section class="strategy beam" id="beam">
+  <div class="sec-head">
+    <span class="sec-kicker">Strategy 2 · Beam search</span>
+    <h2>"Keep the k best storylines alive"</h2>
+  </div>
+  <p class="tagline">Multiple explored paths. Still deterministic — but far less short-sighted.</p>
+
+  <div class="analogy">
+    <b>Analogy</b>
+    Send <em>k friends</em> into a maze down the k most promising corridors. At every junction, everyone reports
+    back, you rank <em>all</em> the options seen so far, and again keep only the k best storylines — even if that
+    means abandoning a corridor that looked great at the entrance.
+  </div>
+
+  <p>
+    Beam search keeps <math><mi>k</mi></math> partial hypotheses (the <em>beam width</em>). Each step it extends
+    all of them, scores every candidate by the probability of the <em>whole sequence so far</em> — in practice the
+    sum of log-probabilities — and keeps the top <math><mi>k</mi></math>:
+  </p>
+  <p style="text-align:center;">
+    <math display="block">
+      <mi>score</mi><mo stretchy="false">(</mo><msub><mi>y</mi><mn>1</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>y</mi><mi>t</mi></msub><mo stretchy="false">)</mo>
+      <mo>=</mo>
+      <munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>t</mi></munderover>
+      <mi>log</mi><mo>⁡</mo><mi>P</mi><mo stretchy="false">(</mo><msub><mi>y</mi><mi>i</mi></msub><mo>∣</mo><msub><mi>y</mi><mrow><mo>&lt;</mo><mi>i</mi></mrow></msub><mo>,</mo><mi>x</mi><mo stretchy="false">)</mo>
+    </math>
+  </p>
+
+  <div class="lab">
+    <div class="lab-title">🔦 Lab 3 — Same model, wider flashlight</div>
+    <div class="controls">
+      <span class="small" style="font-weight:700;">Beam width k:</span>
+      <span class="kslider" id="kslider">
+        <button data-k="1">1</button><button data-k="2" class="active">2</button><button data-k="3">3</button>
+      </span>
+      <button class="btn primary-beam" id="beamStepBtn">Advance one step ▸</button>
+      <button class="btn" id="beamResetBtn">↺ Reset</button>
+      <span class="small" id="beamPhase"></span>
+    </div>
+    <div class="beam-table-wrap"><table class="beams" id="beamTable"></table></div>
+    <div id="beamVerdict"></div>
+    <h3>Tree view — kept beams vs. pruned branches</h3>
+    <div class="tree-scroll"><svg id="beamTree"></svg></div>
+    <p class="small">
+      Amber = hypotheses alive in the beam. Faded = pruned. Set <math><mi>k</mi><mo>=</mo><mn>1</mn></math>
+      and beam search collapses into greedy — that's not a coincidence, greedy <em>is</em> beam search with a beam of one.
+    </p>
+  </div>
+
+  <div class="procon">
+    <div class="pro"><b>✅ Pros</b>
+      <ul>
+        <li><strong>Escapes greedy's traps</strong> — a slightly-worse first word can survive long enough to prove itself.</li>
+        <li>Near-standard for <strong>machine translation</strong> and speech recognition, where a "correct" output exists.</li>
+        <li>Still deterministic and tunable: bigger <math><mi>k</mi></math> → wider search.</li>
+      </ul>
+    </div>
+    <div class="con"><b>❌ Cons</b>
+      <ul>
+        <li><strong>k× the compute and memory</strong> — every step extends and re-scores k hypotheses.</li>
+        <li>Still no randomness: in open-ended generation it converges on <strong>generic, repetitive</strong> "safest" text.</li>
+        <li>It's an approximation, not a guarantee — the true best sequence can still be pruned early.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 3 : NUCLEUS                                              -->
+<!-- ================================================================ -->
+<section class="strategy nucleus" id="nucleus">
+  <div class="sec-head">
+    <span class="sec-kicker">Strategy 3 · Nucleus sampling (top-p)</span>
+    <h2>"Roll dice — but only inside the trustworthy zone"</h2>
+  </div>
+  <p class="tagline">Controlled randomness. The candidate pool grows and shrinks with the model's confidence.</p>
+
+  <div class="analogy">
+    <b>Analogy</b>
+    You're ordering at a restaurant. Instead of always ordering the #1 bestseller (greedy — boring) or picking
+    any random line on the menu (pure sampling — you might get the deep-fried napkin), you cover the bottom of the
+    menu with your hand and pick at random among the dishes that make up, say, 90% of what people actually order.
+  </div>
+
+  <p>
+    Sort the vocabulary by probability, take the <strong>smallest</strong> set whose probabilities add up to at
+    least <math><mi>p</mi></math> — the <em>nucleus</em> — renormalize inside it, and sample:
+  </p>
+  <p style="text-align:center;">
+    <math display="block">
+      <msub><mi>V</mi><mi>p</mi></msub><mo>=</mo>
+      <mtext>smallest&nbsp;set&nbsp;with</mtext>
+      <mspace width="0.4em"></mspace>
+      <munder><mo>∑</mo><mrow><mi>y</mi><mo>∈</mo><msub><mi>V</mi><mi>p</mi></msub></mrow></munder>
+      <mi>P</mi><mo stretchy="false">(</mo><mi>y</mi><mo>∣</mo><msub><mi>y</mi><mrow><mo>&lt;</mo><mi>t</mi></mrow></msub><mo>,</mo><mi>x</mi><mo stretchy="false">)</mo>
+      <mo>≥</mo><mi>p</mi>
+    </math>
+  </p>
+
+  <div class="lab">
+    <div class="lab-title">🎲 Lab 4 — Slide p, watch the nucleus breathe</div>
+    <p class="small" style="margin-top:0;">Two prompts, one slider. Notice how the <em>same</em> p produces a completely different pool size:</p>
+    <div class="ctx-toggle" id="ctxToggle">
+      <button data-ctx="confident" class="active">🗼 “The Eiffel Tower is in ___” <span class="small" style="display:block;font-weight:400;">model is very confident</span></button>
+      <button data-ctx="uncertain">🍽️ “For dinner tonight I want ___” <span class="small" style="display:block;font-weight:400;">model is genuinely unsure</span></button>
+    </div>
+    <div class="p-slider-row">
+      <span class="p-readout">p&nbsp;=&nbsp;<b id="pVal">0.90</b></span>
+      <input type="range" id="pSlider" min="0.05" max="1" step="0.01" value="0.90">
+      <span class="small" id="poolSize"></span>
+    </div>
+    <div class="strip-holder">
+      <div class="cum-strip" id="cumStrip"></div>
+      <div class="strip-caption"><span>0 — cumulative probability, tokens sorted largest first</span><span>1</span></div>
+    </div>
+    <div class="dist" id="nucDist"></div>
+    <div class="controls">
+      <button class="btn primary-nucleus" id="sampleBtn">🎲 Sample once</button>
+      <button class="btn" id="sample25Btn">🎲 ×25 (tally column)</button>
+      <button class="btn" id="sampleResetBtn">↺ Clear samples</button>
+    </div>
+    <div class="sample-log" id="sampleLog"></div>
+    <div class="pool-note" id="poolNote"></div>
+  </div>
+
+  <div class="procon">
+    <div class="pro"><b>✅ Pros</b>
+      <ul>
+        <li><strong>Adaptive</strong> — confident model → tiny pool (nearly greedy); uncertain model → wide pool (real variety). A fixed top-k can't do this.</li>
+        <li><strong>Cuts the crazy tail</strong> — the 0.5%-probability nonsense tokens are excluded before the dice roll.</li>
+        <li>The default for <strong>chatbots and creative generation</strong> — diverse but coherent.</li>
+      </ul>
+    </div>
+    <div class="con"><b>❌ Cons</b>
+      <ul>
+        <li><strong>Not reproducible</strong> — same prompt, different output each run (unless you fix the random seed).</li>
+        <li>No optimality story: it isn't even trying to find the most probable sequence.</li>
+        <li>Badly tuned p (too high) lets weird tokens back in; too low and it degenerates into greedy.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 4 : HEAD TO HEAD                                          -->
+<!-- ================================================================ -->
+<section class="strategy" style="border-top:5px solid var(--ink);" id="compare">
+  <div class="sec-head">
+    <span class="sec-kicker" style="background:#f1f0ec;color:var(--ink-2);">Head to head</span>
+    <h2>Same model, three personalities</h2>
+  </div>
+
+  <div class="compare-wrap">
+    <table class="compare">
+      <thead>
+        <tr><th></th><th>Greedy</th><th>Beam search (width k)</th><th>Nucleus (top-p)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>What it keeps per step</td><td>1 path</td><td>k paths</td><td>1 path, chosen at random from the nucleus</td></tr>
+        <tr><td>Deterministic?</td><td>Yes</td><td>Yes</td><td><strong>No</strong> — different every run</td></tr>
+        <tr><td>Objective</td><td>Best <em>next token</em></td><td>≈ best <em>whole sequence</em></td><td>Plausible <em>and</em> diverse text</td></tr>
+        <tr><td>Compute cost</td><td>1×</td><td>≈ k×</td><td>≈ 1× (plus a sort)</td></tr>
+        <tr><td>Signature failure</td><td>Local traps &amp; repetition loops</td><td>Generic, bland "safest" output</td><td>Occasional incoherent turn if p is too high</td></tr>
+        <tr><td>Shines at</td><td>Reproducible pipelines, short factual fills</td><td>Translation, speech-to-text, summarization</td><td>Chat, stories, brainstorming</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>🧭 Which strategy would you ship?</h3>
+  <p class="small" style="margin-top:-2px;">Three real product decisions. Pick a decoding strategy for each:</p>
+  <div id="quiz"></div>
+</section>
+
+<footer>
+  Interactive widget for teaching LLM inference strategies · greedy decoding, beam search &amp; nucleus sampling ·
+  Part of the <a href="index.html">interactive-widgets</a> collection.
+</footer>
+
+</div><!-- /wrap -->
+
+<script>
+"use strict";
+
+/* ================================================================
+   Shared toy language model (the full tree)
+   ================================================================ */
+const TREE = {
+  word: "The", kids: [
+    { word: "nice",  p: 0.5, kids: [
+      { word: "woman",   p: 0.40 },
+      { word: "house",   p: 0.35 },
+      { word: "dog",     p: 0.25 },
+    ]},
+    { word: "dog",   p: 0.4, kids: [
+      { word: "barked",  p: 0.80 },
+      { word: "ran",     p: 0.15 },
+      { word: "slept",   p: 0.05 },
+    ]},
+    { word: "robot", p: 0.1, kids: [
+      { word: "beeped",  p: 0.60 },
+      { word: "danced",  p: 0.30 },
+      { word: "dreamed", p: 0.10 },
+    ]},
+  ]
+};
+// id helpers: level-1 node id = word ("nice"); leaf id = "nice.woman"
+const L1 = TREE.kids;
+const fmtP = (x) => x.toFixed(3).replace(/0$/, "");   // 0.2→"0.20", 0.175→"0.175"
+const fmtPct = (x) => { const v = Math.round(1000*x)/10; return v.toFixed(v % 1 ? 1 : 0) + "%"; };
+
+// all 9 complete sentences with joint probability
+const ALL_SENTENCES = [];
+for (const a of L1) for (const b of a.kids)
+  ALL_SENTENCES.push({ id: a.word + "." + b.word, words: ["The", a.word, b.word], p: a.p * b.p });
+ALL_SENTENCES.sort((x, y) => y.p - x.p);
+const CHAMPION = ALL_SENTENCES[0];            // "The dog barked", 0.32
+
+/* small MathML builder helpers for JS-generated narration */
+const mi = (s) => `<mi>${s}</mi>`;
+const mn = (s) => `<mn>${s}</mn>`;
+const mo = (s) => `<mo>${s}</mo>`;
+const mathWrap = (inner) => `<math>${inner}</math>`;
+
+/* ================================================================
+   SVG tree renderer (shared by greedy + beam sections)
+   states: map id -> "on" | "champ" | "pruned"   (undefined = neutral)
+   colors: {on:"#hex", onBg:"#hex"}
+   ================================================================ */
+function renderTree(svg, states, colors, showScores) {
+  const NW = 92, NH = 27, X0 = 14, X1 = 250, X2 = 480, XS = 590;
+  const rowH = 41, topPad = 22;
+  const leafY = (i) => topPad + i * rowH;
+
+  let leaves = [];
+  L1.forEach((a, ai) => a.kids.forEach((b, bi) => leaves.push({ a, b, i: ai * 3 + bi })));
+  const l1Y = L1.map((a, ai) => (leafY(ai*3) + leafY(ai*3 + 2)) / 2);
+  const rootY = (l1Y[0] + l1Y[2]) / 2;
+
+  const H = topPad + 9 * rowH;
+  svg.setAttribute("viewBox", `0 0 ${showScores ? 700 : 620} ${H}`);
+
+  const st = (id) => states[id] || "none";
+  const nodeFill = (s) => s === "on" ? colors.onBg : s === "champ" ? "#e9f7f0" : s === "pruned" ? "#f4f3f0" : "#ffffff";
+  const nodeStroke = (s) => s === "on" ? colors.on : s === "champ" ? "#0d7a54" : s === "pruned" ? "#dddbd3" : "#c3c2b7";
+  const inkFor = (s) => s === "pruned" ? "#b4b2aa" : "#0b0b0b";
+
+  let out = "";
+  const edge = (x1, y1, x2, y2, s, label) => {
+    const mx = (x1 + x2) / 2;
+    const col = s === "on" ? colors.on : s === "champ" ? "#0d7a54" : s === "pruned" ? "#dfddd5" : "#c3c2b7";
+    const w = (s === "on" || s === "champ") ? 2.6 : 1.4;
+    const dash = s === "champ" ? ` stroke-dasharray="5 4"` : "";
+    out += `<path d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" fill="none" stroke="${col}" stroke-width="${w}"${dash}/>`;
+    out += `<text x="${mx}" y="${(y1+y2)/2 - 7}" text-anchor="middle" font-size="12.5"
+      font-family='"STIX Two Math","Cambria Math","Times New Roman",serif'
+      fill="${s === "pruned" ? "#b4b2aa" : "#52514e"}">${label}</text>`;
+  };
+  const node = (x, y, word, s) => {
+    out += `<rect x="${x}" y="${y - NH/2}" width="${NW}" height="${NH}" rx="7"
+      fill="${nodeFill(s)}" stroke="${nodeStroke(s)}" stroke-width="${(s === "on" || s === "champ") ? 2.2 : 1.3}"${s === "champ" ? ` stroke-dasharray="5 4"` : ""}/>`;
+    out += `<text x="${x + NW/2}" y="${y + 4.5}" text-anchor="middle" font-size="14.5" font-style="italic"
+      font-family='"STIX Two Math","Cambria Math","Times New Roman",serif' fill="${inkFor(s)}">${word}</text>`;
+  };
+
+  // edges first (under nodes)
+  L1.forEach((a, ai) => {
+    // edge state: "on" if child node on; champ if child on champ path
+    edge(X0 + NW, rootY, X1, l1Y[ai], st(a.word), fmtP(a.p));
+    a.kids.forEach((b, bi) => {
+      const id = a.word + "." + b.word;
+      edge(X1 + NW, l1Y[ai], X2, leafY(ai*3 + bi), st(id), fmtP(b.p));
+    });
+  });
+  node(X0, rootY, "The", states["The"] || "none");
+  L1.forEach((a, ai) => node(X1, l1Y[ai], a.word, st(a.word)));
+  L1.forEach((a, ai) => a.kids.forEach((b, bi) => {
+    const id = a.word + "." + b.word;
+    node(X2, leafY(ai*3 + bi), b.word, st(id));
+    if (showScores) {
+      const s = st(id);
+      const joint = a.p * b.p;
+      const bold = (s === "on" || s === "champ") ? ` font-weight="700"` : "";
+      out += `<text x="${XS}" y="${leafY(ai*3+bi) + 4.5}" font-size="13"
+        font-family='"STIX Two Math","Cambria Math","Times New Roman",serif'
+        fill="${s === "pruned" ? "#b4b2aa" : (s === "champ" ? "#0d7a54" : (s === "on" ? colors.on : "#52514e"))}"${bold}>P = ${fmtP(joint)}${s === "champ" ? "  ← best" : ""}</text>`;
+    }
+  }));
+  svg.innerHTML = out;
+}
+
+/* ================================================================
+   SECTION 1 — GREEDY stepper
+   ================================================================ */
+const gSentence = document.getElementById("greedySentence");
+const gDist     = document.getElementById("greedyDist");
+const gVerdict  = document.getElementById("greedyVerdict");
+const gStepBtn  = document.getElementById("greedyStepBtn");
+const gRunning  = document.getElementById("greedyRunning");
+const gTreeWrap = document.getElementById("greedyTreeWrap");
+
+let gState; // {step:0|1|2, picked:[l1node?, leafnode?]}
+
+function greedyDistData() {
+  if (gState.step === 0) return L1.map(n => ({ word: n.word, p: n.p }));
+  if (gState.step === 1) return gState.picked[0].kids.map(n => ({ word: n.word, p: n.p }));
+  return null;
+}
+
+function renderGreedy(justPicked) {
+  // sentence
+  const words = ["The"];
+  if (gState.picked[0]) words.push(gState.picked[0].word);
+  if (gState.picked[1]) words.push(gState.picked[1].word);
+  let html = words.map((w, i) =>
+    (i > 0 && i === words.length - 1 && justPicked)
+      ? `<span class="new-word">${w}</span>` : w
+  ).join(" ");
+  if (gState.step < 2) html += ` <span class="cursor">▁</span>`; else html += ".";
+  gSentence.innerHTML = html;
+
+  // running probability
+  const parts = [];
+  if (gState.picked[0]) parts.push(gState.picked[0].p);
+  if (gState.picked[1]) parts.push(gState.picked[1].p);
+  if (parts.length) {
+    const prod = parts.reduce((a, b) => a * b, 1);
+    const expr = parts.length === 1 ? mn(fmtP(prod))
+      : parts.map(p => mn(fmtP(p))).join(mo("×")) + mo("=") + mn(fmtP(prod));
+    gRunning.innerHTML = "sentence probability so far: " + mathWrap(expr);
+  } else gRunning.innerHTML = "";
+
+  // distribution bars
+  const data = greedyDistData();
+  if (data) {
+    const ctx = gState.step === 0 ? "The …" : "The " + gState.picked[0].word + " …";
+    const maxWord = data.reduce((m, d) => d.p > m.p ? d : m).word;
+    gDist.innerHTML =
+      `<div class="small" style="margin:6px 0 4px;">Model output — <b>P(next word | “${ctx}”)</b>. Greedy will grab the longest bar:</div>` +
+      data.map(d => `
+        <div class="dist-row${d.word === maxWord ? " is-max" : ""}">
+          <span class="tok">${d.word}</span>
+          <span class="bar-track"><span class="bar" style="width:${d.p*100}%"></span></span>
+          <span class="val">${fmtP(d.p)}${d.word === maxWord ? ` <span class="pick-tag">← argmax</span>` : ""}</span>
+        </div>`).join("");
+    gStepBtn.disabled = false;
+  } else {
+    gDist.innerHTML = "";
+    gStepBtn.disabled = true;
+  }
+
+  // verdict + tree
+  if (gState.step === 2) {
+    const gp = gState.picked[0].p * gState.picked[1].p;
+    gVerdict.innerHTML = `
+      <div class="verdict warn">
+        <b class="vt">⚠️ Greedy is done: “The nice woman.” — sentence probability ${mathWrap(mn("0.5")+mo("×")+mn("0.4")+mo("=")+mn("0.20"))}</b>
+        Looks reasonable… but scroll the tree below. The sentence <em style="font-family:var(--math);">The dog barked</em>
+        scores ${mathWrap(mn("0.4")+mo("×")+mn("0.8")+mo("=")+mn("0.32"))} — <strong>60% more likely</strong> than greedy's pick.
+        Greedy lost the better sentence at step 1 and could never recover, because it never revisits a choice.
+      </div>`;
+    gTreeWrap.style.display = "block";
+    const states = { "The": "on", [gState.picked[0].word]: "on",
+      [gState.picked[0].word + "." + gState.picked[1].word]: "on",
+      [CHAMPION.id]: "champ", "dog": "champ" };
+    // greedy path overrides champ only where they collide (they don't here)
+    renderTree(document.getElementById("greedyTree"), states,
+      { on: "#2a78d6", onBg: "#edf4fc" }, true);
+  } else {
+    gVerdict.innerHTML = "";
+    gTreeWrap.style.display = "none";
+  }
+}
+
+function greedyStep() {
+  if (gState.step === 0) {
+    gState.picked[0] = L1.reduce((m, n) => n.p > m.p ? n : m);
+    gState.step = 1;
+  } else if (gState.step === 1) {
+    gState.picked[1] = gState.picked[0].kids.reduce((m, n) => n.p > m.p ? n : m);
+    gState.step = 2;
+  }
+  renderGreedy(true);
+}
+function greedyReset() { gState = { step: 0, picked: [] }; renderGreedy(false); }
+gStepBtn.addEventListener("click", greedyStep);
+document.getElementById("greedyResetBtn").addEventListener("click", greedyReset);
+greedyReset();
+
+/* ================================================================
+   SECTION 1b — repetition trap
+   ================================================================ */
+const LOOP_START = ["I", "just", "wanted", "to", "say", "that", "I", "think", "it", "is"];
+const LOOP_CHUNK = ["a", "great", "way", "to", "learn", "and", "I", "think", "it", "is"];
+const loopBox = document.getElementById("loopBox");
+const loopVerdict = document.getElementById("loopVerdict");
+let loopPresses;
+
+function renderLoop() {
+  let html = LOOP_START.join(" ");
+  for (let i = 0; i < loopPresses; i++) {
+    const cls = i >= 1 ? ` class="rep"` : "";
+    html += ` <span${cls}>${LOOP_CHUNK.join(" ")}</span>`;
+  }
+  html += ` <span style="color:var(--muted);">▁</span>`;
+  loopBox.innerHTML = html;
+  loopVerdict.innerHTML = loopPresses >= 3 ? `
+    <div class="verdict warn">
+      <b class="vt">🔁 Stuck — and it will never get out.</b>
+      Greedy is deterministic: <em>same context in → same argmax out</em>. Once the phrase
+      “…I think it is” reappears, the model faces (almost) the same context it already saw, so the top
+      suggestion is the same continuation — which recreates the context again. Real LLMs decoded greedily
+      show exactly this failure. Every strategy with randomness (like nucleus sampling) can break the cycle;
+      greedy cannot.
+    </div>` : "";
+}
+document.getElementById("loopBtn").addEventListener("click", () => { loopPresses++; renderLoop(); });
+document.getElementById("loopResetBtn").addEventListener("click", () => { loopPresses = 0; renderLoop(); });
+loopPresses = 0; renderLoop();
+
+/* ================================================================
+   SECTION 2 — BEAM SEARCH stepper
+   ================================================================ */
+const beamTable = document.getElementById("beamTable");
+const beamVerdict = document.getElementById("beamVerdict");
+const beamPhase = document.getElementById("beamPhase");
+const beamTreeSvg = document.getElementById("beamTree");
+let beamK = 2, beamStep = 0;   // step: 0 initial, 1 after first expansion, 2 done
+
+function beamCandidatesStep1() {
+  return L1.map(n => ({ words: ["The", n.word], p: n.p, l1: n }))
+           .sort((a, b) => b.p - a.p);
+}
+function beamCandidatesStep2(kept) {
+  const out = [];
+  for (const h of kept) for (const b of h.l1.kids)
+    out.push({ words: [...h.words, b.word], p: h.p * b.p, l1: h.l1, leaf: b });
+  return out.sort((a, b) => b.p - a.p);
+}
+
+function beamRowsHTML(cands, keptCount, final) {
+  const head = `<thead><tr><th>hypothesis</th><th>P (product)</th><th>log P</th><th>status</th></tr></thead>`;
+  const rows = cands.map((c, i) => {
+    const kept = i < keptCount;
+    const winner = final && i === 0;
+    const cls = winner ? "winner" : kept ? "kept" : "pruned";
+    const chip = winner ? `<span class="status-chip win">🏆 selected — highest cumulative prob</span>`
+               : kept   ? `<span class="status-chip kept">in beam</span>`
+                        : `<span class="status-chip pruned">pruned</span>`;
+    return `<tr class="${cls}">
+      <td><span class="seq">${c.words.join(" ")} …</span></td>
+      <td class="num">${fmtP(c.p)}</td>
+      <td class="num">${Math.log(c.p).toFixed(2)}</td>
+      <td>${chip}</td></tr>`;
+  }).join("");
+  return head + `<tbody>${rows}</tbody>`;
+}
+
+function renderBeam() {
+  document.querySelectorAll("#kslider button").forEach(b =>
+    b.classList.toggle("active", +b.dataset.k === beamK));
+  const stepBtn = document.getElementById("beamStepBtn");
+
+  let states = { "The": "on" };
+  if (beamStep === 0) {
+    beamPhase.textContent = `Beam holds 1 hypothesis: “The …”. k = ${beamK}.`;
+    beamTable.innerHTML = beamRowsHTML([{ words: ["The"], p: 1 }], 1, false);
+    beamVerdict.innerHTML = "";
+    stepBtn.disabled = false;
+  } else {
+    const c1 = beamCandidatesStep1();
+    const kept1 = c1.slice(0, beamK);
+    kept1.forEach(h => states[h.l1.word] = "on");
+    c1.slice(beamK).forEach(h => {
+      states[h.l1.word] = "pruned";
+      h.l1.kids.forEach(b => states[h.l1.word + "." + b.word] = "pruned");
+    });
+    if (beamStep === 1) {
+      beamPhase.textContent = `Step 1: expanded “The” into ${c1.length} candidates, kept top ${beamK}.`;
+      beamTable.innerHTML = beamRowsHTML(c1, beamK, false);
+      beamVerdict.innerHTML = "";
+      stepBtn.disabled = false;
+    } else {
+      const c2 = beamCandidatesStep2(kept1);
+      const keptIds = new Set(c2.slice(0, beamK).map(c => c.l1.word + "." + c.leaf.word));
+      // mark leaves
+      kept1.forEach(h => h.l1.kids.forEach(b => {
+        const id = h.l1.word + "." + b.word;
+        states[id] = keptIds.has(id) ? "on" : "pruned";
+      }));
+      beamPhase.textContent = `Step 2: expanded ${kept1.length} hypotheses into ${c2.length} candidates, kept top ${beamK}. All hypotheses reached the end — select the best.`;
+      beamTable.innerHTML = beamRowsHTML(c2, beamK, true);
+      stepBtn.disabled = true;
+
+      const best = c2[0];
+      const bestStr = best.words.join(" ");
+      if (beamK === 1) {
+        beamVerdict.innerHTML = `
+          <div class="verdict info">
+            <b class="vt">With k = 1, beam search found “${bestStr}.” (P = ${fmtP(best.p)}) — identical to greedy.</b>
+            A beam of one can never keep a runner-up alive. Bump k to 2 and run it again.
+          </div>`;
+      } else {
+        beamVerdict.innerHTML = `
+          <div class="verdict win">
+            <b class="vt">🏆 Beam search (k = ${beamK}) found “${bestStr}.” — P = ${fmtP(best.p)} vs. greedy's 0.20.</b>
+            The winning sentence starts with <em style="font-family:var(--math);">dog</em>, the word greedy rejected.
+            Beam search kept it alive as hypothesis #2, and one step later its strong continuation
+            (<em style="font-family:var(--math);">barked</em>, 0.8) pushed the <em>cumulative</em> probability past every
+            “nice…” sentence. That is the whole trick: judge sequences, not single words.
+          </div>`;
+      }
+    }
+  }
+  renderTree(beamTreeSvg, states, { on: "#c98500", onBg: "#fdf6e3" }, beamStep === 2);
+}
+document.getElementById("beamStepBtn").addEventListener("click", () => {
+  if (beamStep < 2) beamStep++;
+  renderBeam();
+});
+document.getElementById("beamResetBtn").addEventListener("click", () => { beamStep = 0; renderBeam(); });
+document.querySelectorAll("#kslider button").forEach(b =>
+  b.addEventListener("click", () => { beamK = +b.dataset.k; beamStep = 0; renderBeam(); }));
+renderBeam();
+
+/* ================================================================
+   SECTION 3 — NUCLEUS sampling
+   ================================================================ */
+const CONTEXTS = {
+  confident: {
+    label: "The Eiffel Tower is in",
+    weird: new Set(["Vegas"]),
+    tokens: [["Paris",0.88],["France",0.05],["Europe",0.03],["the",0.02],["fact",0.01],["Vegas",0.01]],
+  },
+  uncertain: {
+    label: "For dinner tonight I want",
+    weird: new Set(["cement","Tuesday","sadness"]),
+    tokens: [["pizza",0.16],["sushi",0.14],["pasta",0.13],["tacos",0.11],["curry",0.09],["salad",0.08],
+             ["ramen",0.07],["soup",0.06],["burgers",0.05],["nothing",0.04],["cement",0.03],["Tuesday",0.02],["sadness",0.02]],
+  },
+};
+let nucCtx = "confident", nucP = 0.90;
+let tallies = {}, sampleChips = [];
+
+function nucleusCut(tokens, p) {
+  let cum = 0, cut = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    cum += tokens[i][1]; cut = i + 1;
+    if (cum >= p - 1e-9) break;
+  }
+  return cut;
+}
+
+function renderNucleus() {
+  const ctx = CONTEXTS[nucCtx];
+  const toks = ctx.tokens;
+  const cut = nucleusCut(toks, nucP);
+  document.getElementById("pVal").textContent = nucP.toFixed(2);
+  document.getElementById("poolSize").innerHTML =
+    `nucleus = <b>${cut} token${cut > 1 ? "s" : ""}</b> of ${toks.length}`;
+
+  // cumulative strip
+  let x = 0, strip = "";
+  toks.forEach(([w, p], i) => {
+    const wpct = p * 100;
+    strip += `<div class="seg ${i < cut ? "in" : "out"}" style="left:${x}%;width:${wpct}%;">
+      <span>${wpct >= 5 ? w : ""}</span></div>`;
+    x += wpct;
+  });
+  strip += `<div class="p-marker" style="left:${nucP*100}%"></div>`;
+  document.getElementById("cumStrip").innerHTML = strip;
+
+  // rows
+  let cum = 0, rows = "", nucSum = toks.slice(0, cut).reduce((a, t) => a + t[1], 0);
+  rows += `<div class="small" style="margin:8px 0 4px;">P(next word | “${ctx.label} ___”), sorted. Inside the nucleus each token is renormalized (÷ ${nucSum.toFixed(2)}):</div>`;
+  toks.forEach(([w, p], i) => {
+    cum += p;
+    const inside = i < cut;
+    const renorm = inside ? ` · renorm ${fmtPct(p / nucSum)}` : "";
+    const tally = tallies[w] ? `×${tallies[w]}` : "";
+    rows += `<div class="nuc-row${inside ? "" : " outside"}" data-tok="${w}">
+        <span class="tok">${w}</span>
+        <span class="bar-track"><span class="bar" style="width:${p / toks[0][1] * 100}%"></span></span>
+        <span class="val">${fmtPct(p)} · cum ${fmtPct(Math.min(cum,1))}${renorm}</span>
+        <span class="tally">${tally}</span>
+      </div>`;
+    if (i === cut - 1 && cut < toks.length) rows += `<hr class="nuc-boundary">`;
+  });
+  document.getElementById("nucDist").innerHTML = rows;
+
+  // chips
+  document.getElementById("sampleLog").innerHTML = sampleChips.map(w =>
+    `<span class="sample-chip${ctx.weird.has(w) ? " weird" : ""}">${w}</span>`).join("");
+
+  // adaptive-pool note
+  const other = nucCtx === "confident" ? CONTEXTS.uncertain : CONTEXTS.confident;
+  const otherCut = nucleusCut(other.tokens, nucP);
+  document.getElementById("poolNote").innerHTML = `
+    <b>The key insight:</b> at p = ${nucP.toFixed(2)} this prompt's nucleus has <b>${cut}</b> token${cut>1?"s":""},
+    while “${other.label} ___” gets <b>${otherCut}</b> — <em>same rule, different pool</em>, because the pool is sized
+    by the model's own confidence. A fixed top-k list can't adapt like this.` +
+    (nucP >= 0.99 ? `<br><span style="color:var(--bad);"><b>⚠ p ≈ 1 is pure sampling:</b> the tail is back in the pool — sample enough times and you'll eventually want <em>cement</em> for dinner.</span>` : "");
+}
+
+function sampleOnce(markRow) {
+  const ctx = CONTEXTS[nucCtx];
+  const cut = nucleusCut(ctx.tokens, nucP);
+  const pool = ctx.tokens.slice(0, cut);
+  const total = pool.reduce((a, t) => a + t[1], 0);
+  let r = Math.random() * total, picked = pool[pool.length - 1][0];
+  for (const [w, p] of pool) { r -= p; if (r <= 0) { picked = w; break; } }
+  tallies[picked] = (tallies[picked] || 0) + 1;
+  if (markRow) sampleChips.push(picked);
+  return picked;
+}
+function clearSamples() { tallies = {}; sampleChips = []; }
+
+document.getElementById("sampleBtn").addEventListener("click", () => {
+  const w = sampleOnce(true);
+  renderNucleus();
+  const row = document.querySelector(`.nuc-row[data-tok="${w}"]`);
+  if (row) row.classList.add("sampled-now");
+});
+document.getElementById("sample25Btn").addEventListener("click", () => {
+  for (let i = 0; i < 25; i++) sampleOnce(false);
+  renderNucleus();
+});
+document.getElementById("sampleResetBtn").addEventListener("click", () => { clearSamples(); renderNucleus(); });
+document.getElementById("pSlider").addEventListener("input", (e) => {
+  nucP = +e.target.value; clearSamples(); renderNucleus();
+});
+document.querySelectorAll("#ctxToggle button").forEach(b =>
+  b.addEventListener("click", () => {
+    nucCtx = b.dataset.ctx; clearSamples();
+    document.querySelectorAll("#ctxToggle button").forEach(x =>
+      x.classList.toggle("active", x === b));
+    renderNucleus();
+  }));
+renderNucleus();
+
+/* ================================================================
+   SECTION 4 — scenario quiz
+   ================================================================ */
+const QUIZ = [
+  {
+    q: "1 · You're shipping an English → Spanish translator for legal contracts. There is essentially one correct translation, and quality is everything.",
+    answer: "beam",
+    why: {
+      beam:    "✔ Beam search. Translation has a (near-)correct target, so it pays to search for the highest-probability whole sequence — exactly what beam search approximates. This is the industry standard for MT.",
+      greedy:  "✘ Greedy is fast, but one early local-optimum word can derail a legal clause — and there's no way back. Beam search keeps alternatives alive and reliably finds better full translations.",
+      nucleus: "✘ Randomness is a liability here: two runs would give two different contracts. When a correct answer exists, you want search, not dice — beam search.",
+    },
+  },
+  {
+    q: "2 · You're building a creative-writing partner that suggests story continuations. Users complain that suggestions all sound the same.",
+    answer: "nucleus",
+    why: {
+      nucleus: "✔ Nucleus sampling. Open-ended generation needs diversity, and top-p delivers it while still cutting the incoherent tail. Every click can give a fresh, plausible continuation.",
+      greedy:  "✘ Greedy gives the same continuation every time — the exact complaint — and tends to drift into loops on long generations.",
+      beam:    "✘ Counter-intuitively, beam search makes it worse: it converges on the safest, most generic text (and all high-probability beams sound alike). Diversity needs sampling.",
+    },
+  },
+  {
+    q: "3 · Your model outputs JSON that feeds an automated pipeline. Any run must produce byte-identical output for the same input, and latency matters.",
+    answer: "greedy",
+    why: {
+      greedy:  "✔ Greedy. Deterministic, cheapest possible, and structured outputs are usually high-confidence anyway (the distribution is peaked), so its weaknesses barely bite.",
+      beam:    "✘ Beam is deterministic too, but you'd pay k× compute for quality you don't need on a peaked, formulaic distribution. Latency matters here.",
+      nucleus: "✘ Sampling breaks the byte-identical requirement immediately — same input, different JSON. (Setting p tiny just re-invents greedy, with extra steps.)",
+    },
+  },
+];
+document.getElementById("quiz").innerHTML = QUIZ.map((item, i) => `
+  <div class="quiz-card" data-i="${i}">
+    <div class="quiz-q">${item.q}</div>
+    <div class="quiz-opts">
+      <button data-s="greedy">Greedy</button>
+      <button data-s="beam">Beam search</button>
+      <button data-s="nucleus">Nucleus (top-p)</button>
+    </div>
+    <div class="quiz-fb"></div>
+  </div>`).join("");
+document.querySelectorAll(".quiz-card").forEach(card => {
+  const item = QUIZ[+card.dataset.i];
+  card.querySelectorAll("button").forEach(btn => btn.addEventListener("click", () => {
+    const s = btn.dataset.s, right = s === item.answer;
+    card.querySelectorAll("button").forEach(b => b.classList.remove("picked-right", "picked-wrong"));
+    btn.classList.add(right ? "picked-right" : "picked-wrong");
+    const fb = card.querySelector(".quiz-fb");
+    fb.textContent = item.why[s];
+    fb.className = "quiz-fb show " + (right ? "right" : "wrong");
+  }));
+});
+</script>
+</body>
+</html>
