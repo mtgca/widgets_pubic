@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transposed Convolutions &amp; the Checkerboard Artifact</title>
+<style>
+  :root{
+    --ink:#1e293b;
+    --ink2:#475569;
+    --muted:#94a3b8;
+    --bg:#f8fafc;
+    --card:#ffffff;
+    --border:#e2e8f0;
+    --blue:#2563eb;
+    --blue-dark:#1e40af;
+    --blue-pale:#eff6ff;
+    --input-bg:#dbeafe;
+    --input-border:#93c5fd;
+    --input-ink:#1e3a5f;
+    --kernel-bg:#ede9fe;
+    --kernel-border:#c4b5fd;
+    --kernel-ink:#5b21b6;
+    --amber:#f59e0b;
+    --good-bg:#e6f9f1; --good-ink:#1a7a4a; --good-border:#9ad9bb;
+    --warn-bg:#fdf3e7; --warn-ink:#9a5b00; --warn-border:#f0c088;
+    --math:"STIX Two Math","Cambria Math","Latin Modern Math","Times New Roman",Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.55; padding:32px 16px 64px;
+  }
+  math{font-family:var(--math);}
+  .wrap{max-width:1060px;margin:0 auto;}
+  h1{font-size:1.7rem;margin-bottom:4px;letter-spacing:-.01em;}
+  .subtitle{color:var(--ink2);margin-bottom:28px;font-size:1.02rem;}
+  .card{
+    background:var(--card);border:1px solid var(--border);border-radius:12px;
+    padding:24px 26px;margin-bottom:26px;box-shadow:0 1px 3px rgba(15,23,42,.05);
+  }
+  .card h2{font-size:1.18rem;margin-bottom:10px;}
+  .card h2 .step-num{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;
+    font-size:.85rem;margin-right:8px;vertical-align:-3px;
+  }
+  .card p{color:var(--ink2);margin-bottom:10px;max-width:72ch;}
+  .card p strong{color:var(--ink);}
+  .note{
+    background:var(--blue-pale);border-left:3px solid var(--blue);
+    padding:10px 14px;border-radius:0 8px 8px 0;font-size:.92rem;color:var(--ink2);
+    margin:12px 0;max-width:72ch;
+  }
+  .footnote{font-size:.83rem;color:var(--muted);margin-top:12px;max-width:72ch;}
+
+  /* ---- grids ---- */
+  .scroll{overflow-x:auto;padding-bottom:4px;}
+  .grid-row{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap;margin:18px 0;}
+  .grid-block{display:flex;flex-direction:column;gap:8px;align-items:center;}
+  .grid-label{font-size:.82rem;font-weight:600;color:var(--ink2);text-align:center;}
+  .grid-label .dim{font-weight:400;color:var(--muted);}
+  .cellgrid{display:grid;gap:2px;}
+  .cell{
+    display:flex;align-items:center;justify-content:center;position:relative;
+    border-radius:4px;font-weight:600;font-variant-numeric:tabular-nums;
+    background:#f1f5f9;color:var(--ink2);user-select:none;
+  }
+  .cell.in{background:var(--input-bg);color:var(--input-ink);border:1px solid var(--input-border);}
+  .cell.ker{background:var(--kernel-bg);color:var(--kernel-ink);border:1px solid var(--kernel-border);}
+  .cell.zero-ins{background:#f1f5f9;color:var(--muted);font-weight:400;}
+  .cell.pad{background:transparent;border:1px dashed #cbd5e1;color:#cbd5e1;font-weight:400;}
+  .cell.clickable{cursor:pointer;transition:transform .08s;}
+  .cell.clickable:hover{transform:scale(1.06);}
+  .cell.stamped-in{opacity:.45;}
+  .cell.stamped-in::after{
+    content:"✓";position:absolute;top:1px;right:3px;font-size:9px;color:var(--good-ink);
+  }
+  .cell.target{outline:2px dashed var(--amber);outline-offset:-2px;z-index:1;}
+  .cell.just{outline:2px solid var(--amber);outline-offset:-2px;z-index:1;}
+  .cell .count-badge{
+    position:absolute;bottom:1px;right:2px;font-size:8px;font-weight:700;
+    color:inherit;opacity:.75;
+  }
+  .op{align-self:center;font-size:1.3rem;color:var(--muted);padding-top:22px;}
+
+  /* ---- controls ---- */
+  .controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:14px 0;}
+  .controls .group{display:flex;gap:6px;align-items:center;}
+  .controls label{font-size:.88rem;color:var(--ink2);font-weight:600;}
+  button.btn{
+    font:600 .88rem/1 inherit;padding:8px 14px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--border);background:#fff;color:var(--ink);
+  }
+  button.btn:hover{border-color:var(--blue);color:var(--blue);}
+  button.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff;}
+  button.btn.primary:hover{background:var(--blue-dark);color:#fff;}
+  button.btn:disabled{opacity:.4;cursor:default;}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .seg button{
+    font:600 .85rem/1 inherit;padding:8px 12px;border:none;background:#fff;
+    color:var(--ink2);cursor:pointer;
+  }
+  .seg button.active{background:var(--blue);color:#fff;}
+  input[type=range]{accent-color:var(--blue);width:130px;}
+  .chk{display:flex;align-items:center;gap:6px;font-size:.88rem;color:var(--ink2);}
+  .chk input{accent-color:var(--blue);}
+
+  .narration{
+    min-height:44px;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+    padding:10px 14px;font-size:.9rem;color:var(--ink2);margin-top:10px;
+  }
+  .verdict{
+    display:inline-block;padding:8px 14px;border-radius:8px;font-size:.9rem;font-weight:600;
+    margin:10px 0;
+  }
+  .verdict.good{background:var(--good-bg);color:var(--good-ink);border:1px solid var(--good-border);}
+  .verdict.warn{background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-border);}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.8rem;color:var(--ink2);margin-top:8px;}
+  .legend span{display:flex;align-items:center;gap:5px;}
+  .legend i{width:13px;height:13px;border-radius:3px;display:inline-block;}
+
+  /* 1-D profile bars */
+  .profile{display:flex;gap:2px;align-items:flex-end;}
+  .profile .bar{
+    background:var(--blue);border-radius:3px 3px 0 0;position:relative;
+    display:flex;align-items:flex-start;justify-content:center;
+  }
+  .profile .bar span{font-size:9px;font-weight:700;color:#fff;padding-top:1px;}
+  .profile-wrap{display:flex;flex-direction:column;gap:4px;align-items:flex-start;}
+
+  /* fixes row */
+  .fixes{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;}
+  .fix{flex:1 1 260px;max-width:330px;}
+  .fix h3{font-size:.95rem;margin-bottom:6px;}
+  .fix .cap{font-size:.83rem;color:var(--ink2);margin-top:8px;}
+
+  /* quiz */
+  .quiz-q{margin-bottom:18px;}
+  .quiz-q .q{font-weight:600;margin-bottom:8px;}
+  .quiz-opts{display:flex;gap:8px;flex-wrap:wrap;}
+  .quiz-opts button{
+    font:500 .88rem/1.3 inherit;padding:9px 14px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--border);background:#fff;color:var(--ink);text-align:left;
+  }
+  .quiz-opts button:hover{border-color:var(--blue);}
+  .quiz-opts button.right{background:var(--good-bg);border-color:var(--good-border);color:var(--good-ink);}
+  .quiz-opts button.wrong{background:var(--warn-bg);border-color:var(--warn-border);color:var(--warn-ink);}
+  .quiz-expl{display:none;font-size:.87rem;color:var(--ink2);margin-top:8px;padding:8px 12px;
+    background:var(--bg);border-radius:8px;max-width:70ch;}
+  .quiz-q.answered .quiz-expl{display:block;}
+
+  /* tooltip */
+  .tip{
+    position:fixed;pointer-events:none;background:var(--ink);color:#fff;
+    font-size:.8rem;padding:6px 10px;border-radius:6px;z-index:50;display:none;
+    font-variant-numeric:tabular-nums;white-space:nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="verify-badge" data-verified="false" data-author="mtgca"></div>
+<style>
+.verify-badge{position:fixed;top:10px;right:10px;z-index:9999;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:6px 12px;border-radius:999px;display:flex;align-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none;}
+.verify-badge[data-verified="true"]{background:#e6f9f1;color:#1a7a4a;border:1px solid #9ad9bb;}
+.verify-badge[data-verified="true"]::before{content:"\2713 Expert-verified";}
+.verify-badge[data-verified="false"]{background:#fdf3e7;color:#9a5b00;border:1px solid #f0c088;}
+.verify-badge[data-verified="false"]::before{content:"\26A0 AI-generated \00B7 not expert-verified";}
+.verify-badge[data-author]::after{content:"· by @" attr(data-author);opacity:.75;margin-left:4px;}
+</style>
+
+<div class="wrap">
+  <h1>Transposed Convolutions &amp; the Checkerboard Artifact</h1>
+  <p class="subtitle">A convolution you already know, run in reverse — and why its overlaps can paint a checkerboard.</p>
+
+  <!-- ============ 1. GATHER vs SCATTER ============ -->
+  <div class="card">
+    <h2><span class="step-num">1</span>From gather to scatter</h2>
+    <p>A <strong>regular convolution gathers</strong>: each output pixel reads a
+      <math><mi>k</mi><mo>×</mo><mi>k</mi></math> window of the input and reduces it to one number.
+      A <strong>transposed convolution scatters</strong>: each <em>input</em> pixel takes the whole kernel,
+      scales it by its own value, and stamps that
+      <math><mi>k</mi><mo>×</mo><mi>k</mi></math> patch into the output. Where stamps overlap, they <strong>sum</strong>.</p>
+    <p>That flip also reverses the size arithmetic. With stride
+      <math><mi>s</mi></math> and no padding, a transposed convolution <em>grows</em> the input:</p>
+    <p style="text-align:center;font-size:1.1rem;">
+      <math><mi>o</mi><mo>=</mo><mo stretchy="false">(</mo><mi>i</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo>·</mo><mi>s</mi><mo>+</mo><mi>k</mi></math>
+    </p>
+    <div class="grid-row" id="s1-diagrams"></div>
+    <p class="footnote">Left: convolution, one shaded 3×3 window → one output cell. Right: transposed convolution,
+      one input cell → one shaded 3×3 stamp in the output. Same wiring, arrows reversed — which is why it is called
+      <em>transposed</em>: it multiplies by the transpose of the convolution's matrix. It is <em>not</em> the inverse
+      of a convolution (a common misconception), just a learnable upsampler with conv-like weight sharing.</p>
+  </div>
+
+  <!-- ============ 2. STAMPING PLAYGROUND ============ -->
+  <div class="card">
+    <h2><span class="step-num">2</span>Stamp it yourself</h2>
+    <p><strong>Hover</strong> an input pixel to see which output region it will hit.
+      <strong>Click it</strong> (or press <em>Step</em>) to stamp <em>value × kernel</em> into the output.
+      Overlapping stamps add up — hover any output cell to see the sum's breakdown.
+      Try both strides and watch how the overlap pattern changes.</p>
+    <div class="controls">
+      <div class="group">
+        <label>Stride</label>
+        <span class="seg" id="a-stride">
+          <button data-s="1">s = 1</button>
+          <button data-s="2" class="active">s = 2</button>
+        </span>
+      </div>
+      <button class="btn primary" id="a-step">Step</button>
+      <button class="btn" id="a-all">Stamp all</button>
+      <button class="btn" id="a-reset">Reset</button>
+      <label class="chk"><input type="checkbox" id="a-counts"> show overlap counts</label>
+    </div>
+    <div class="scroll">
+      <div class="grid-row" id="a-grids"></div>
+    </div>
+    <div class="narration" id="a-narration">Nothing stamped yet. Hover an input pixel, then click it.</div>
+    <div class="legend">
+      <span><i style="background:var(--input-bg);border:1px solid var(--input-border);"></i> input 3×3</span>
+      <span><i style="background:var(--kernel-bg);border:1px solid var(--kernel-border);"></i> kernel 3×3</span>
+      <span><i style="background:#bfdbfe;"></i> output (darker = larger sum)</span>
+      <span><i style="border:2px dashed var(--amber);"></i> stamp region</span>
+    </div>
+    <div class="note" id="a-hint">With <strong>s = 2</strong> and <strong>k = 3</strong>, stamps land every 2 pixels but are 3 pixels wide —
+      so some output cells receive <strong>1</strong> stamp and their neighbors receive <strong>2</strong> or <strong>4</strong>.
+      Turn on <em>show overlap counts</em> and stamp all: the counts alternate. That alternation is the seed of the checkerboard.</div>
+  </div>
+
+  <!-- ============ 3. ZERO-INSERTION VIEW ============ -->
+  <div class="card">
+    <h2><span class="step-num">3</span>It's just a convolution in disguise</h2>
+    <p>If you prefer the convolution you already know: a transposed convolution with stride
+      <math><mi>s</mi></math> gives the same result as (1) <strong>inserting
+      <math><mi>s</mi><mo>−</mo><mn>1</mn></math> zeros</strong> between input pixels,
+      (2) padding the border with <math><mi>k</mi><mo>−</mo><mn>1</mn></math> zeros, and
+      (3) running a <strong>normal stride-1 convolution</strong> over it.
+      Hover an input pixel to find it in the dilated grid.</p>
+    <div class="scroll">
+      <div class="grid-row" id="b-grids"></div>
+    </div>
+    <p>Now the checkerboard has a second explanation: as the stride-1 kernel slides over this grid,
+      <strong>some window positions cover 4 real pixels, others cover 2 or 1</strong> — the rest of each window
+      is inserted zeros. Adjacent output cells are computed from different <em>amounts of real signal</em>.</p>
+    <p class="footnote">Strictly, the equivalent kernel is the original rotated 180°; the kernel used here is symmetric, so it makes no difference.</p>
+  </div>
+
+  <!-- ============ 4. CHECKERBOARD EXPLORER ============ -->
+  <div class="card">
+    <h2><span class="step-num">4</span>The checkerboard, isolated</h2>
+    <p>Strip away the values: feed in an image of all 1s with a kernel of all 1s, so every output cell simply
+      <strong>counts how many stamps reached it</strong>. If that count is uneven in the interior, no learned kernel
+      can fully hide it — the multiplicity pattern is baked into the architecture. Explore
+      <math><mi>k</mi></math> and <math><mi>s</mi></math>:</p>
+    <div class="controls">
+      <div class="group">
+        <label>Kernel <math><mi>k</mi></math> = <span id="c-kval">3</span></label>
+        <input type="range" id="c-k" min="2" max="5" step="1" value="3">
+      </div>
+      <div class="group">
+        <label>Stride <math><mi>s</mi></math> = <span id="c-sval">2</span></label>
+        <input type="range" id="c-s" min="1" max="3" step="1" value="2">
+      </div>
+    </div>
+    <div id="c-verdict"></div>
+    <div class="scroll">
+      <div class="grid-row" id="c-grids"></div>
+    </div>
+    <p class="footnote">Borders always receive fewer stamps — that is the ordinary edge effect, not the checkerboard.
+      The artifact is the <em>alternating</em> pattern in the interior, which appears exactly when
+      <math><mi>k</mi></math> mod <math><mi>s</mi></math> ≠ 0. When <math><mi>k</mi><mo>=</mo><mi>s</mi></math>,
+      coverage is uniform because stamps tile perfectly with no overlap at all.</p>
+  </div>
+
+  <!-- ============ 5. FIXES ============ -->
+  <div class="card">
+    <h2><span class="step-num">5</span>How practitioners avoid it</h2>
+    <p>Same experiment — uniform input, count the coverage — for three ways to upsample ×2:</p>
+    <div class="fixes" id="d-fixes"></div>
+    <div class="note">The <strong>resize-then-convolve</strong> fix (nearest or bilinear upsampling followed by a plain
+      stride-1 convolution) separates <em>upsampling</em> from <em>filtering</em>, so no overlap arithmetic can go wrong.
+      It is the standard remedy proposed by Odena, Dumoulin &amp; Olah (2016), <em>“Deconvolution and Checkerboard Artifacts”</em> (Distill).
+      Choosing <math><mi>k</mi></math> divisible by <math><mi>s</mi></math> helps, but uneven <em>gradients</em> can still
+      re-introduce faint patterns during training — resize-conv is the safer default.</p>
+  </div>
+
+  <!-- ============ 6. QUIZ ============ -->
+  <div class="card">
+    <h2><span class="step-num">6</span>Check yourself</h2>
+    <div id="quiz"></div>
+  </div>
+
+  <p class="footnote" style="text-align:center;">
+    Transposed convolutions appear in autoencoders, GAN generators, and segmentation decoders (e.g. U-Net up-path variants).
+    Reference: Odena, Dumoulin &amp; Olah, “Deconvolution and Checkerboard Artifacts”, Distill 2016.
+  </p>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+'use strict';
+/* ================= helpers ================= */
+const $ = s => document.querySelector(s);
+function el(tag, cls, txt){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (txt !== undefined) e.textContent = txt;
+  return e;
+}
+function hex2rgb(h){ return [1,3,5].map(i => parseInt(h.slice(i,i+2),16)); }
+function mixHex(a, b, t){
+  const A = hex2rgb(a), B = hex2rgb(b);
+  return 'rgb(' + A.map((v,i)=>Math.round(v+(B[i]-v)*t)).join(',') + ')';
+}
+/* single-hue sequential ramp: pale blue -> dark blue */
+function ramp(t){ return mixHex('#eff6ff','#1e40af', Math.max(0,Math.min(1,t))); }
+function rampInk(t){ return t > 0.55 ? '#ffffff' : '#1e3a5f'; }
+
+function makeGrid(rows, cols, px){
+  const g = el('div','cellgrid');
+  g.style.gridTemplateColumns = `repeat(${cols}, ${px}px)`;
+  const cells = [];
+  for (let r=0;r<rows;r++){
+    cells.push([]);
+    for (let c=0;c<cols;c++){
+      const cell = el('div','cell');
+      cell.style.width = px+'px'; cell.style.height = px+'px';
+      cell.style.fontSize = Math.max(9, Math.round(px*0.34))+'px';
+      g.appendChild(cell); cells[r].push(cell);
+    }
+  }
+  return {root:g, cells};
+}
+function block(labelHTML, gridRoot){
+  const b = el('div','grid-block');
+  const l = el('div','grid-label'); l.innerHTML = labelHTML;
+  b.appendChild(l); b.appendChild(gridRoot);
+  return b;
+}
+const tip = $('#tip');
+function showTip(html, x, y){
+  tip.innerHTML = html; tip.style.display = 'block';
+  tip.style.left = (x+14)+'px'; tip.style.top = (y+14)+'px';
+}
+function hideTip(){ tip.style.display = 'none'; }
+
+/* 1-D stamp counts: output length (n-1)s+k, count of (i,j) with p = i*s+j */
+function coverage1D(n, k, s){
+  const o = (n-1)*s + k, c = new Array(o).fill(0);
+  for (let i=0;i<n;i++) for (let j=0;j<k;j++) c[i*s+j]++;
+  return c;
+}
+
+/* ================= 1. static gather/scatter diagrams ================= */
+(function(){
+  const row = $('#s1-diagrams');
+  /* conv: 4x4 -> 2x2 (k=3, s=1), highlight top-left window -> output (0,0) */
+  const cIn = makeGrid(4,4,34), cOut = makeGrid(2,2,34);
+  cIn.cells.flat().forEach(c => c.classList.add('in'));
+  for (let r=0;r<3;r++) for (let c=0;c<3;c++) cIn.cells[r][c].classList.add('target');
+  cOut.cells.flat().forEach(c => { c.style.background = ramp(0.15); });
+  cOut.cells[0][0].classList.add('just');
+  row.appendChild(block('Convolution <span class="dim">gathers: 4×4 → 2×2</span>', cIn.root));
+  const op1 = el('div','op','→'); row.appendChild(op1);
+  row.appendChild(block('output <span class="dim">2×2</span>', cOut.root));
+
+  const spacer = el('div',''); spacer.style.flexBasis = '30px'; row.appendChild(spacer);
+
+  /* transposed: 2x2 -> 4x4 (k=3, s=1), input (0,0) -> 3x3 stamp */
+  const tIn = makeGrid(2,2,34), tOut = makeGrid(4,4,34);
+  tIn.cells.flat().forEach(c => c.classList.add('in'));
+  tIn.cells[0][0].classList.add('just');
+  tOut.cells.flat().forEach(c => { c.style.background = ramp(0.15); });
+  for (let r=0;r<3;r++) for (let c=0;c<3;c++) tOut.cells[r][c].classList.add('target');
+  row.appendChild(block('Transposed conv <span class="dim">scatters: 2×2 → 4×4</span>', tIn.root));
+  const op2 = el('div','op','→'); row.appendChild(op2);
+  row.appendChild(block('output <span class="dim">4×4</span>', tOut.root));
+})();
+
+/* ================= 2. stamping playground ================= */
+const A = {
+  input:  [[1,2,1],[2,0,1],[1,1,2]],
+  kernel: [[1,2,1],[2,4,2],[1,2,1]],
+  stride: 2,
+  order: [],          // stamped input indices (raster 0..8), in stamp order
+  hover: null,        // hovered input index or null
+  last: null,         // last stamped index (amber ring)
+};
+function aOut(){ return (3-1)*A.stride + 3; }
+/* full result (all 9 stamped) — used to normalize the color ramp stably */
+function aFull(){
+  const o = aOut(), out = Array.from({length:o},()=>new Array(o).fill(0));
+  for (let r=0;r<3;r++) for (let c=0;c<3;c++)
+    for (let i=0;i<3;i++) for (let j=0;j<3;j++)
+      out[r*A.stride+i][c*A.stride+j] += A.input[r][c]*A.kernel[i][j];
+  return out;
+}
+/* current sums + per-cell contribution list from stamped pixels only */
+function aCurrent(){
+  const o = aOut();
+  const out = Array.from({length:o},()=>new Array(o).fill(0));
+  const contribs = Array.from({length:o},()=>Array.from({length:o},()=>[]));
+  for (const idx of A.order){
+    const r = Math.floor(idx/3), c = idx%3, v = A.input[r][c];
+    for (let i=0;i<3;i++) for (let j=0;j<3;j++){
+      const y = r*A.stride+i, x = c*A.stride+j;
+      out[y][x] += v*A.kernel[i][j];
+      contribs[y][x].push({v, k:A.kernel[i][j]});
+    }
+  }
+  return {out, contribs};
+}
+function aRender(){
+  const row = $('#a-grids'); row.innerHTML = '';
+  const o = aOut();
+  const px = o > 5 ? 42 : 48;
+
+  const inG = makeGrid(3,3,48);
+  for (let r=0;r<3;r++) for (let c=0;c<3;c++){
+    const idx = r*3+c, cell = inG.cells[r][c];
+    cell.textContent = A.input[r][c];
+    cell.classList.add('in','clickable');
+    if (A.order.includes(idx)) cell.classList.add('stamped-in');
+    cell.addEventListener('mouseenter', ()=>{ A.hover = idx; aPaintOutput(); });
+    cell.addEventListener('mouseleave', ()=>{ A.hover = null; aPaintOutput(); });
+    cell.addEventListener('click', ()=> aStamp(idx));
+  }
+  const kerG = makeGrid(3,3,48);
+  for (let r=0;r<3;r++) for (let c=0;c<3;c++){
+    kerG.cells[r][c].textContent = A.kernel[r][c];
+    kerG.cells[r][c].classList.add('ker');
+  }
+  const outG = makeGrid(o,o,px);
+  A.outCells = outG.cells;
+
+  row.appendChild(block('input <span class="dim">3×3 — click to stamp</span>', inG.root));
+  row.appendChild(el('div','op','⊛ᵀ'));
+  row.appendChild(block('kernel <span class="dim">3×3</span>', kerG.root));
+  row.appendChild(el('div','op','→'));
+  row.appendChild(block(`output <span class="dim">${o}×${o} &nbsp;(s = ${A.stride})</span>`, outG.root));
+  aPaintOutput();
+}
+function aPaintOutput(){
+  const o = aOut();
+  const {out, contribs} = aCurrent();
+  const full = aFull();
+  let max = 1; full.forEach(r => r.forEach(v => { if (v > max) max = v; }));
+  const showCounts = $('#a-counts').checked;
+
+  for (let y=0;y<o;y++) for (let x=0;x<o;x++){
+    const cell = A.outCells[y][x];
+    cell.className = 'cell';
+    cell.innerHTML = '';
+    const v = out[y][x], t = v/max;
+    cell.style.background = v > 0 ? ramp(0.12 + 0.88*t) : '#f1f5f9';
+    cell.style.color = v > 0 ? rampInk(0.12 + 0.88*t) : '#cbd5e1';
+    cell.appendChild(document.createTextNode(v > 0 ? v : '·'));
+    if (showCounts && contribs[y][x].length){
+      cell.appendChild(el('span','count-badge','×'+contribs[y][x].length));
+    }
+    /* hover target region */
+    if (A.hover !== null){
+      const r = Math.floor(A.hover/3), c = A.hover%3;
+      if (y >= r*A.stride && y < r*A.stride+3 && x >= c*A.stride && x < c*A.stride+3)
+        cell.classList.add('target');
+    }
+    /* last stamp ring */
+    if (A.last !== null && A.hover === null){
+      const r = Math.floor(A.last/3), c = A.last%3;
+      if (y >= r*A.stride && y < r*A.stride+3 && x >= c*A.stride && x < c*A.stride+3)
+        cell.classList.add('just');
+    }
+    /* tooltip: breakdown of the sum */
+    cell.onmousemove = (e)=>{
+      const list = contribs[y][x];
+      if (!list.length) return hideTip();
+      const parts = list.map(p => `${p.v}·${p.k}`).join(' + ');
+      showTip(`${parts} = <b>${out[y][x]}</b> &nbsp;(${list.length} stamp${list.length>1?'s':''})`, e.clientX, e.clientY);
+    };
+    cell.onmouseleave = hideTip;
+  }
+}
+function aStamp(idx){
+  if (A.order.includes(idx)){
+    A.last = idx; aPaintOutput(); aNarrate(idx, true); return;
+  }
+  A.order.push(idx); A.last = idx;
+  aRender(); aNarrate(idx, false);
+}
+function aNarrate(idx, already){
+  const r = Math.floor(idx/3), c = idx%3, v = A.input[r][c], s = A.stride;
+  const y0 = r*s, x0 = c*s;
+  let msg = already ? `Pixel (${r},${c}) was already stamped. ` :
+    (v === 0
+      ? `Pixel (${r},${c}) has value 0 — its stamp is all zeros, it contributes nothing. Still occupies the region though! `
+      : `Stamped pixel (${r},${c}) = ${v}: wrote ${v} × kernel into output rows ${y0}–${y0+2}, cols ${x0}–${x0+2}. `);
+  const done = A.order.length;
+  msg += done === 9 ? 'All 9 pixels stamped — hover output cells to see each sum’s breakdown.'
+                    : `(${done}/9 stamped)`;
+  $('#a-narration').textContent = msg;
+}
+$('#a-step').addEventListener('click', ()=>{
+  for (let idx=0; idx<9; idx++) if (!A.order.includes(idx)) return aStamp(idx);
+});
+$('#a-all').addEventListener('click', ()=>{
+  for (let idx=0; idx<9; idx++) if (!A.order.includes(idx)) A.order.push(idx);
+  A.last = null; aRender();
+  $('#a-narration').textContent = 'All 9 stamps applied. Hover output cells for the breakdown; toggle "show overlap counts" to see how many stamps each cell received.';
+});
+$('#a-reset').addEventListener('click', ()=>{
+  A.order = []; A.last = null; aRender();
+  $('#a-narration').textContent = 'Reset. Hover an input pixel, then click it.';
+});
+$('#a-counts').addEventListener('change', aPaintOutput);
+document.querySelectorAll('#a-stride button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('#a-stride button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    A.stride = +b.dataset.s; A.order = []; A.last = null; aRender();
+    $('#a-narration').textContent = `Stride set to ${A.stride}. Output is now ${aOut()}×${aOut()} — stamp again and compare the overlaps.`;
+    $('#a-hint').style.display = A.stride === 2 ? '' : 'none';
+  });
+});
+aRender();
+
+/* ================= 3. zero-insertion view ================= */
+(function(){
+  const row = $('#b-grids');
+  const s = 2, k = 3, n = 3, pad = k-1;
+  const core = (n-1)*s + 1;          // 5
+  const D = core + 2*pad;            // 9
+
+  const inG = makeGrid(n,n,44);
+  const dilG = makeGrid(D,D,30);
+  const dCellOf = (r,c) => dilG.cells[pad + r*s][pad + c*s];
+
+  for (let r=0;r<D;r++) for (let c=0;c<D;c++){
+    const inPad = r < pad || c < pad || r >= pad+core || c >= pad+core;
+    const cell = dilG.cells[r][c];
+    cell.classList.add(inPad ? 'pad' : 'zero-ins');
+    cell.textContent = '0';
+  }
+  for (let r=0;r<n;r++) for (let c=0;c<n;c++){
+    const iCell = inG.cells[r][c];
+    iCell.textContent = A.input[r][c];
+    iCell.classList.add('in','clickable');
+    const dCell = dCellOf(r,c);
+    dCell.className = 'cell in';
+    dCell.textContent = A.input[r][c];
+    iCell.addEventListener('mouseenter', ()=>{ iCell.classList.add('just'); dCell.classList.add('just'); });
+    iCell.addEventListener('mouseleave', ()=>{ iCell.classList.remove('just'); dCell.classList.remove('just'); });
+  }
+  row.appendChild(block('input <span class="dim">3×3</span>', inG.root));
+  row.appendChild(el('div','op','→'));
+  row.appendChild(block('insert zeros (s−1 = 1) + pad (k−1 = 2) <span class="dim">9×9</span>', dilG.root));
+  row.appendChild(el('div','op','→'));
+  const t = el('div','grid-block');
+  const lbl = el('div','grid-label'); lbl.innerHTML = 'normal conv, 3×3, stride 1<br><span class="dim">→ same 7×7 output as step 2</span>';
+  t.appendChild(lbl);
+  row.appendChild(t);
+})();
+
+/* ================= 4. checkerboard explorer ================= */
+function cRender(){
+  const n = 4, k = +$('#c-k').value, s = +$('#c-s').value;
+  $('#c-kval').textContent = k; $('#c-sval').textContent = s;
+  const c1 = coverage1D(n,k,s), o = c1.length;
+  const max = Math.max(...c1) ** 2;
+
+  /* verdict */
+  const v = $('#c-verdict');
+  if (k % s === 0){
+    const noOverlap = k === s;
+    v.innerHTML = `<span class="verdict good">✓ k mod s = 0 → uniform interior coverage${noOverlap ? ' (k = s: stamps tile exactly, zero overlap)' : ''} — no checkerboard</span>`;
+  } else {
+    v.innerHTML = `<span class="verdict warn">⚠ k mod s = ${k%s} ≠ 0 → uneven overlap → checkerboard</span>`;
+  }
+
+  const row = $('#c-grids'); row.innerHTML = '';
+  const px = o > 11 ? 26 : 32;
+
+  /* 2-D coverage heatmap (counts are separable: count[y][x] = c1[y]·c1[x]) */
+  const g = makeGrid(o,o,px);
+  for (let y=0;y<o;y++) for (let x=0;x<o;x++){
+    const cnt = c1[y]*c1[x], t = cnt/max, cell = g.cells[y][x];
+    cell.style.background = ramp(0.08 + 0.92*t);
+    cell.style.color = rampInk(0.08 + 0.92*t);
+    cell.textContent = cnt;
+  }
+  row.appendChild(block(
+    `stamps per output cell <span class="dim">${o}×${o} &nbsp;(input 4×4, kernel &amp; input all 1s)</span>`, g.root));
+
+  /* 1-D profile aligned with columns */
+  const pw = el('div','profile-wrap');
+  const lbl = el('div','grid-label'); lbl.innerHTML = '1-D view: stamps per column';
+  const prof = el('div','profile');
+  const maxC = Math.max(...c1);
+  for (const cnt of c1){
+    const bar = el('div','bar');
+    bar.style.width = px+'px';
+    bar.style.height = (cnt/maxC*64)+'px';
+    bar.appendChild(el('span','',''+cnt));
+    prof.appendChild(bar);
+  }
+  pw.appendChild(lbl); pw.appendChild(prof);
+  const holder = el('div','grid-block'); holder.style.justifyContent='flex-end';
+  holder.appendChild(pw);
+  row.appendChild(holder);
+}
+$('#c-k').addEventListener('input', cRender);
+$('#c-s').addEventListener('input', cRender);
+cRender();
+
+/* ================= 5. fixes ================= */
+(function(){
+  const wrap = $('#d-fixes');
+  function addMap(title, matrix, cap){
+    const fix = el('div','fix');
+    fix.appendChild(el('h3','',title));
+    const o = matrix.length, px = 24;
+    let max = 1; matrix.forEach(r=>r.forEach(v=>{ if(v>max) max=v; }));
+    const g = makeGrid(o,o,px);
+    for (let y=0;y<o;y++) for (let x=0;x<o;x++){
+      const t = matrix[y][x]/max, cell = g.cells[y][x];
+      cell.style.background = ramp(0.08+0.92*t);
+      cell.style.color = rampInk(0.08+0.92*t);
+      cell.textContent = matrix[y][x];
+    }
+    const sc = el('div','scroll'); sc.appendChild(g.root); fix.appendChild(sc);
+    const c = el('div','cap'); c.innerHTML = cap; fix.appendChild(c);
+    wrap.appendChild(fix);
+  }
+  const outer = c1 => c1.map(a => c1.map(b => a*b));
+
+  addMap('Transposed conv, k=3, s=2', outer(coverage1D(4,3,2)),
+    '⚠ 3 mod 2 ≠ 0 — interior alternates 1 / 2 / 4. This is the classic checkerboard configuration.');
+  addMap('Transposed conv, k=4, s=2', outer(coverage1D(4,4,2)),
+    '✓ 4 mod 2 = 0 — uniform interior (every cell: 4 stamps). Better, though training gradients can still reintroduce faint patterns.');
+
+  /* resize-conv: nearest ×2 to 8×8 ones, then 3×3 stride-1 conv with "same" padding:
+     each output counts kernel taps that land in-bounds */
+  const R = 8, resize = Array.from({length:R},(_,y)=>Array.from({length:R},(_,x)=>{
+    let cnt = 0;
+    for (let i=-1;i<=1;i++) for (let j=-1;j<=1;j++)
+      if (y+i>=0 && y+i<R && x+j>=0 && x+j<R) cnt++;
+    return cnt;
+  }));
+  addMap('Nearest ×2 resize + conv k=3, s=1', resize,
+    '✓ Resize-then-convolve: coverage varies only at the border (ordinary edge effect). No alternation anywhere — the recommended fix.');
+})();
+
+/* ================= 6. quiz ================= */
+(function(){
+  const questions = [
+    {
+      q: 'You need ×2 upsampling (s = 2) with a transposed convolution. Which kernel size avoids uneven overlap?',
+      opts: ['k = 3', 'k = 4', 'k = 5'],
+      right: 1,
+      expl: 'Even coverage needs k divisible by s. 4 mod 2 = 0, so every interior cell receives the same number of stamps. With k = 3 or k = 5 the counts alternate.'
+    },
+    {
+      q: 'k = 5, s = 3: will the interior coverage be uniform?',
+      opts: ['Yes — the kernel is big enough to cover everything', 'No — 5 mod 3 = 2, so overlap counts alternate'],
+      right: 1,
+      expl: 'Size doesn’t matter, divisibility does. Stamps land every 3 pixels but span 5, so overlaps repeat in an uneven period-3 pattern → checkerboard.'
+    },
+    {
+      q: 'Your GAN generator outputs images with a faint checkerboard texture. Which change is most likely to remove it?',
+      opts: ['Train longer', 'Replace transposed convs with nearest-resize + 3×3 stride-1 conv', 'Increase the learning rate'],
+      right: 1,
+      expl: 'The pattern comes from the layer’s overlap arithmetic, not from underfitting. Resize-then-convolve upsamples evenly, then filters — no overlap counting involved.'
+    },
+  ];
+  const holder = $('#quiz');
+  questions.forEach((Q)=>{
+    const qd = el('div','quiz-q');
+    qd.appendChild(el('div','q',Q.q));
+    const opts = el('div','quiz-opts');
+    const expl = el('div','quiz-expl');
+    Q.opts.forEach((o,i)=>{
+      const b = el('button','',o);
+      b.addEventListener('click', ()=>{
+        if (qd.classList.contains('answered')) return;
+        qd.classList.add('answered');
+        b.classList.add(i === Q.right ? 'right' : 'wrong');
+        opts.children[Q.right].classList.add('right');
+        expl.textContent = (i === Q.right ? '✓ Correct. ' : '✗ Not quite. ') + Q.expl;
+      });
+      opts.appendChild(b);
+    });
+    qd.appendChild(opts); qd.appendChild(expl);
+    holder.appendChild(qd);
+  });
+})();
+</script>
+</body>
+</html>
